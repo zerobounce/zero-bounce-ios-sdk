@@ -8,7 +8,7 @@ s.summary = "ZeroBounceSDK provides wrappers over ZeroBounce api"
 s.requires_arc = true
 
 # 2
-s.version = "0.0.1"
+s.version = "0.0.101"
 
 # 3
 s.license = { :type => "MIT", :file => "LICENSE" }
@@ -25,14 +25,12 @@ s.source = { :git => "git@gitlab.gud.ro:mountsoftware/zero-bounce/zero-bounce-io
 
 # 7
 s.framework = "Foundation"
-# s.dependency 'Alamofire', '~> 4.7'
-# s.dependency 'MBProgressHUD', '~> 1.1.0'
 
 # 8
-s.source_files = "ZeroBounceSDK/**/*.{swift}"
+s.source_files = "Zero Bounce iOS SDK/*.{swift}"
 
 # 9
-s.resources = "ZeroBounceSDK/**/*.{png,jpeg,jpg,storyboard,xib,xcassets}"
+# s.resources = "ZeroBounceSDK/**/*.{png,jpeg,jpg,storyboard,xib,xcassets}"
 
 # 10
 s.swift_version = "5"

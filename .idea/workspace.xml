@@ -1,14 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f804909b-b225-49f0-8f3f-92c003c6967b" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/Zero Bounce iOS SDK/ZBValidateResponse.swift" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Zero Bounce iOS SDK/ZBValidateStatus.swift" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Zero Bounce iOS SDK/ZBValidateSubStatus.swift" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Zero Bounce iOS SDK.xcodeproj/project.pbxproj" beforeDir="false" afterPath="$PROJECT_DIR$/Zero Bounce iOS SDK.xcodeproj/project.pbxproj" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Zero Bounce iOS SDK.xcodeproj/project.xcworkspace/xcuserdata/mountsoftware.xcuserdatad/UserInterfaceState.xcuserstate" beforeDir="false" afterPath="$PROJECT_DIR$/Zero Bounce iOS SDK.xcodeproj/project.xcworkspace/xcuserdata/mountsoftware.xcuserdatad/UserInterfaceState.xcuserstate" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Zero Bounce iOS SDK.xcodeproj/xcuserdata/mountsoftware.xcuserdatad/xcschemes/xcschememanagement.plist" beforeDir="false" afterPath="$PROJECT_DIR$/Zero Bounce iOS SDK.xcodeproj/xcuserdata/mountsoftware.xcuserdatad/xcschemes/xcschememanagement.plist" afterDir="false" />
-    </list>
+    <list default="true" id="f804909b-b225-49f0-8f3f-92c003c6967b" name="Default Changelist" comment="" />
     <ignored path="$USER_HOME$/Library/Caches/AppCode2019.1/DerivedData/Zero_Bounce_iOS_SDK-hkihynztoymmahbhrxgvjrldwiyx/Build/Intermediates.noindex/" />
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -23,7 +16,7 @@
         <entry file="file://$PROJECT_DIR$/Zero Bounce iOS SDK/ZBValidateSubStatus.swift">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="510">
-              <caret line="34" column="1" lean-forward="true" selection-start-line="34" selection-start-column="1" selection-end-line="34" selection-end-column="1" />
+              <caret line="34" column="1" selection-start-line="34" selection-start-column="1" selection-end-line="34" selection-end-column="1" />
             </state>
           </provider>
         </entry>
@@ -32,7 +25,7 @@
         <entry file="file://$PROJECT_DIR$/Zero Bounce iOS SDK/ZBValidateResponse.swift">
           <provider selected="true" editor-type-id="text-editor">
             <state relative-caret-position="785">
-              <caret line="68" column="5" lean-forward="true" selection-start-line="68" selection-start-column="5" selection-end-line="68" selection-end-column="5" />
+              <caret line="68" column="5" selection-start-line="68" selection-start-column="5" selection-end-line="68" selection-end-column="5" />
             </state>
           </provider>
         </entry>
@@ -60,7 +53,7 @@
       </list>
     </option>
   </component>
-  <component name="ProjectFrameBounds">
+  <component name="ProjectFrameBounds" extendedState="1">
     <option name="x" value="6" />
     <option name="y" value="23" />
     <option name="width" value="1914" />
@@ -87,6 +80,7 @@
     </panes>
   </component>
   <component name="PropertiesComponent">
+    <property name="SHARE_PROJECT_CONFIGURATION_FILES" value="true" />
     <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="nodejs_interpreter_path.stuck_in_default_project" value="undefined stuck path" />
     <property name="nodejs_npm_path_reset_for_default_project" value="true" />
@@ -124,16 +118,15 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1562655217681</updated>
-      <workItem from="1562655221532" duration="2207000" />
+      <workItem from="1562655221532" duration="2677000" />
     </task>
     <servers />
   </component>
   <component name="TimeTrackingManager">
-    <option name="totallyTimeSpent" value="2207000" />
+    <option name="totallyTimeSpent" value="2677000" />
   </component>
   <component name="ToolWindowManager">
-    <frame x="6" y="23" width="1914" height="969" extended-state="0" />
-    <editor active="true" />
+    <frame x="6" y="23" width="1914" height="969" extended-state="1" />
     <layout>
       <window_info id="Designer" />
       <window_info id="Favorites" side_tool="true" />
@@ -164,14 +157,14 @@
     <entry file="file://$PROJECT_DIR$/Zero Bounce iOS SDK/ZBValidateSubStatus.swift">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="510">
-          <caret line="34" column="1" lean-forward="true" selection-start-line="34" selection-start-column="1" selection-end-line="34" selection-end-column="1" />
+          <caret line="34" column="1" selection-start-line="34" selection-start-column="1" selection-end-line="34" selection-end-column="1" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/Zero Bounce iOS SDK/ZBValidateResponse.swift">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="785">
-          <caret line="68" column="5" lean-forward="true" selection-start-line="68" selection-start-column="5" selection-end-line="68" selection-end-column="5" />
+          <caret line="68" column="5" selection-start-line="68" selection-start-column="5" selection-end-line="68" selection-end-column="5" />
         </state>
       </provider>
     </entry>
