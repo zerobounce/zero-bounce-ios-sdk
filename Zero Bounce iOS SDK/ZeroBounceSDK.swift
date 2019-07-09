@@ -251,7 +251,7 @@ public class ZeroBounceSDK {
             }
             
             let json = String(data: data, encoding: .utf8)
-            NSLog("ZeroBounceSDK data json: \(json)")
+            NSLog("ZeroBounceSDK data json: \(String(describing: json))")
             
             result(RequestResult.success(response, data))
         }).resume()
