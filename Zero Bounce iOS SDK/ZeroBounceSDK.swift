@@ -193,14 +193,10 @@ public class ZeroBounceSDK {
     private func sendJsonRequest<T: Codable>(request:URLRequest, completion: @escaping (ZBResult<T>) -> ()) {
         sendRequest(request: request) { result in
             switch result {
-            case .success(let response, let data):
+            case .success( _, let data):
 
                 do {
                     // let value = try self.jsonDecoder.decode(T.self, from: data)
-
-                    // let json = String(data: data, encoding: .utf8)
-                    // NSLog("ZeroBounceSDK json: \(json)")
-
                     let value = try JSONDecoder().decode(T.self, from: data)
                     completion(ZBResult.Success(value))
                 } catch {
@@ -237,6 +233,7 @@ public class ZeroBounceSDK {
                 result(RequestResult.failure(ZBError.noResponse))
                 return
             }
+            NSLog("ZeroBounceSDK statusCode: \(statusCode)")
 
             /*
             guard 200..<299 ~= statusCode else {
