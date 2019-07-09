@@ -10,7 +10,7 @@ import Foundation
 
 public class ZeroBounceSDK {
     
-    static let shared = ZeroBounceSDK()
+    static public let shared = ZeroBounceSDK()
 
     private let apiBaseUrl = "https://api.zerobounce.net/v2"
     private let bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
@@ -18,17 +18,17 @@ public class ZeroBounceSDK {
     
     private init() {}
     
-    func initialize(apiKey:String) {
+    public func initialize(apiKey:String) {
         self.apiKey = apiKey
     }
     
-    func validate(email:String, ipAddress:String? = nil, completion: (Result<[ZBValidateResponse]>) -> ()) {
+    public func validate(email:String, ipAddress:String? = nil, completion: (Result<[ZBValidateResponse]>) -> ()) {
         let ipAddressPart = ipAddress != nil ? "\(ipAddress!)" : ""
         request(url: "\(apiBaseUrl)/validate?api_key=\(apiKey!)&email=\(email)&ip_address=\(ipAddressPart)",
                 completion: completion)
     }
     
-    enum Result<T : Codable>
+    public enum Result<T : Codable>
     {
         case Success(T)
         case Failure(NSError?)
