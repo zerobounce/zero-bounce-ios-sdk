@@ -61,10 +61,10 @@ public struct ZBValidateResponse : Codable {
     let zipCode: String?
 
     ///The country of the IP passed in.
-    let country: String
+    let country: String?
 
     ///The UTC time the email was validated.
-    let processedAt: Date?
+    let processedAt: String?
 
     let error: String?
 
@@ -87,7 +87,7 @@ public struct ZBValidateResponse : Codable {
         case region
         case zipCode = "zipcode"
         case country
-        case processedAt = "Processed_at"
+        case processedAt = "processed_at"
         case error
     }
 
