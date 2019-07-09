@@ -9,6 +9,7 @@
 import Foundation
 
 public enum ZBValidateSubStatus: String, Codable {
+    case none = ""
     case antiSpamSystem = "antispam_system"
     case greyListed = "greylisted"
     case mailServerTemporaryError = "mail_server_temporary_error"
