@@ -8,7 +8,7 @@
 
 import Foundation
 
-class ZeroBounceSDK {
+public class ZeroBounceSDK {
     
     static let shared = ZeroBounceSDK()
 
