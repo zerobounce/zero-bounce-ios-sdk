@@ -69,7 +69,11 @@ public struct ZBValidateResponse : Codable {
     let error: String?
 
     enum CodingKeys: String, CodingKey {
+        case address
+        case status
         case subStatus = "sub_status"
+        case account
+        case domain
         case didYouMean = "did_you_mean"
         case domainAgeDays = "domain_age_days"
         case freeEmail = "free_email"
@@ -78,8 +82,13 @@ public struct ZBValidateResponse : Codable {
         case smtpProvider = "smtp_provider"
         case firstName = "firstname"
         case lastName = "lastname"
+        case gender
+        case city
+        case region
         case zipCode = "zipcode"
+        case country
         case processedAt = "Processed_at"
+        case error
     }
 
 }
