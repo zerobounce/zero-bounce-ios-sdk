@@ -9,20 +9,22 @@
 /* Begin PBXBuildFile section */
 		06650474314B89618D95AB89 /* Pods_Zero_Bounce_iOS_SDKTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C1108529D450647390518C3 /* Pods_Zero_Bounce_iOS_SDKTests.framework */; };
 		B5E10FBD021FE822975C0044 /* Pods_Zero_Bounce_iOS_SDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C6B239DD8DCCF5A9914F78A /* Pods_Zero_Bounce_iOS_SDK.framework */; };
+		BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */; };
+		BC458D9822D5FD08004DEF30 /* ZBMultiPartRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */; };
+		BC458D9922D5FD08004DEF30 /* ZBCreditsResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8C22D5FD08004DEF30 /* ZBCreditsResponse.swift */; };
+		BC458D9A22D5FD08004DEF30 /* ZBDeleteFileResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8D22D5FD08004DEF30 /* ZBDeleteFileResponse.swift */; };
+		BC458D9B22D5FD08004DEF30 /* ZBValidateStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8E22D5FD08004DEF30 /* ZBValidateStatus.swift */; };
+		BC458D9C22D5FD08004DEF30 /* ZBGetFileResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8F22D5FD08004DEF30 /* ZBGetFileResponse.swift */; };
+		BC458D9D22D5FD08004DEF30 /* ZeroBounceSDK.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D9022D5FD08004DEF30 /* ZeroBounceSDK.swift */; };
+		BC458D9E22D5FD08004DEF30 /* ZBGetApiUsageResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D9122D5FD08004DEF30 /* ZBGetApiUsageResponse.swift */; };
+		BC458D9F22D5FD08004DEF30 /* ZBFileStatusResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D9222D5FD08004DEF30 /* ZBFileStatusResponse.swift */; };
+		BC458DA022D5FD08004DEF30 /* ZBValidateSubStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D9322D5FD08004DEF30 /* ZBValidateSubStatus.swift */; };
+		BC458DA122D5FD08004DEF30 /* ZBError.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D9422D5FD08004DEF30 /* ZBError.swift */; };
+		BC458DA222D5FD08004DEF30 /* ZBSendFileResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */; };
+		BC458DA322D5FD08004DEF30 /* ZBValidateResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D9622D5FD08004DEF30 /* ZBValidateResponse.swift */; };
 		BCC4E27B22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCC4E27122D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework */; };
 		BCC4E28022D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */; };
 		BCC4E28222D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h in Headers */ = {isa = PBXBuildFile; fileRef = BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		BCC4E2F022D4F81900BD7BF3 /* ZeroBounceSDK.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2E522D4F81700BD7BF3 /* ZeroBounceSDK.swift */; };
-		BCC4E2F122D4F81900BD7BF3 /* ZBGetApiUsageResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2E622D4F81700BD7BF3 /* ZBGetApiUsageResponse.swift */; };
-		BCC4E2F222D4F81900BD7BF3 /* ZBMultiPartRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2E722D4F81700BD7BF3 /* ZBMultiPartRequest.swift */; };
-		BCC4E2F322D4F81900BD7BF3 /* ZBValidateResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2E822D4F81700BD7BF3 /* ZBValidateResponse.swift */; };
-		BCC4E2F422D4F81900BD7BF3 /* ZBValidateSubStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2E922D4F81800BD7BF3 /* ZBValidateSubStatus.swift */; };
-		BCC4E2F522D4F81900BD7BF3 /* ZBValidateStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2EA22D4F81800BD7BF3 /* ZBValidateStatus.swift */; };
-		BCC4E2F622D4F81900BD7BF3 /* ZBSendFileResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2EB22D4F81800BD7BF3 /* ZBSendFileResponse.swift */; };
-		BCC4E2F722D4F81900BD7BF3 /* ZBFileStatusResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2EC22D4F81800BD7BF3 /* ZBFileStatusResponse.swift */; };
-		BCC4E2F822D4F81900BD7BF3 /* ZBCreditsResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2ED22D4F81800BD7BF3 /* ZBCreditsResponse.swift */; };
-		BCC4E2F922D4F81900BD7BF3 /* ZBGetFileResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2EE22D4F81800BD7BF3 /* ZBGetFileResponse.swift */; };
-		BCC4E2FA22D4F81900BD7BF3 /* ZBDeleteFileResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E2EF22D4F81800BD7BF3 /* ZBDeleteFileResponse.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,23 +42,25 @@
 		5C6B239DD8DCCF5A9914F78A /* Pods_Zero_Bounce_iOS_SDK.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Zero_Bounce_iOS_SDK.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		65E08EBF76C40EBD464CC798 /* Pods-Zero Bounce iOS SDK.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDK.release.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.release.xcconfig"; sourceTree = "<group>"; };
 		AF7878FA8AFF0369D416A167 /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; sourceTree = "<group>"; };
+		BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBFileManager.swift; sourceTree = "<group>"; };
+		BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBMultiPartRequest.swift; sourceTree = "<group>"; };
+		BC458D8C22D5FD08004DEF30 /* ZBCreditsResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBCreditsResponse.swift; sourceTree = "<group>"; };
+		BC458D8D22D5FD08004DEF30 /* ZBDeleteFileResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBDeleteFileResponse.swift; sourceTree = "<group>"; };
+		BC458D8E22D5FD08004DEF30 /* ZBValidateStatus.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBValidateStatus.swift; sourceTree = "<group>"; };
+		BC458D8F22D5FD08004DEF30 /* ZBGetFileResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBGetFileResponse.swift; sourceTree = "<group>"; };
+		BC458D9022D5FD08004DEF30 /* ZeroBounceSDK.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZeroBounceSDK.swift; sourceTree = "<group>"; };
+		BC458D9122D5FD08004DEF30 /* ZBGetApiUsageResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBGetApiUsageResponse.swift; sourceTree = "<group>"; };
+		BC458D9222D5FD08004DEF30 /* ZBFileStatusResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBFileStatusResponse.swift; sourceTree = "<group>"; };
+		BC458D9322D5FD08004DEF30 /* ZBValidateSubStatus.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBValidateSubStatus.swift; sourceTree = "<group>"; };
+		BC458D9422D5FD08004DEF30 /* ZBError.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBError.swift; sourceTree = "<group>"; };
+		BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBSendFileResponse.swift; sourceTree = "<group>"; };
+		BC458D9622D5FD08004DEF30 /* ZBValidateResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBValidateResponse.swift; sourceTree = "<group>"; };
 		BCC4E27122D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Zero_Bounce_iOS_SDK.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = Zero_Bounce_iOS_SDK.h; sourceTree = "<group>"; };
 		BCC4E27522D39A7900BD7BF3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BCC4E27A22D39A7900BD7BF3 /* Zero Bounce iOS SDKTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Zero Bounce iOS SDKTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Zero_Bounce_iOS_SDKTests.swift; sourceTree = "<group>"; };
 		BCC4E28122D39A7900BD7BF3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		BCC4E2E522D4F81700BD7BF3 /* ZeroBounceSDK.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZeroBounceSDK.swift; sourceTree = "<group>"; };
-		BCC4E2E622D4F81700BD7BF3 /* ZBGetApiUsageResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBGetApiUsageResponse.swift; sourceTree = "<group>"; };
-		BCC4E2E722D4F81700BD7BF3 /* ZBMultiPartRequest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBMultiPartRequest.swift; sourceTree = "<group>"; };
-		BCC4E2E822D4F81700BD7BF3 /* ZBValidateResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBValidateResponse.swift; sourceTree = "<group>"; };
-		BCC4E2E922D4F81800BD7BF3 /* ZBValidateSubStatus.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBValidateSubStatus.swift; sourceTree = "<group>"; };
-		BCC4E2EA22D4F81800BD7BF3 /* ZBValidateStatus.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBValidateStatus.swift; sourceTree = "<group>"; };
-		BCC4E2EB22D4F81800BD7BF3 /* ZBSendFileResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBSendFileResponse.swift; sourceTree = "<group>"; };
-		BCC4E2EC22D4F81800BD7BF3 /* ZBFileStatusResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBFileStatusResponse.swift; sourceTree = "<group>"; };
-		BCC4E2ED22D4F81800BD7BF3 /* ZBCreditsResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBCreditsResponse.swift; sourceTree = "<group>"; };
-		BCC4E2EE22D4F81800BD7BF3 /* ZBGetFileResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBGetFileResponse.swift; sourceTree = "<group>"; };
-		BCC4E2EF22D4F81800BD7BF3 /* ZBDeleteFileResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBDeleteFileResponse.swift; sourceTree = "<group>"; };
 		C24942BB9C61B00CEB128F90 /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDKTests.release.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.release.xcconfig"; sourceTree = "<group>"; };
 		D0DB22CE8F6F6894D3463EA5 /* Pods-Zero Bounce iOS SDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDK.debug.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -125,17 +129,19 @@
 		BCC4E27322D39A7900BD7BF3 /* Zero Bounce iOS SDK */ = {
 			isa = PBXGroup;
 			children = (
-				BCC4E2ED22D4F81800BD7BF3 /* ZBCreditsResponse.swift */,
-				BCC4E2EF22D4F81800BD7BF3 /* ZBDeleteFileResponse.swift */,
-				BCC4E2EC22D4F81800BD7BF3 /* ZBFileStatusResponse.swift */,
-				BCC4E2E622D4F81700BD7BF3 /* ZBGetApiUsageResponse.swift */,
-				BCC4E2EE22D4F81800BD7BF3 /* ZBGetFileResponse.swift */,
-				BCC4E2E722D4F81700BD7BF3 /* ZBMultiPartRequest.swift */,
-				BCC4E2EB22D4F81800BD7BF3 /* ZBSendFileResponse.swift */,
-				BCC4E2E822D4F81700BD7BF3 /* ZBValidateResponse.swift */,
-				BCC4E2EA22D4F81800BD7BF3 /* ZBValidateStatus.swift */,
-				BCC4E2E922D4F81800BD7BF3 /* ZBValidateSubStatus.swift */,
-				BCC4E2E522D4F81700BD7BF3 /* ZeroBounceSDK.swift */,
+				BC458D8C22D5FD08004DEF30 /* ZBCreditsResponse.swift */,
+				BC458D8D22D5FD08004DEF30 /* ZBDeleteFileResponse.swift */,
+				BC458D9422D5FD08004DEF30 /* ZBError.swift */,
+				BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */,
+				BC458D9222D5FD08004DEF30 /* ZBFileStatusResponse.swift */,
+				BC458D9122D5FD08004DEF30 /* ZBGetApiUsageResponse.swift */,
+				BC458D8F22D5FD08004DEF30 /* ZBGetFileResponse.swift */,
+				BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */,
+				BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */,
+				BC458D9622D5FD08004DEF30 /* ZBValidateResponse.swift */,
+				BC458D8E22D5FD08004DEF30 /* ZBValidateStatus.swift */,
+				BC458D9322D5FD08004DEF30 /* ZBValidateSubStatus.swift */,
+				BC458D9022D5FD08004DEF30 /* ZeroBounceSDK.swift */,
 				BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */,
 				BCC4E27522D39A7900BD7BF3 /* Info.plist */,
 			);
@@ -309,17 +315,19 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BCC4E2F722D4F81900BD7BF3 /* ZBFileStatusResponse.swift in Sources */,
-				BCC4E2F322D4F81900BD7BF3 /* ZBValidateResponse.swift in Sources */,
-				BCC4E2F022D4F81900BD7BF3 /* ZeroBounceSDK.swift in Sources */,
-				BCC4E2F222D4F81900BD7BF3 /* ZBMultiPartRequest.swift in Sources */,
-				BCC4E2FA22D4F81900BD7BF3 /* ZBDeleteFileResponse.swift in Sources */,
-				BCC4E2F422D4F81900BD7BF3 /* ZBValidateSubStatus.swift in Sources */,
-				BCC4E2F922D4F81900BD7BF3 /* ZBGetFileResponse.swift in Sources */,
-				BCC4E2F822D4F81900BD7BF3 /* ZBCreditsResponse.swift in Sources */,
-				BCC4E2F622D4F81900BD7BF3 /* ZBSendFileResponse.swift in Sources */,
-				BCC4E2F522D4F81900BD7BF3 /* ZBValidateStatus.swift in Sources */,
-				BCC4E2F122D4F81900BD7BF3 /* ZBGetApiUsageResponse.swift in Sources */,
+				BC458D9E22D5FD08004DEF30 /* ZBGetApiUsageResponse.swift in Sources */,
+				BC458D9922D5FD08004DEF30 /* ZBCreditsResponse.swift in Sources */,
+				BC458D9822D5FD08004DEF30 /* ZBMultiPartRequest.swift in Sources */,
+				BC458D9D22D5FD08004DEF30 /* ZeroBounceSDK.swift in Sources */,
+				BC458D9B22D5FD08004DEF30 /* ZBValidateStatus.swift in Sources */,
+				BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */,
+				BC458D9F22D5FD08004DEF30 /* ZBFileStatusResponse.swift in Sources */,
+				BC458D9A22D5FD08004DEF30 /* ZBDeleteFileResponse.swift in Sources */,
+				BC458DA222D5FD08004DEF30 /* ZBSendFileResponse.swift in Sources */,
+				BC458DA122D5FD08004DEF30 /* ZBError.swift in Sources */,
+				BC458DA322D5FD08004DEF30 /* ZBValidateResponse.swift in Sources */,
+				BC458DA022D5FD08004DEF30 /* ZBValidateSubStatus.swift in Sources */,
+				BC458D9C22D5FD08004DEF30 /* ZBGetFileResponse.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
