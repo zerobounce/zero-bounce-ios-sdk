@@ -27,6 +27,10 @@ public class ZeroBounceSDK {
         self.apiKey = apiKey
     }
 
+    ///
+    /// - parameter email: The email address you want to validate
+    /// - parameter ipAddress: The IP Address the email signed up from (Can be blank)
+    ///
     public func validate(email: String, ipAddress: String? = nil, completion: @escaping (ZBResult<ZBValidateResponse>) -> ()) {
         //print("ZeroBounceSDK validate email=\(email)")
         guard let apiKey = self.apiKey else {
@@ -38,6 +42,9 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(apiBaseUrl)/validate?api_key=\(apiKey)&email=\(email)&ip_address=\(ipAddressPart)", completion: completion)
     }
 
+    ///
+    /// This API will tell you how many credits you have left on your account. It's simple, fast and easy to use.
+    ///
     public func getCredits(completion: @escaping (ZBResult<ZBCreditsResponse>) -> ()) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
@@ -47,6 +54,9 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(apiBaseUrl)/getcredits?api_key=\(apiKey)", completion: completion)
     }
 
+    ///
+    /// - parameter fileId: The returned file ID when calling sendFile API.
+    ///
     public func fileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
@@ -56,6 +66,9 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(bulkApiBaseUrl)/filestatus?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
     }
 
+    ///
+    /// - parameter fileId: The returned file ID when calling sendfile API.
+    ///
     public func deleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
@@ -65,6 +78,10 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(bulkApiBaseUrl)/filestatus?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
     }
 
+    ///
+    /// - parameter startDate: The start date of when you want to view API usage
+    /// - parameter endDate: The end date of when you want to view API usage
+    ///
     public func getApiUsage(startDate: Date, endDate: Date, completion: @escaping (ZBResult<ZBGetApiUsageResponse>) -> ()) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
@@ -77,6 +94,9 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(apiBaseUrl)/getapiusage?api_key=\(apiKey)&start_date=\(startString)&end_date=\(endString)", completion: completion)
     }
     
+    ///
+    /// The sendfile API allows user to send a file for bulk email validation
+    ///
     public func sendFile(
         filePath: String, emailAddressColumn:Int, returnUrl: String? = nil,
         firstNameColumn: Int? = nil, lastNameColumn: Int? = nil, genderColumn:Int? = nil, ipAddressColumn:Int? = nil, hasHeaderRow: Bool = false,
@@ -113,6 +133,9 @@ public class ZeroBounceSDK {
         }
     }
     
+    ///
+    /// The getfile API allows users to get the validation results file for the file been submitted using sendfile API
+    ///
     public func getFile(fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
@@ -130,7 +153,7 @@ public class ZeroBounceSDK {
                 }
 
                 print("Zero Bounce SDK getFile data: \(text), fileName=\(fileName)")
-                self.writeFile(text: text, to: fileName) { writeResult in
+                ZBFileManager.writeFile(text: text, to: fileName) { writeResult in
                     switch writeResult {
                     case .success(let path):
                             completion(.Success(ZBGetFileResponse(localFilePath: path)))
@@ -153,29 +176,6 @@ public class ZeroBounceSDK {
         case Failure(Error)
     }
 
-    public enum ZBError: LocalizedError {
-        case notInitialized
-        case apiError
-        case invalidEndpoint
-        case noResponse
-        case invalidResponse(statusCode: Int)
-        case noData
-        case decodeError
-        case saveFileError(message: String)
-        public var errorDescription: String? {
-            switch self {
-            case .notInitialized:
-                return "ZeroBounceSDK is not initialized. Please call ZeroBounceSDK.shared.initialize(apiKey) first"
-            case .invalidResponse(let statusCode):
-                return "Invalid Response (status code: \(statusCode))" 
-            case .saveFileError(let message):
-                return message
-            default:
-                return "No error description provided"
-            }
-        }
-    }
- 
     private func sendJsonRequest<T: Codable>(url: String, completion: @escaping (ZBResult<T>) -> ()) {
         var r = URLRequest(url: URL(string: url)!)
         r.httpMethod = "GET"
@@ -193,19 +193,17 @@ public class ZeroBounceSDK {
     private func sendJsonRequest<T: Codable>(request:URLRequest, completion: @escaping (ZBResult<T>) -> ()) {
         sendRequest(request: request) { result in
             switch result {
-            case .success( _, let data):
-
+            case .success(_, let data):
                 do {
-                    // let value = try self.jsonDecoder.decode(T.self, from: data)
                     let value = try JSONDecoder().decode(T.self, from: data)
-                    completion(ZBResult.Success(value))
+                    completion(.Success(value))
                 } catch {
                     NSLog("ZeroBounceSDK error \(error)")
-                    completion(ZBResult.Failure(ZBError.decodeError))
+                    completion(.Failure(ZBError.decodeError))
                 }
                 break
             case .failure (let error):
-                completion(ZBResult.Failure(error))
+                completion(.Failure(error))
                 break
             }
         }
@@ -233,6 +231,7 @@ public class ZeroBounceSDK {
                 result(RequestResult.failure(ZBError.noResponse))
                 return
             }
+
             NSLog("ZeroBounceSDK statusCode: \(statusCode)")
 
             /*
@@ -253,41 +252,5 @@ public class ZeroBounceSDK {
             result(RequestResult.success(response, data))
         }).resume()
     }
-
-    private enum WriteFileResult {
-        case success(String)
-        case failure(Error)
-    }
-
-    private func writeFile(text:String, to fileNamed: String, folder: String = "SavedFiles", result: @escaping (WriteFileResult) -> ()) {
-        guard let path = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first else {
-            result(.failure(ZBError.saveFileError(message: "Cannot access downloads directory")))
-            return
-        }
-
-        guard let writePath = NSURL(fileURLWithPath: path).appendingPathComponent(folder) else {
-            result(.failure(ZBError.saveFileError(message: "Cannot access folder \(folder)")))
-            return
-        }
-        
-        do {
-            try FileManager.default.createDirectory(atPath: writePath.path, withIntermediateDirectories: true)
-        } catch {
-            result(.failure(ZBError.saveFileError(message: "Cannot create directory \(writePath.path)")))
-            return
-        }
-
-        let file = writePath.appendingPathComponent(fileNamed)
-
-        do {
-            try text.write(to: file, atomically: false, encoding: .utf8)
-        } catch {
-            result(.failure(ZBError.saveFileError(message: "Cannot write to file \(file.path)")))
-            return
-        }
-
-        result(.success(file.path))
-    }
-
 
 }

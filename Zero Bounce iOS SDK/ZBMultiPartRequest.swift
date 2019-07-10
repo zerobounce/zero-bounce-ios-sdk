@@ -9,7 +9,7 @@
 import Foundation
 import MobileCoreServices
 
-public class ZBMultiPartRequest {
+internal class ZBMultiPartRequest {
     
     /// Create request
     ///
@@ -19,7 +19,7 @@ public class ZBMultiPartRequest {
     ///
     /// - returns:            The `URLRequest` that was created
     
-    static public func createFileRequest(url:String, parameters: [String: Any]?, filePathKey: String, paths: [String]) throws -> URLRequest {
+    static internal func createFileRequest(url:String, parameters: [String: Any]?, filePathKey: String, paths: [String]) throws -> URLRequest {
         let boundary = generateBoundaryString()
         
         var request = URLRequest(url: URL(string: url)!)
@@ -79,7 +79,7 @@ public class ZBMultiPartRequest {
     ///
     /// - returns:            The boundary string that consists of "Boundary-" followed by a UUID string.
     
-    static public func generateBoundaryString() -> String {
+    static internal func generateBoundaryString() -> String {
         return "Boundary-\(UUID().uuidString)"
     }
     
@@ -104,7 +104,7 @@ public class ZBMultiPartRequest {
     }
 }
 
-extension Data {
+internal extension Data {
     
     /// Append string to Data
     ///
