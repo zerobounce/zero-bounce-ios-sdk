@@ -8,19 +8,19 @@ s.summary = "ZeroBounceSDK provides wrappers over ZeroBounce api"
 s.requires_arc = true
 
 # 2
-s.version = "0.0.107"
+s.version = "0.0.1"
 
 # 3
 s.license = { :type => "MIT", :file => "LICENSE" }
 
 # 4 - Replace with your name and e-mail address
-s.author = { "Andrei Tatomir" => "andrei.tatomir@mountsoftware.ro" }
+s.author = { "Zero Bounce" => "integrations@zerobounce.net" }
 
 # 5 - Replace this URL with your own GitHub page's URL (from the address bar)
-s.homepage = "https://gitlab.gud.ro:9443/mountsoftware/zero-bounce/zero-bounce-ios-sdk"
+s.homepage = "https://github.com/zerobounce-llc/zero-bounce-ios-sdk"
 
 # 6 - Replace this URL with your own Git URL from "Quick Setup"
-s.source = { :git => "git@gitlab.gud.ro:mountsoftware/zero-bounce/zero-bounce-ios-sdk.git",
+s.source = { :git => "https://github.com/zerobounce-llc/zero-bounce-ios-sdk.git",
 :tag => "#{s.version}" }
 
 # 7
