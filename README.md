@@ -1,4 +1,5 @@
 # Zero Bounce iOS SDK
 
-push podspec cmd: 
-- `pod repo push ZeroBouncePodSpecs ZeroBounceSDK.podspec`
+### Installation
+Add the pod to your Podfile:
+```pod 'ZeroBounceSDK' ```
