@@ -85,7 +85,7 @@ let lastNameColumn = 3;             // The index of "last name" column in the fi
 let genderColumn = 3;               // The index of "gender" column in the file
 let ipAddressColumn = 3;            // The index of "IP address" column in the file
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
-val returnUrl = "https://domain.com/called/after/processing/request";
+let returnUrl = "https://domain.com/called/after/processing/request";
 
 ZeroBounceSDK.shared.sendFile(
     filePath,
