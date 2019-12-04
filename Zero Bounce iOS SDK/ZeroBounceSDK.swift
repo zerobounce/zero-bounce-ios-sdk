@@ -27,6 +27,7 @@ public class ZeroBounceSDK {
         self.apiKey = apiKey
     }
 
+    //MARK: Validate
     ///
     /// - parameter email: The email address you want to validate
     /// - parameter ipAddress: The IP Address the email signed up from (Can be blank)
@@ -42,6 +43,7 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(apiBaseUrl)/validate?api_key=\(apiKey)&email=\(email)&ip_address=\(ipAddressPart)", completion: completion)
     }
 
+    //MARK: GetCredits
     ///
     /// This API will tell you how many credits you have left on your account. It's simple, fast and easy to use.
     ///
@@ -53,31 +55,8 @@ public class ZeroBounceSDK {
 
         sendJsonRequest(url: "\(apiBaseUrl)/getcredits?api_key=\(apiKey)", completion: completion)
     }
-
-    ///
-    /// - parameter fileId: The returned file ID when calling sendFile API.
-    ///
-    public func fileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
-            completion(ZBResult.Failure(ZBError.notInitialized))
-            return
-        }
-
-        sendJsonRequest(url: "\(bulkApiBaseUrl)/filestatus?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
-    }
-
-    ///
-    /// - parameter fileId: The returned file ID when calling sendfile API.
-    ///
-    public func deleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
-            completion(ZBResult.Failure(ZBError.notInitialized))
-            return
-        }
-
-        sendJsonRequest(url: "\(bulkApiBaseUrl)/filestatus?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
-    }
-
+    
+    //MARK: GetApiUsage
     ///
     /// - parameter startDate: The start date of when you want to view API usage
     /// - parameter endDate: The end date of when you want to view API usage
@@ -93,7 +72,71 @@ public class ZeroBounceSDK {
 
         sendJsonRequest(url: "\(apiBaseUrl)/getapiusage?api_key=\(apiKey)&start_date=\(startString)&end_date=\(endString)", completion: completion)
     }
+
+    //MARK: FileStatus
+    ///
+    /// - parameter fileId: The returned file ID when calling sendFile API.
+    ///
+    public func fileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
+        _fileStatus(scoring: false, fileId: fileId, completion: completion)
+    }
+
+    ///
+    /// - parameter fileId: The returned file ID when calling scoringSendFile API.
+    ///
+    public func scoringFileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
+        _fileStatus(scoring: true, fileId: fileId, completion: completion)
+    }
+
+    private func _fileStatus(scoring: Bool, fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+
+        sendJsonRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/filestatus?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
+    }
+
+    //MARK: DeleteFile
+    ///
+    /// - parameter fileId: The returned file ID when calling sendfile API.
+    ///
+    public func deleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
+        _deleteFile(scoring: false, fileId: fileId, completion: completion)
+    }
+
+    ///
+    /// - parameter fileId: The returned file ID when calling scoringSendfile API.
+    ///
+    public func scoringDeleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
+        _deleteFile(scoring: true, fileId: fileId, completion: completion)
+    }
+
+    private func _deleteFile(scoring: Bool, fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+
+        sendJsonRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/deletefile?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
+    }
+
     
+
+    //MARK: SendFile
+    ///
+    /// The scoringSendfile API allows user to send a file for bulk email validation
+    ///
+    public func scoringSendFile(
+            filePath: String, emailAddressColumn:Int, returnUrl: String? = nil,
+            hasHeaderRow: Bool = false,
+            completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+
+        _sendFile(scoring: true, filePath: filePath, emailAddressColumn: emailAddressColumn,
+                returnUrl: returnUrl, hasHeaderRow: hasHeaderRow,
+                completion: completion)
+    }
+
     ///
     /// The sendfile API allows user to send a file for bulk email validation
     ///
@@ -101,17 +144,29 @@ public class ZeroBounceSDK {
         filePath: String, emailAddressColumn:Int, returnUrl: String? = nil,
         firstNameColumn: Int? = nil, lastNameColumn: Int? = nil, genderColumn:Int? = nil, ipAddressColumn:Int? = nil, hasHeaderRow: Bool = false,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
-        
+
+        _sendFile(scoring: false, filePath: filePath, emailAddressColumn: emailAddressColumn,
+                returnUrl: returnUrl, firstNameColumn: firstNameColumn, lastNameColumn:lastNameColumn, genderColumn: genderColumn,
+                ipAddressColumn: ipAddressColumn, hasHeaderRow: hasHeaderRow,
+                completion: completion)
+    }
+
+    private func _sendFile(
+            scoring: Bool,
+            filePath: String, emailAddressColumn:Int, returnUrl: String? = nil,
+            firstNameColumn: Int? = nil, lastNameColumn: Int? = nil, genderColumn:Int? = nil, ipAddressColumn:Int? = nil, hasHeaderRow: Bool = false,
+            completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
-        
+
         var parameters = [
             "api_key": apiKey,
             "email_address_column": emailAddressColumn,
             "has_header_row": hasHeaderRow,
-            ] as [String : Any]
+        ] as [String : Any]
         if let firstNameColumn = firstNameColumn {
             parameters["first_name_column"] = firstNameColumn
         }
@@ -125,24 +180,37 @@ public class ZeroBounceSDK {
             parameters["ip_address_column"] = ipAddressColumn
         }
         do {
-            let r = try ZBMultiPartRequest.createFileRequest(url: "\(bulkApiBaseUrl)/sendFile", parameters: parameters, filePathKey: "file", paths: [filePath])
+            let r = try ZBMultiPartRequest.createFileRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/sendFile", parameters: parameters, filePathKey: "file", paths: [filePath])
             sendJsonRequest(request: r, completion: completion)
         } catch {
             completion(ZBResult.Failure(error))
             return
         }
     }
-    
+
+
+    //MARK: GetFile
     ///
     /// The getfile API allows users to get the validation results file for the file been submitted using sendfile API
     ///
     public func getFile(fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+        _getFile(scoring: false, fileId: fileId, completion: completion)
+    }
+
+    ///
+    /// The scoringGetFile API allows users to get the validation results file for the file been submitted using scoringSendfile API
+    ///
+    public func scoringGetFile(fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+        _getFile(scoring: true, fileId: fileId, completion: completion)
+    }
+
+    private func _getFile(scoring: Bool, fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
 
-        sendRequest(url: "\(bulkApiBaseUrl)/getFile?api_key=\(apiKey)&file_id=\(fileId)") { result in 
+        sendRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/getFile?api_key=\(apiKey)&file_id=\(fileId)") { result in
             switch result {
             case .success(let response, let data):
 
@@ -156,7 +224,7 @@ public class ZeroBounceSDK {
                 ZBFileManager.writeFile(text: text, to: fileName) { writeResult in
                     switch writeResult {
                     case .success(let path):
-                            completion(.Success(ZBGetFileResponse(localFilePath: path)))
+                        completion(.Success(ZBGetFileResponse(localFilePath: path)))
                         break;
                     case .failure(let error):
                         completion(.Failure(error))
@@ -171,6 +239,7 @@ public class ZeroBounceSDK {
         }
     }
 
+    //MARK: Internal
     public enum ZBResult<T: Codable> {
         case Success(T)
         case Failure(Error)
@@ -215,12 +284,12 @@ public class ZeroBounceSDK {
 
     private func sendRequest(request:URLRequest,  result: @escaping (RequestResult) -> ()) {
         URLSession.shared.dataTask(with: request, completionHandler: { data, response, error -> Void in
-            
+
             if let error = error {
                 result(RequestResult.failure(error))
                 return
             }
-            
+
             guard let response = response else {
                 result(RequestResult.failure(ZBError.noResponse))
                 return
@@ -245,10 +314,10 @@ public class ZeroBounceSDK {
                 result(RequestResult.failure(ZBError.noData))
                 return
             }
-            
+
             let json = String(data: data, encoding: .utf8)
             NSLog("ZeroBounceSDK data json: \(String(describing: json))")
-            
+
             result(RequestResult.success(response, data))
         }).resume()
     }
