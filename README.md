@@ -95,8 +95,7 @@ ZeroBounceSDK.shared.sendFile(
     lastNameColumn,
     genderColumn,
     ipAddressColumn,
-    hasHeaderRow,
-    ) { (result) in
+    hasHeaderRow) { (result) in
         switch (result) {
         case .Success(let response):
             NSLog("sendFile success response=\(response)")
@@ -145,6 +144,78 @@ ZeroBounceSDK.shared.fileStatus(fileId) { (result) in
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
 ZeroBounceSDK.shared.deleteFile(fileId) { (result) in
+    switch (result) {
+    case .Success(let response):
+        NSLog("deleteFile success response=\(response)")
+        break;
+    case .Failure(let error):
+        NSLog("deleteFile failure error=\(String(describing: error))")
+        break;
+    }
+}
+```
+
+### AI Scoring API
+* ##### The scoringSendFile API allows user to send a file for bulk email validation
+```swift
+let filePath = File("<FILE_PATH>"); // The csv or txt file
+let emailAddressColumn = 3;         // The index of "email" column in the file. Index starts at 1
+let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
+let returnUrl = "https://domain.com/called/after/processing/request";
+
+ZeroBounceSDK.shared.scoringSendFile(
+    filePath,
+    emailAddressColumn,
+    returnUrl,
+    hasHeaderRow) { (result) in
+        switch (result) {
+        case .Success(let response):
+            NSLog("sendFile success response=\(response)")
+            break;
+        case .Failure(let error):
+            NSLog("sendFile failure error=\(String(describing: error))")
+            break;
+        }
+}
+```
+
+* ##### The scoringGetFile API allows users to get the validation results file for the file been submitted using scoringSendFile API
+```swift
+let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
+
+ZeroBounceSDK.shared.scoringGetfile(fileId) { (result) in
+    switch (result) {
+    case .Success(let response):
+        NSLog("getfile success response=\(response)")
+        break;
+    case .Failure(let error):
+        NSLog("getfile failure error=\(String(describing: error))")
+        break;
+    }
+}
+```
+
+* ##### Check the status of a file uploaded via "scoringSendFile" method
+```swift
+let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
+
+ZeroBounceSDK.shared.scoringFileStatus(fileId) { (result) in
+    switch (result) {
+    case .Success(let response):
+        NSLog("fileStatus success response=\(response)")
+        break;
+    case .Failure(let error):
+        NSLog("fileStatus failure error=\(String(describing: error))")
+        break;
+    }
+}
+```
+
+* ##### Deletes the file that was submitted using scoring scoringSendFile API. File can be deleted only when its status is _`Complete`_
+```swift
+let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
+
+ZeroBounceSDK.shared.scoringDeleteFile(fileId) { (result) in
     switch (result) {
     case .Success(let response):
         NSLog("deleteFile success response=\(response)")
