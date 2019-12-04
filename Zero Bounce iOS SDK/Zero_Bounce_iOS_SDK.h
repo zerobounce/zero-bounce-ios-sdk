@@ -2,8 +2,8 @@
 //  Zero_Bounce_iOS_SDK.h
 //  Zero Bounce iOS SDK
 //
-//  Created by Mount Software on 08/07/2019.
-//  Copyright © 2019 Mount Software. All rights reserved.
+//  Created by ZeroBounce on 08/07/2019.
+//  Copyright © 2019 ZeroBounce. All rights reserved.
 //
 
 #import <UIKit/UIKit.h>

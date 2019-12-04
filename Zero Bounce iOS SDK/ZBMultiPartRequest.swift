@@ -2,8 +2,8 @@
 //  ZBMultiPartRequest.swift
 //  Zero Bounce iOS SDK
 //
-//  Created by Mount Software on 09/07/2019.
-//  Copyright © 2019 Mount Software. All rights reserved.
+//  Created by ZeroBounce on 09/07/2019.
+//  Copyright © 2019 ZeroBounce. All rights reserved.
 //
 
 import Foundation

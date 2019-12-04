@@ -2,8 +2,8 @@
 //  ZBFileManager.swift
 //  ZeroBounceExample
 //
-//  Created by Mount Software on 10/07/2019.
-//  Copyright © 2019 Mount Software. All rights reserved.
+//  Created by ZeroBounce on 10/07/2019.
+//  Copyright © 2019 ZeroBounce. All rights reserved.
 //
 
 import Foundation
