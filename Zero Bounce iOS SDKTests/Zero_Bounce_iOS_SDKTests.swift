@@ -7,28 +7,43 @@
 //
 
 import XCTest
+import Mocker
 @testable import Zero_Bounce_iOS_SDK
 
 class Zero_Bounce_iOS_SDKTests: XCTestCase {
+    private let apiKey = "test-api-key"
 
     override func setUp() {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+        ZeroBounceSDK.shared.initialize(apiKey: apiKey)
     }
 
     override func tearDown() {
         // Put teardown code here. This method is called after the invocation of each test method in the class.
     }
 
-    func testExample() {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-    }
+    func testGetCredits() {
+        let apiEndpoint = URL(
+            string: "\(ZeroBounceSDK.shared.apiBaseUrl)/getcredits?api_key=\(ZeroBounceSDK.shared.apiKey!)"
+        )!
+        let credits = "3000"
+        let creditsResponse = ZBCreditsResponse(credits: credits)
+        let mockedData = try! JSONEncoder().encode(creditsResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        mock.register()
 
-    func testPerformanceExample() {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.getCredits() { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                NSLog("getCredits success response=\(response)")
+                XCTAssertEqual(response.credits, credits)
+            case .Failure(let error):
+                NSLog("getCredits failure error=\(String(describing: error))")
+                XCTAssertTrue(false)
+            }
         }
-    }
 
+        wait(for: [requestExpectation], timeout: 60)
+    }
 }

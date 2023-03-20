@@ -14,9 +14,9 @@ public class ZeroBounceSDK {
 
     static public let shared = ZeroBounceSDK()
 
-    private let apiBaseUrl = "https://api.zerobounce.net/v2"
+    let apiBaseUrl = "https://api.zerobounce.net/v2"
     private let bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
-    private var apiKey: String?
+    var apiKey: String?
     private let dateFormatter = DateFormatter()
 
     fileprivate init() {

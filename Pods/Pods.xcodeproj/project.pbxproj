@@ -7,16 +7,30 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1C08873DA90D371808B0FFED14C73E7B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3212113385A8FBBDB272BD23C409FF61 /* Foundation.framework */; };
-		50ABF928EF74D2C3A0509EAD664AC855 /* Pods-Zero Bounce iOS SDKTests-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 81CB0101780086A939DD0663D3EE820C /* Pods-Zero Bounce iOS SDKTests-dummy.m */; };
-		82348DB966965E40DBF27DE3CEFA11A0 /* Pods-Zero Bounce iOS SDK-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 0B7D9F08639BE2546DE98BC3386B1A7D /* Pods-Zero Bounce iOS SDK-dummy.m */; };
-		964618249B613B671B2DB917CA9D55A5 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3212113385A8FBBDB272BD23C409FF61 /* Foundation.framework */; };
-		B7D256F18C20DED45E588E904CD8D7FF /* Pods-Zero Bounce iOS SDK-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = B1043C26FBAE981129EAC2845779B71F /* Pods-Zero Bounce iOS SDK-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		BE27BEA078B6730437894AA46A4095A7 /* Pods-Zero Bounce iOS SDKTests-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = B6B9A07DB78FBDC43C7AABE3C6368684 /* Pods-Zero Bounce iOS SDKTests-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		16C212AE6C1962E6819A141F60D916AE /* XCTest+Mocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AADB2E13D968B6F95E7B3298D5466080 /* XCTest+Mocker.swift */; };
+		28CEB36551A181DF457C93FFB18E7381 /* Mocker-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = 9CC2FA9CF45904706A6D7C69716CAB15 /* Mocker-dummy.m */; };
+		29F187DBCC303F9503C9358F054B39B0 /* Pods-Zero Bounce iOS SDK-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = D71D58F182D85E9405E97CC583D017AB /* Pods-Zero Bounce iOS SDK-dummy.m */; };
+		58814DAAA817340DDE6940745DFA6FEF /* Mocker-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = B39C663AE45FD9C39EC394CBD2FD3E9D /* Mocker-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		6176B8AB61AFAFA869D8EA932D2335DC /* Pods-Zero Bounce iOS SDKTests-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = F5969E66CBD7281096162532DCB3CBBC /* Pods-Zero Bounce iOS SDKTests-dummy.m */; };
+		6F6D75947BB42216FD3F358A3EF218FF /* MockingURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F04FA72B9124DBDAE621F08CC48F9D5 /* MockingURLProtocol.swift */; };
+		76814AA058958109184702F52CD0B89E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73010CC983E3809BECEE5348DA1BB8C6 /* Foundation.framework */; };
+		A9303B325DCEAA53E0BE1C17B74E9AD1 /* Mocker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E431243C5EA8240DAD900DC261B82E /* Mocker.swift */; };
+		D6852B34DA12C9F33ED0C9C62F02C962 /* Pods-Zero Bounce iOS SDK-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = 761B13E73CBB5FBE99875DB9C4793F5B /* Pods-Zero Bounce iOS SDK-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		D7400FBE968D96824996206AECA0F1A0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73010CC983E3809BECEE5348DA1BB8C6 /* Foundation.framework */; };
+		D98E48167CF2344B96E9B9BF12CD3A1E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73010CC983E3809BECEE5348DA1BB8C6 /* Foundation.framework */; };
+		EDBFB59F27EBE82C452CAEC3C725AF01 /* Mock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F0C8A45C7931281AD3989219E99651A /* Mock.swift */; };
+		F59B2BBAF44EE4F1FF40BF4BF2E7E098 /* Pods-Zero Bounce iOS SDKTests-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = E12B78570EAAB6B58BED0812FEB19D17 /* Pods-Zero Bounce iOS SDKTests-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		0FFDFAFA66D11E9D4F6A46AE4343D922 /* PBXContainerItemProxy */ = {
+		5E5A38F6ECDF41F11E1DE2225315FBDF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 04AFC708359363290935C681A1CE226D;
+			remoteInfo = Mocker;
+		};
+		9558A9F9EED1CDC39E04EC1F1196E8AC /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
 			proxyType = 1;
@@ -26,88 +40,163 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		00F9F92704C17CE117142FF3B51ED45E /* Pods-Zero Bounce iOS SDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDK.debug.xcconfig"; sourceTree = "<group>"; };
-		06038EDBC7506D12DAF222BCE9AB59D9 /* Pods-Zero Bounce iOS SDKTests-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDKTests-Info.plist"; sourceTree = "<group>"; };
-		0B7D9F08639BE2546DE98BC3386B1A7D /* Pods-Zero Bounce iOS SDK-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-Zero Bounce iOS SDK-dummy.m"; sourceTree = "<group>"; };
-		3212113385A8FBBDB272BD23C409FF61 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS12.2.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		335E048E21AC7D78302D9D1865961FF2 /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDKTests.release.xcconfig"; sourceTree = "<group>"; };
-		446CA8F7F5A18E5C30E3E763950091DA /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; sourceTree = "<group>"; };
-		50255642E4D8237FC9C0D4097141817A /* Pods-Zero Bounce iOS SDK-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDK-acknowledgements.plist"; sourceTree = "<group>"; };
-		6396DB6947DC538C94EEB9EE8CC246DA /* Pods-Zero Bounce iOS SDKTests-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-Zero Bounce iOS SDKTests-acknowledgements.markdown"; sourceTree = "<group>"; };
-		7262D04F5C23CCFC52C5F782A2A57F11 /* Pods-Zero Bounce iOS SDK.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDK.release.xcconfig"; sourceTree = "<group>"; };
-		76DE01171208C63D39848BEF3EBEB065 /* Pods-Zero Bounce iOS SDK-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-Zero Bounce iOS SDK-acknowledgements.markdown"; sourceTree = "<group>"; };
-		81CB0101780086A939DD0663D3EE820C /* Pods-Zero Bounce iOS SDKTests-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-Zero Bounce iOS SDKTests-dummy.m"; sourceTree = "<group>"; };
-		838A6C6C79117AE6BC893DF70207A013 /* Pods_Zero_Bounce_iOS_SDKTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = Pods_Zero_Bounce_iOS_SDKTests.framework; path = "Pods-Zero Bounce iOS SDKTests.framework"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1D4AE396CC91228FE660B84E90FBD20A /* Mocker */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = Mocker; path = Mocker.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A15BE38B78E4F169EA838565D832656 /* Mocker.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Mocker.release.xcconfig; sourceTree = "<group>"; };
+		3F04FA72B9124DBDAE621F08CC48F9D5 /* MockingURLProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MockingURLProtocol.swift; path = Sources/MockingURLProtocol.swift; sourceTree = "<group>"; };
+		561B80292D301996F089293007363F0B /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDKTests.release.xcconfig"; sourceTree = "<group>"; };
+		6135E9B46CDDF170EE31592FCDEE0525 /* Pods-Zero Bounce iOS SDK-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDK-acknowledgements.plist"; sourceTree = "<group>"; };
+		6883CCE35B5B4CF2B82F43EE03DAE7F0 /* Pods-Zero Bounce iOS SDK.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-Zero Bounce iOS SDK.modulemap"; sourceTree = "<group>"; };
+		6A029CFD0FBE4C9241549D6687355485 /* Pods-Zero Bounce iOS SDKTests-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-Zero Bounce iOS SDKTests-acknowledgements.markdown"; sourceTree = "<group>"; };
+		6F0C8A45C7931281AD3989219E99651A /* Mock.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Mock.swift; path = Sources/Mock.swift; sourceTree = "<group>"; };
+		73010CC983E3809BECEE5348DA1BB8C6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		73F9B5B5F31E2776D24F05ECF78459ED /* Mocker-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Mocker-Info.plist"; sourceTree = "<group>"; };
+		761B13E73CBB5FBE99875DB9C4793F5B /* Pods-Zero Bounce iOS SDK-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-Zero Bounce iOS SDK-umbrella.h"; sourceTree = "<group>"; };
+		79D7B65F4457F7D554E68B03DE54EDD4 /* Pods-Zero Bounce iOS SDK-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-Zero Bounce iOS SDK-acknowledgements.markdown"; sourceTree = "<group>"; };
+		7BB1E02E1EC78B0AD0E7B7C8B148B313 /* Pods-Zero Bounce iOS SDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDK.debug.xcconfig"; sourceTree = "<group>"; };
+		8F423F0AF85E90D775B129E3DC0AEEAB /* Mocker-prefix.pch */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Mocker-prefix.pch"; sourceTree = "<group>"; };
+		923C428905FE7230B839B0604F4642D3 /* Pods-Zero Bounce iOS SDKTests */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = "Pods-Zero Bounce iOS SDKTests"; path = Pods_Zero_Bounce_iOS_SDKTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		9A8112185A9DF667345DBD1319E38AF9 /* Mocker.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = Mocker.modulemap; sourceTree = "<group>"; };
+		9CC2FA9CF45904706A6D7C69716CAB15 /* Mocker-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Mocker-dummy.m"; sourceTree = "<group>"; };
 		9D940727FF8FB9C785EB98E56350EF41 /* Podfile */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; lastKnownFileType = text; name = Podfile; path = ../Podfile; sourceTree = SOURCE_ROOT; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
-		A3B82C438451CB7F5024FDA9F994EEA8 /* Pods-Zero Bounce iOS SDK-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDK-Info.plist"; sourceTree = "<group>"; };
-		B1043C26FBAE981129EAC2845779B71F /* Pods-Zero Bounce iOS SDK-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-Zero Bounce iOS SDK-umbrella.h"; sourceTree = "<group>"; };
-		B2A980480F266C897081C7E396330EA6 /* Pods-Zero Bounce iOS SDKTests.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-Zero Bounce iOS SDKTests.modulemap"; sourceTree = "<group>"; };
-		B6B9A07DB78FBDC43C7AABE3C6368684 /* Pods-Zero Bounce iOS SDKTests-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-Zero Bounce iOS SDKTests-umbrella.h"; sourceTree = "<group>"; };
-		C61E0A2B67E54A743B63A82765FC100B /* Pods-Zero Bounce iOS SDK.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-Zero Bounce iOS SDK.modulemap"; sourceTree = "<group>"; };
-		DAB2F641B7C1E3BBF6C4C5117C35D2E9 /* Pods-Zero Bounce iOS SDKTests-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDKTests-acknowledgements.plist"; sourceTree = "<group>"; };
-		F89BEF105C968CDE7ABF3B7EF3CCC3CF /* Pods_Zero_Bounce_iOS_SDK.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = Pods_Zero_Bounce_iOS_SDK.framework; path = "Pods-Zero Bounce iOS SDK.framework"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B8659F6121C0B7C35622A3B4453002 /* Pods-Zero Bounce iOS SDKTests-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDKTests-Info.plist"; sourceTree = "<group>"; };
+		AA9D5CE7785A1119C4A0FA2A52B807AB /* Pods-Zero Bounce iOS SDK */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = "Pods-Zero Bounce iOS SDK"; path = Pods_Zero_Bounce_iOS_SDK.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		AADB2E13D968B6F95E7B3298D5466080 /* XCTest+Mocker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "XCTest+Mocker.swift"; path = "Sources/XCTest+Mocker.swift"; sourceTree = "<group>"; };
+		AE1495F707D131DF7B054E0CE81D6B45 /* Pods-Zero Bounce iOS SDKTests.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-Zero Bounce iOS SDKTests.modulemap"; sourceTree = "<group>"; };
+		B39C663AE45FD9C39EC394CBD2FD3E9D /* Mocker-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Mocker-umbrella.h"; sourceTree = "<group>"; };
+		B496A8D0E52184C2F29382AB7F81F905 /* Pods-Zero Bounce iOS SDKTests-frameworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-Zero Bounce iOS SDKTests-frameworks.sh"; sourceTree = "<group>"; };
+		BAC75D378E31F6AD72DC55F5DBE30C7B /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; sourceTree = "<group>"; };
+		C0E431243C5EA8240DAD900DC261B82E /* Mocker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Mocker.swift; path = Sources/Mocker.swift; sourceTree = "<group>"; };
+		C944355E23D74CC466BC6E3E681A8436 /* Mocker.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Mocker.debug.xcconfig; sourceTree = "<group>"; };
+		D71D58F182D85E9405E97CC583D017AB /* Pods-Zero Bounce iOS SDK-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-Zero Bounce iOS SDK-dummy.m"; sourceTree = "<group>"; };
+		DD64CBDCA3C8537A1EFEEB61CD3D87E2 /* Pods-Zero Bounce iOS SDK-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDK-Info.plist"; sourceTree = "<group>"; };
+		E12B78570EAAB6B58BED0812FEB19D17 /* Pods-Zero Bounce iOS SDKTests-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-Zero Bounce iOS SDKTests-umbrella.h"; sourceTree = "<group>"; };
+		F5969E66CBD7281096162532DCB3CBBC /* Pods-Zero Bounce iOS SDKTests-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-Zero Bounce iOS SDKTests-dummy.m"; sourceTree = "<group>"; };
+		F6BA335170EE3A086FFB7284C3DC7DEF /* Pods-Zero Bounce iOS SDK.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Zero Bounce iOS SDK.release.xcconfig"; sourceTree = "<group>"; };
+		FFFC3E0A520332541FE45C6DCE8175FD /* Pods-Zero Bounce iOS SDKTests-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Zero Bounce iOS SDKTests-acknowledgements.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		3D931C7C695B739053219A988124EF8A /* Frameworks */ = {
+		214BFDA4ED10BB65DB85C774364AFAB6 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				964618249B613B671B2DB917CA9D55A5 /* Foundation.framework in Frameworks */,
+				76814AA058958109184702F52CD0B89E /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		89DEA332405A54B2A3CC2B87A7048301 /* Frameworks */ = {
+		2AC0C81688D62159A3321DD1C28497FF /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1C08873DA90D371808B0FFED14C73E7B /* Foundation.framework in Frameworks */,
+				D7400FBE968D96824996206AECA0F1A0 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7307D429159048DEEB5FB323979AAE72 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D98E48167CF2344B96E9B9BF12CD3A1E /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		35227E9C6390924340A221305CD1FF7E /* Targets Support Files */ = {
+		05E26C5B13FD2C44C61839F38A85A396 /* Targets Support Files */ = {
 			isa = PBXGroup;
 			children = (
-				5E53FF8E7A6CB76B69BF64498920A5D9 /* Pods-Zero Bounce iOS SDK */,
-				D93372BBE667BA9B411E1640AB1CA3CE /* Pods-Zero Bounce iOS SDKTests */,
+				BF7519E3197019481DD623DD3493D810 /* Pods-Zero Bounce iOS SDK */,
+				10F4440319E43F47E0DC190C5E29DE6F /* Pods-Zero Bounce iOS SDKTests */,
 			);
 			name = "Targets Support Files";
 			sourceTree = "<group>";
 		};
-		528841ABB78CA4F52BE13BF3C4AD08AB /* Products */ = {
+		10F4440319E43F47E0DC190C5E29DE6F /* Pods-Zero Bounce iOS SDKTests */ = {
 			isa = PBXGroup;
 			children = (
-				F89BEF105C968CDE7ABF3B7EF3CCC3CF /* Pods_Zero_Bounce_iOS_SDK.framework */,
-				838A6C6C79117AE6BC893DF70207A013 /* Pods_Zero_Bounce_iOS_SDKTests.framework */,
+				AE1495F707D131DF7B054E0CE81D6B45 /* Pods-Zero Bounce iOS SDKTests.modulemap */,
+				6A029CFD0FBE4C9241549D6687355485 /* Pods-Zero Bounce iOS SDKTests-acknowledgements.markdown */,
+				FFFC3E0A520332541FE45C6DCE8175FD /* Pods-Zero Bounce iOS SDKTests-acknowledgements.plist */,
+				F5969E66CBD7281096162532DCB3CBBC /* Pods-Zero Bounce iOS SDKTests-dummy.m */,
+				B496A8D0E52184C2F29382AB7F81F905 /* Pods-Zero Bounce iOS SDKTests-frameworks.sh */,
+				A1B8659F6121C0B7C35622A3B4453002 /* Pods-Zero Bounce iOS SDKTests-Info.plist */,
+				E12B78570EAAB6B58BED0812FEB19D17 /* Pods-Zero Bounce iOS SDKTests-umbrella.h */,
+				BAC75D378E31F6AD72DC55F5DBE30C7B /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */,
+				561B80292D301996F089293007363F0B /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */,
+			);
+			name = "Pods-Zero Bounce iOS SDKTests";
+			path = "Target Support Files/Pods-Zero Bounce iOS SDKTests";
+			sourceTree = "<group>";
+		};
+		578452D2E740E91742655AC8F1636D1F /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				73010CC983E3809BECEE5348DA1BB8C6 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		904C1791B151A4545BC15DBF1689D536 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				1D4AE396CC91228FE660B84E90FBD20A /* Mocker */,
+				AA9D5CE7785A1119C4A0FA2A52B807AB /* Pods-Zero Bounce iOS SDK */,
+				923C428905FE7230B839B0604F4642D3 /* Pods-Zero Bounce iOS SDKTests */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		5E53FF8E7A6CB76B69BF64498920A5D9 /* Pods-Zero Bounce iOS SDK */ = {
+		9A57B171578B49572F7BE29B4555B8B4 /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				C61E0A2B67E54A743B63A82765FC100B /* Pods-Zero Bounce iOS SDK.modulemap */,
-				76DE01171208C63D39848BEF3EBEB065 /* Pods-Zero Bounce iOS SDK-acknowledgements.markdown */,
-				50255642E4D8237FC9C0D4097141817A /* Pods-Zero Bounce iOS SDK-acknowledgements.plist */,
-				0B7D9F08639BE2546DE98BC3386B1A7D /* Pods-Zero Bounce iOS SDK-dummy.m */,
-				A3B82C438451CB7F5024FDA9F994EEA8 /* Pods-Zero Bounce iOS SDK-Info.plist */,
-				B1043C26FBAE981129EAC2845779B71F /* Pods-Zero Bounce iOS SDK-umbrella.h */,
-				00F9F92704C17CE117142FF3B51ED45E /* Pods-Zero Bounce iOS SDK.debug.xcconfig */,
-				7262D04F5C23CCFC52C5F782A2A57F11 /* Pods-Zero Bounce iOS SDK.release.xcconfig */,
+				9F8B0748C73769A8A0F0EE0623FE7C29 /* Mocker */,
+			);
+			name = Pods;
+			sourceTree = "<group>";
+		};
+		9F8B0748C73769A8A0F0EE0623FE7C29 /* Mocker */ = {
+			isa = PBXGroup;
+			children = (
+				6F0C8A45C7931281AD3989219E99651A /* Mock.swift */,
+				C0E431243C5EA8240DAD900DC261B82E /* Mocker.swift */,
+				3F04FA72B9124DBDAE621F08CC48F9D5 /* MockingURLProtocol.swift */,
+				AADB2E13D968B6F95E7B3298D5466080 /* XCTest+Mocker.swift */,
+				CDB54B44EDB3DE9B2F8DC2325DC1E333 /* Support Files */,
+			);
+			name = Mocker;
+			path = Mocker;
+			sourceTree = "<group>";
+		};
+		BF7519E3197019481DD623DD3493D810 /* Pods-Zero Bounce iOS SDK */ = {
+			isa = PBXGroup;
+			children = (
+				6883CCE35B5B4CF2B82F43EE03DAE7F0 /* Pods-Zero Bounce iOS SDK.modulemap */,
+				79D7B65F4457F7D554E68B03DE54EDD4 /* Pods-Zero Bounce iOS SDK-acknowledgements.markdown */,
+				6135E9B46CDDF170EE31592FCDEE0525 /* Pods-Zero Bounce iOS SDK-acknowledgements.plist */,
+				D71D58F182D85E9405E97CC583D017AB /* Pods-Zero Bounce iOS SDK-dummy.m */,
+				DD64CBDCA3C8537A1EFEEB61CD3D87E2 /* Pods-Zero Bounce iOS SDK-Info.plist */,
+				761B13E73CBB5FBE99875DB9C4793F5B /* Pods-Zero Bounce iOS SDK-umbrella.h */,
+				7BB1E02E1EC78B0AD0E7B7C8B148B313 /* Pods-Zero Bounce iOS SDK.debug.xcconfig */,
+				F6BA335170EE3A086FFB7284C3DC7DEF /* Pods-Zero Bounce iOS SDK.release.xcconfig */,
 			);
 			name = "Pods-Zero Bounce iOS SDK";
 			path = "Target Support Files/Pods-Zero Bounce iOS SDK";
 			sourceTree = "<group>";
 		};
-		C0834CEBB1379A84116EF29F93051C60 /* iOS */ = {
+		CDB54B44EDB3DE9B2F8DC2325DC1E333 /* Support Files */ = {
 			isa = PBXGroup;
 			children = (
-				3212113385A8FBBDB272BD23C409FF61 /* Foundation.framework */,
+				9A8112185A9DF667345DBD1319E38AF9 /* Mocker.modulemap */,
+				9CC2FA9CF45904706A6D7C69716CAB15 /* Mocker-dummy.m */,
+				73F9B5B5F31E2776D24F05ECF78459ED /* Mocker-Info.plist */,
+				8F423F0AF85E90D775B129E3DC0AEEAB /* Mocker-prefix.pch */,
+				B39C663AE45FD9C39EC394CBD2FD3E9D /* Mocker-umbrella.h */,
+				C944355E23D74CC466BC6E3E681A8436 /* Mocker.debug.xcconfig */,
+				3A15BE38B78E4F169EA838565D832656 /* Mocker.release.xcconfig */,
 			);
-			name = iOS;
+			name = "Support Files";
+			path = "../Target Support Files/Mocker";
 			sourceTree = "<group>";
 		};
 		CF1408CF629C7361332E53B88F7BD30C = {
@@ -115,92 +204,104 @@
 			children = (
 				9D940727FF8FB9C785EB98E56350EF41 /* Podfile */,
 				D210D550F4EA176C3123ED886F8F87F5 /* Frameworks */,
-				528841ABB78CA4F52BE13BF3C4AD08AB /* Products */,
-				35227E9C6390924340A221305CD1FF7E /* Targets Support Files */,
+				9A57B171578B49572F7BE29B4555B8B4 /* Pods */,
+				904C1791B151A4545BC15DBF1689D536 /* Products */,
+				05E26C5B13FD2C44C61839F38A85A396 /* Targets Support Files */,
 			);
 			sourceTree = "<group>";
 		};
 		D210D550F4EA176C3123ED886F8F87F5 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				C0834CEBB1379A84116EF29F93051C60 /* iOS */,
+				578452D2E740E91742655AC8F1636D1F /* iOS */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		D93372BBE667BA9B411E1640AB1CA3CE /* Pods-Zero Bounce iOS SDKTests */ = {
-			isa = PBXGroup;
-			children = (
-				B2A980480F266C897081C7E396330EA6 /* Pods-Zero Bounce iOS SDKTests.modulemap */,
-				6396DB6947DC538C94EEB9EE8CC246DA /* Pods-Zero Bounce iOS SDKTests-acknowledgements.markdown */,
-				DAB2F641B7C1E3BBF6C4C5117C35D2E9 /* Pods-Zero Bounce iOS SDKTests-acknowledgements.plist */,
-				81CB0101780086A939DD0663D3EE820C /* Pods-Zero Bounce iOS SDKTests-dummy.m */,
-				06038EDBC7506D12DAF222BCE9AB59D9 /* Pods-Zero Bounce iOS SDKTests-Info.plist */,
-				B6B9A07DB78FBDC43C7AABE3C6368684 /* Pods-Zero Bounce iOS SDKTests-umbrella.h */,
-				446CA8F7F5A18E5C30E3E763950091DA /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */,
-				335E048E21AC7D78302D9D1865961FF2 /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */,
-			);
-			name = "Pods-Zero Bounce iOS SDKTests";
-			path = "Target Support Files/Pods-Zero Bounce iOS SDKTests";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
-		1B82A79511A0A1EF896F2CAAAFBC4CA8 /* Headers */ = {
+		0446413BA98CB633D841A480CD1E91D9 /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B7D256F18C20DED45E588E904CD8D7FF /* Pods-Zero Bounce iOS SDK-umbrella.h in Headers */,
+				D6852B34DA12C9F33ED0C9C62F02C962 /* Pods-Zero Bounce iOS SDK-umbrella.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		E27B53E383BEE5488A3E27EA1B8E7488 /* Headers */ = {
+		5599E4C5D333C8D9AC6704EE722A999C /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BE27BEA078B6730437894AA46A4095A7 /* Pods-Zero Bounce iOS SDKTests-umbrella.h in Headers */,
+				F59B2BBAF44EE4F1FF40BF4BF2E7E098 /* Pods-Zero Bounce iOS SDKTests-umbrella.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		70CBDD8B4868A45D0EA9184295B08B8C /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				58814DAAA817340DDE6940745DFA6FEF /* Mocker-umbrella.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
-		7661C8039F74C45F6BB065110B3BD9C2 /* Pods-Zero Bounce iOS SDKTests */ = {
+		04AFC708359363290935C681A1CE226D /* Mocker */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 167AD3149684092BED3B32041B8792C1 /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDKTests" */;
+			buildConfigurationList = 8359028EE17557014B28BC1899BACC2A /* Build configuration list for PBXNativeTarget "Mocker" */;
 			buildPhases = (
-				E27B53E383BEE5488A3E27EA1B8E7488 /* Headers */,
-				60A7CAC15B4C2129A41BDEBB4A3B939E /* Sources */,
-				3D931C7C695B739053219A988124EF8A /* Frameworks */,
-				4D93C0EF57473002E50A5DC6AE0A529C /* Resources */,
+				70CBDD8B4868A45D0EA9184295B08B8C /* Headers */,
+				F93004551F5DEA33606E7C6F1BB2692E /* Sources */,
+				214BFDA4ED10BB65DB85C774364AFAB6 /* Frameworks */,
+				E39635A51B891ECBC2A64AF86DAC9718 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				2D697D295D29BA31D4B25AE4567A4FE2 /* PBXTargetDependency */,
+			);
+			name = Mocker;
+			productName = Mocker;
+			productReference = 1D4AE396CC91228FE660B84E90FBD20A /* Mocker */;
+			productType = "com.apple.product-type.framework";
+		};
+		7661C8039F74C45F6BB065110B3BD9C2 /* Pods-Zero Bounce iOS SDKTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F329CB95BADFF8F492A345AAE6770D7B /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDKTests" */;
+			buildPhases = (
+				5599E4C5D333C8D9AC6704EE722A999C /* Headers */,
+				EE47BA48623204DD9934D7648D62948C /* Sources */,
+				7307D429159048DEEB5FB323979AAE72 /* Frameworks */,
+				87E5364E47C1CE441DBCD9B62A10A2AF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				EBEF33767F5A93D585E2BA7F132A21F1 /* PBXTargetDependency */,
+				2BD5FF4A49C514360E28AC2F5E9AA017 /* PBXTargetDependency */,
 			);
 			name = "Pods-Zero Bounce iOS SDKTests";
-			productName = "Pods-Zero Bounce iOS SDKTests";
-			productReference = 838A6C6C79117AE6BC893DF70207A013 /* Pods_Zero_Bounce_iOS_SDKTests.framework */;
+			productName = Pods_Zero_Bounce_iOS_SDKTests;
+			productReference = 923C428905FE7230B839B0604F4642D3 /* Pods-Zero Bounce iOS SDKTests */;
 			productType = "com.apple.product-type.framework";
 		};
 		C734FDC1AC762D623419E70FFA2FED42 /* Pods-Zero Bounce iOS SDK */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 7C389A9EF0D43CF79D8BA37393799445 /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDK" */;
+			buildConfigurationList = 3B2DA5D46AD0044EC9EB6F30C37D2F66 /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDK" */;
 			buildPhases = (
-				1B82A79511A0A1EF896F2CAAAFBC4CA8 /* Headers */,
-				32D4CD4261ED3EB316A4DF50DED87E56 /* Sources */,
-				89DEA332405A54B2A3CC2B87A7048301 /* Frameworks */,
-				A4124BF1C0367C30EC885ABC45D89A2B /* Resources */,
+				0446413BA98CB633D841A480CD1E91D9 /* Headers */,
+				9382B6C03A208222158F127AE2A22D26 /* Sources */,
+				2AC0C81688D62159A3321DD1C28497FF /* Frameworks */,
+				8FA62DDA339C109ED23E466B2D4CCBD9 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = "Pods-Zero Bounce iOS SDK";
-			productName = "Pods-Zero Bounce iOS SDK";
-			productReference = F89BEF105C968CDE7ABF3B7EF3CCC3CF /* Pods_Zero_Bounce_iOS_SDK.framework */;
+			productName = Pods_Zero_Bounce_iOS_SDK;
+			productReference = AA9D5CE7785A1119C4A0FA2A52B807AB /* Pods-Zero Bounce iOS SDK */;
 			productType = "com.apple.product-type.framework";
 		};
 /* End PBXNativeTarget section */
@@ -209,21 +310,23 @@
 		BFDFE7DC352907FC980B868725387E98 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 1020;
-				LastUpgradeCheck = 1020;
+				LastSwiftUpdateCheck = 1240;
+				LastUpgradeCheck = 1240;
 			};
 			buildConfigurationList = 4821239608C13582E20E6DA73FD5F1F9 /* Build configuration list for PBXProject "Pods" */;
 			compatibilityVersion = "Xcode 9.3";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				Base,
 				en,
 			);
 			mainGroup = CF1408CF629C7361332E53B88F7BD30C;
-			productRefGroup = 528841ABB78CA4F52BE13BF3C4AD08AB /* Products */;
+			productRefGroup = 904C1791B151A4545BC15DBF1689D536 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				04AFC708359363290935C681A1CE226D /* Mocker */,
 				C734FDC1AC762D623419E70FFA2FED42 /* Pods-Zero Bounce iOS SDK */,
 				7661C8039F74C45F6BB065110B3BD9C2 /* Pods-Zero Bounce iOS SDKTests */,
 			);
@@ -231,14 +334,21 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		4D93C0EF57473002E50A5DC6AE0A529C /* Resources */ = {
+		87E5364E47C1CE441DBCD9B62A10A2AF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A4124BF1C0367C30EC885ABC45D89A2B /* Resources */ = {
+		8FA62DDA339C109ED23E466B2D4CCBD9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E39635A51B891ECBC2A64AF86DAC9718 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -248,41 +358,57 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		32D4CD4261ED3EB316A4DF50DED87E56 /* Sources */ = {
+		9382B6C03A208222158F127AE2A22D26 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				82348DB966965E40DBF27DE3CEFA11A0 /* Pods-Zero Bounce iOS SDK-dummy.m in Sources */,
+				29F187DBCC303F9503C9358F054B39B0 /* Pods-Zero Bounce iOS SDK-dummy.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		60A7CAC15B4C2129A41BDEBB4A3B939E /* Sources */ = {
+		EE47BA48623204DD9934D7648D62948C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				50ABF928EF74D2C3A0509EAD664AC855 /* Pods-Zero Bounce iOS SDKTests-dummy.m in Sources */,
+				6176B8AB61AFAFA869D8EA932D2335DC /* Pods-Zero Bounce iOS SDKTests-dummy.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F93004551F5DEA33606E7C6F1BB2692E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EDBFB59F27EBE82C452CAEC3C725AF01 /* Mock.swift in Sources */,
+				A9303B325DCEAA53E0BE1C17B74E9AD1 /* Mocker.swift in Sources */,
+				28CEB36551A181DF457C93FFB18E7381 /* Mocker-dummy.m in Sources */,
+				6F6D75947BB42216FD3F358A3EF218FF /* MockingURLProtocol.swift in Sources */,
+				16C212AE6C1962E6819A141F60D916AE /* XCTest+Mocker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		2D697D295D29BA31D4B25AE4567A4FE2 /* PBXTargetDependency */ = {
+		2BD5FF4A49C514360E28AC2F5E9AA017 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = "Pods-Zero Bounce iOS SDK";
 			target = C734FDC1AC762D623419E70FFA2FED42 /* Pods-Zero Bounce iOS SDK */;
-			targetProxy = 0FFDFAFA66D11E9D4F6A46AE4343D922 /* PBXContainerItemProxy */;
+			targetProxy = 9558A9F9EED1CDC39E04EC1F1196E8AC /* PBXContainerItemProxy */;
+		};
+		EBEF33767F5A93D585E2BA7F132A21F1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Mocker;
+			target = 04AFC708359363290935C681A1CE226D /* Mocker */;
+			targetProxy = 5E5A38F6ECDF41F11E1DE2225315FBDF /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		16599E06FBF78B71AFEEBA4DA2B954F4 /* Release */ = {
+		1176EB6FBD0D9B1182E88FDA076FA733 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 335E048E21AC7D78302D9D1865961FF2 /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */;
+			baseConfigurationReference = C944355E23D74CC466BC6E3E681A8436 /* Mocker.debug.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_IDENTITY = "";
 				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
@@ -291,34 +417,33 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				INFOPLIST_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-Info.plist";
+				GCC_PREFIX_HEADER = "Target Support Files/Mocker/Mocker-prefix.pch";
+				INFOPLIST_FILE = "Target Support Files/Mocker/Mocker-Info.plist";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
-				IPHONEOS_DEPLOYMENT_TARGET = 12.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 10.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MACH_O_TYPE = staticlib;
-				MODULEMAP_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.modulemap";
-				OTHER_LDFLAGS = "";
-				OTHER_LIBTOOLFLAGS = "";
-				PODS_ROOT = "$(SRCROOT)";
-				PRODUCT_BUNDLE_IDENTIFIER = "org.cocoapods.${PRODUCT_NAME:rfc1034identifier}";
-				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				MODULEMAP_FILE = "Target Support Files/Mocker/Mocker.modulemap";
+				PRODUCT_MODULE_NAME = Mocker;
+				PRODUCT_NAME = Mocker;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
+				SWIFT_VERSION = 5.1;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
 			};
-			name = Release;
+			name = Debug;
 		};
-		204B8AEA4AE90A551A1768B355C2F9F0 /* Debug */ = {
+		2F8F5A10E41E53360D98263F292D94D1 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -341,6 +466,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -379,10 +505,11 @@
 			};
 			name = Debug;
 		};
-		3CCC6195EDBEE5DA2A49DF962113BE16 /* Release */ = {
+		4F9AE7FB4ACAB7722C091E1EFA9FF12A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -405,6 +532,7 @@
 				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
@@ -439,13 +567,12 @@
 			};
 			name = Release;
 		};
-		4EC4AEFFC6E77A78964F316C4087BD57 /* Debug */ = {
+		521148281FFC360B26E457145F9E9477 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 446CA8F7F5A18E5C30E3E763950091DA /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */;
+			baseConfigurationReference = 7BB1E02E1EC78B0AD0E7B7C8B148B313 /* Pods-Zero Bounce iOS SDK.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_IDENTITY = "";
 				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
@@ -454,7 +581,7 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				INFOPLIST_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-Info.plist";
+				INFOPLIST_FILE = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK-Info.plist";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				IPHONEOS_DEPLOYMENT_TARGET = 12.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -463,7 +590,7 @@
 					"@loader_path/Frameworks",
 				);
 				MACH_O_TYPE = staticlib;
-				MODULEMAP_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.modulemap";
+				MODULEMAP_FILE = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.modulemap";
 				OTHER_LDFLAGS = "";
 				OTHER_LIBTOOLFLAGS = "";
 				PODS_ROOT = "$(SRCROOT)";
@@ -477,13 +604,12 @@
 			};
 			name = Debug;
 		};
-		89D0945B96D46BF32DA5FCB7DED20918 /* Release */ = {
+		75BBE0BCEF28E4BB43D898B3C850DDD6 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 7262D04F5C23CCFC52C5F782A2A57F11 /* Pods-Zero Bounce iOS SDK.release.xcconfig */;
+			baseConfigurationReference = F6BA335170EE3A086FFB7284C3DC7DEF /* Pods-Zero Bounce iOS SDK.release.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_IDENTITY = "";
 				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
@@ -516,13 +642,11 @@
 			};
 			name = Release;
 		};
-		A15B1D3A95236C57007A06BE6E75AB11 /* Debug */ = {
+		7BC27F711AB87C88F55A2B8BE35034A0 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 00F9F92704C17CE117142FF3B51ED45E /* Pods-Zero Bounce iOS SDK.debug.xcconfig */;
+			baseConfigurationReference = 3A15BE38B78E4F169EA838565D832656 /* Mocker.release.xcconfig */;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_IDENTITY = "";
 				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
@@ -531,7 +655,44 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				INFOPLIST_FILE = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK-Info.plist";
+				GCC_PREFIX_HEADER = "Target Support Files/Mocker/Mocker-prefix.pch";
+				INFOPLIST_FILE = "Target Support Files/Mocker/Mocker-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 10.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MODULEMAP_FILE = "Target Support Files/Mocker/Mocker.modulemap";
+				PRODUCT_MODULE_NAME = Mocker;
+				PRODUCT_NAME = Mocker;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) ";
+				SWIFT_VERSION = 5.1;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
+		A0052F64A956ACF957C90CB4421474AF /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 561B80292D301996F089293007363F0B /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INFOPLIST_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-Info.plist";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
 				IPHONEOS_DEPLOYMENT_TARGET = 12.2;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -540,7 +701,45 @@
 					"@loader_path/Frameworks",
 				);
 				MACH_O_TYPE = staticlib;
-				MODULEMAP_FILE = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.modulemap";
+				MODULEMAP_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.modulemap";
+				OTHER_LDFLAGS = "";
+				OTHER_LIBTOOLFLAGS = "";
+				PODS_ROOT = "$(SRCROOT)";
+				PRODUCT_BUNDLE_IDENTIFIER = "org.cocoapods.${PRODUCT_NAME:rfc1034identifier}";
+				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+				VERSION_INFO_PREFIX = "";
+			};
+			name = Release;
+		};
+		C081E54A7D4F621B84543B39018ADB72 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = BAC75D378E31F6AD72DC55F5DBE30C7B /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CURRENT_PROJECT_VERSION = 1;
+				DEFINES_MODULE = YES;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				DYLIB_INSTALL_NAME_BASE = "@rpath";
+				INFOPLIST_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-Info.plist";
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
+				IPHONEOS_DEPLOYMENT_TARGET = 12.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACH_O_TYPE = staticlib;
+				MODULEMAP_FILE = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.modulemap";
 				OTHER_LDFLAGS = "";
 				OTHER_LIBTOOLFLAGS = "";
 				PODS_ROOT = "$(SRCROOT)";
@@ -557,11 +756,11 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		167AD3149684092BED3B32041B8792C1 /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDKTests" */ = {
+		3B2DA5D46AD0044EC9EB6F30C37D2F66 /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDK" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				4EC4AEFFC6E77A78964F316C4087BD57 /* Debug */,
-				16599E06FBF78B71AFEEBA4DA2B954F4 /* Release */,
+				521148281FFC360B26E457145F9E9477 /* Debug */,
+				75BBE0BCEF28E4BB43D898B3C850DDD6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -569,17 +768,26 @@
 		4821239608C13582E20E6DA73FD5F1F9 /* Build configuration list for PBXProject "Pods" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				204B8AEA4AE90A551A1768B355C2F9F0 /* Debug */,
-				3CCC6195EDBEE5DA2A49DF962113BE16 /* Release */,
+				2F8F5A10E41E53360D98263F292D94D1 /* Debug */,
+				4F9AE7FB4ACAB7722C091E1EFA9FF12A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		7C389A9EF0D43CF79D8BA37393799445 /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDK" */ = {
+		8359028EE17557014B28BC1899BACC2A /* Build configuration list for PBXNativeTarget "Mocker" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				A15B1D3A95236C57007A06BE6E75AB11 /* Debug */,
-				89D0945B96D46BF32DA5FCB7DED20918 /* Release */,
+				1176EB6FBD0D9B1182E88FDA076FA733 /* Debug */,
+				7BC27F711AB87C88F55A2B8BE35034A0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F329CB95BADFF8F492A345AAE6770D7B /* Build configuration list for PBXNativeTarget "Pods-Zero Bounce iOS SDKTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C081E54A7D4F621B84543B39018ADB72 /* Debug */,
+				A0052F64A956ACF957C90CB4421474AF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
