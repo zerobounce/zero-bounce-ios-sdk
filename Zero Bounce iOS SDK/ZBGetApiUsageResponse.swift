@@ -17,7 +17,7 @@ public struct ZBGetApiUsageResponse : Codable {
     
     /// Total invalid email addresses returned by the API
     let statusInvalid: Int
-
+    
     /// Total catch-all email addresses returned by the API
     let statusCatchAll: Int
     
@@ -59,7 +59,7 @@ public struct ZBGetApiUsageResponse : Codable {
     
     /// Total number of times the API has a sub status of "antispam_system"
     let subStatusAntiSpamSystem: Int
-
+    
     /// Total number of times the API has a sub status of "does_not_accept_mail"
     let subStatusDoesNotAcceptMail: Int
     
@@ -98,7 +98,7 @@ public struct ZBGetApiUsageResponse : Codable {
     
     /// End date of query
     let endDate: String?
-
+    
     enum CodingKeys: String, CodingKey {
         case total
         case statusValid = "status_valid"

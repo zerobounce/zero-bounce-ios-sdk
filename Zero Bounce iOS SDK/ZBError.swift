@@ -17,6 +17,7 @@ public enum ZBError: LocalizedError {
     case noData
     case decodeError
     case saveFileError(message: String)
+    
     public var errorDescription: String? {
         switch self {
         case .notInitialized:

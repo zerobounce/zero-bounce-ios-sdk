@@ -90,5 +90,4 @@ public struct ZBValidateResponse : Codable {
         case processedAt = "processed_at"
         case error
     }
-
 }

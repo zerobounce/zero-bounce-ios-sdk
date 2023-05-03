@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 51;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -30,6 +30,8 @@
 		BCC4E27B22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCC4E27122D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework */; };
 		BCC4E28022D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */; };
 		BCC4E28222D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h in Headers */ = {isa = PBXBuildFile; fileRef = BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		C028421C2A01146300CEB500 /* ZBValidateBatchResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */; };
+		C028421E2A01564200CEB500 /* test.txt in Resources */ = {isa = PBXBuildFile; fileRef = C028421D2A01564200CEB500 /* test.txt */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,6 +75,8 @@
 		BCC4E27A22D39A7900BD7BF3 /* Zero Bounce iOS SDKTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Zero Bounce iOS SDKTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Zero_Bounce_iOS_SDKTests.swift; sourceTree = "<group>"; };
 		BCC4E28122D39A7900BD7BF3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBValidateBatchResponse.swift; sourceTree = "<group>"; };
+		C028421D2A01564200CEB500 /* test.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = test.txt; sourceTree = "<group>"; };
 		C24942BB9C61B00CEB128F90 /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDKTests.release.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.release.xcconfig"; sourceTree = "<group>"; };
 		D0DB22CE8F6F6894D3463EA5 /* Pods-Zero Bounce iOS SDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDK.debug.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -173,6 +177,7 @@
 				BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */,
 				BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */,
 				BC458D9622D5FD08004DEF30 /* ZBValidateResponse.swift */,
+				C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */,
 				BC458D8E22D5FD08004DEF30 /* ZBValidateStatus.swift */,
 				BC458D9322D5FD08004DEF30 /* ZBValidateSubStatus.swift */,
 				BC458D9022D5FD08004DEF30 /* ZeroBounceSDK.swift */,
@@ -186,6 +191,7 @@
 			isa = PBXGroup;
 			children = (
 				BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */,
+				C028421D2A01564200CEB500 /* test.txt */,
 				BCC4E28122D39A7900BD7BF3 /* Info.plist */,
 			);
 			path = "Zero Bounce iOS SDKTests";
@@ -325,6 +331,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C028421E2A01564200CEB500 /* test.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -413,6 +420,7 @@
 				BC458D9822D5FD08004DEF30 /* ZBMultiPartRequest.swift in Sources */,
 				BC458D9D22D5FD08004DEF30 /* ZeroBounceSDK.swift in Sources */,
 				BC458D9B22D5FD08004DEF30 /* ZBValidateStatus.swift in Sources */,
+				C028421C2A01146300CEB500 /* ZBValidateBatchResponse.swift in Sources */,
 				BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */,
 				BC458D9F22D5FD08004DEF30 /* ZBFileStatusResponse.swift in Sources */,
 				BC458D9A22D5FD08004DEF30 /* ZBDeleteFileResponse.swift in Sources */,
