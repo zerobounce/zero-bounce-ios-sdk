@@ -99,6 +99,9 @@ public struct ZBGetApiUsageResponse : Codable {
     /// End date of query
     let endDate: String?
     
+    /// Error
+    let error: String?
+    
     enum CodingKeys: String, CodingKey {
         case total
         case statusValid = "status_valid"
@@ -130,5 +133,6 @@ public struct ZBGetApiUsageResponse : Codable {
         case subStatusFailedSmtpConnection = "sub_status_failed_smtp_connection"
         case startDate = "start_date"
         case endDate = "end_date"
+        case error
     }
 }

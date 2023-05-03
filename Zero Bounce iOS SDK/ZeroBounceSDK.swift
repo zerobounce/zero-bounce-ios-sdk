@@ -145,6 +145,15 @@ public class ZeroBounceSDK {
     ///
     /// The sendfile API allows user to send a file for bulk email validation
     ///
+    /// - parameter filePath: The path to a local file in String format
+    /// - parameter emailAddressColumn: The column index of the email address in the file. Index starts from 1
+    /// - parameter returnUrl: The URL will be used to call back when the validation is completed
+    /// - parameter firstNameColumn: The column index of the first name column
+    /// - parameter lastNameColumn: The column index of the last name column
+    /// - parameter genderColumn: The column index of the gender column
+    /// - parameter ipAddressColumn: The IP Address the email signed up from
+    /// - parameter hasHeaderRow: If the first row from the submitted file is a header row. true or false
+    ///
     public func sendFile(
         filePath: String, emailAddressColumn:Int, returnUrl: String? = nil,
         firstNameColumn: Int? = nil, lastNameColumn: Int? = nil, genderColumn:Int? = nil, ipAddressColumn:Int? = nil, hasHeaderRow: Bool = false,
@@ -210,6 +219,8 @@ public class ZeroBounceSDK {
     //MARK: GetFile
     ///
     /// The getfile API allows users to get the validation results file for the file been submitted using sendfile API
+    ///
+    /// - parameter fileId: The returned file ID when calling sendfile API
     ///
     public func getFile(fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
         _getFile(scoring: false, fileId: fileId, completion: completion)

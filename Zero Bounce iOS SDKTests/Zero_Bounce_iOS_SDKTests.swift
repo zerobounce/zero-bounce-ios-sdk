@@ -66,7 +66,16 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("getCredits failure error=\(String(describing: error))")
-                XCTAssertTrue(true)
+                guard let zbError = error as? ZBError else {
+                    XCTAssertTrue(false)
+                    return
+                }
+                switch zbError {
+                case .invalidResponse:
+                    XCTAssertTrue(true)
+                default:
+                    XCTAssertTrue(false)
+                }
             }
         }
 
@@ -181,7 +190,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         wait(for: [requestExpectation], timeout: 60)
     }
     
-    func testValidateBatchNoDataError() {
+    func testValidateBatchDecodeError() {
         let emails = [["email_address": "example@gmail.com"], ["email_address": "example2@gmail.com", "ip_address": "1.1.1.1"]]
         let apiEndpoint = URL(
             string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/validatebatch"
@@ -199,7 +208,16 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                XCTAssertTrue(true)
+                guard let zbError = error as? ZBError else {
+                    XCTAssertTrue(false)
+                    return
+                }
+                switch zbError {
+                case .decodeError:
+                    XCTAssertTrue(true)
+                default:
+                    XCTAssertTrue(false)
+                }
             }
         }
 
@@ -228,7 +246,16 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                XCTAssertTrue(true)
+                guard let zbError = error as? ZBError else {
+                    XCTAssertTrue(false)
+                    return
+                }
+                switch zbError {
+                case .notInitialized:
+                    XCTAssertTrue(true)
+                default:
+                    XCTAssertTrue(false)
+                }
             }
         }
 
@@ -463,7 +490,16 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                XCTAssertTrue(true)
+                guard let zbError = error as? ZBError else {
+                    XCTAssertTrue(false)
+                    return
+                }
+                switch zbError {
+                case .notInitialized:
+                    XCTAssertTrue(true)
+                default:
+                    XCTAssertTrue(false)
+                }
             }
         }
 
@@ -524,7 +560,16 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                XCTAssertTrue(true)
+                guard let zbError = error as? ZBError else {
+                    XCTAssertTrue(false)
+                    return
+                }
+                switch zbError {
+                case .notInitialized:
+                    XCTAssertTrue(true)
+                default:
+                    XCTAssertTrue(false)
+                }
             }
         }
 
