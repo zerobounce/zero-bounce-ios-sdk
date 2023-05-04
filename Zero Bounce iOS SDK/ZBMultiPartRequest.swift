@@ -26,12 +26,6 @@ internal class ZBMultiPartRequest {
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = try createBody(with: parameters, filePathKey: filePathKey, paths: paths, boundary: boundary)
-
-        /*
-        if let body = request.httpBody {
-            NSLog("ZBMultiPartRequest createFileRequest body: \(String(data: body, encoding: .utf8))")
-        }
-        */
         
         return request
     }
@@ -61,9 +55,9 @@ internal class ZBMultiPartRequest {
             let filename = url.lastPathComponent
             let data = try Data(contentsOf: url)
             let mimetype = mimeType(for: path)
-
+            
             NSLog("ZBMultiPartRequest path \(path) has mimeType \(mimetype)")
-
+            
             body.append("--\(boundary)\r\n")
             body.append("Content-Disposition: form-data; name=\"\(filePathKey)\"; filename=\"\(filename)\"\r\n")
             body.append("Content-Type: \(mimetype)\r\n\r\n")

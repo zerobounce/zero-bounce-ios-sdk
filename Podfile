@@ -10,6 +10,7 @@ target 'Zero Bounce iOS SDK' do
   target 'Zero Bounce iOS SDKTests' do
     inherit! :search_paths
     # Pods for testing
+    pod 'Mocker', '~> 2.5.4'
   end
 
 end

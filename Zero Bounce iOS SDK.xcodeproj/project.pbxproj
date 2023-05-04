@@ -3,11 +3,16 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 50;
+	objectVersion = 51;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		06650474314B89618D95AB89 /* Pods_Zero_Bounce_iOS_SDKTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C1108529D450647390518C3 /* Pods_Zero_Bounce_iOS_SDKTests.framework */; };
+		4502126F29C3781D00C12510 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4502126E29C3781D00C12510 /* AppDelegate.swift */; };
+		4502127329C3781D00C12510 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4502127229C3781D00C12510 /* ViewController.swift */; };
+		4502127629C3781D00C12510 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4502127429C3781D00C12510 /* Main.storyboard */; };
+		4502127829C3781F00C12510 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4502127729C3781F00C12510 /* Assets.xcassets */; };
+		4502127B29C3781F00C12510 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4502127929C3781F00C12510 /* LaunchScreen.storyboard */; };
 		B5E10FBD021FE822975C0044 /* Pods_Zero_Bounce_iOS_SDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C6B239DD8DCCF5A9914F78A /* Pods_Zero_Bounce_iOS_SDK.framework */; };
 		BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */; };
 		BC458D9822D5FD08004DEF30 /* ZBMultiPartRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */; };
@@ -25,6 +30,10 @@
 		BCC4E27B22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCC4E27122D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework */; };
 		BCC4E28022D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */; };
 		BCC4E28222D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h in Headers */ = {isa = PBXBuildFile; fileRef = BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		C028421C2A01146300CEB500 /* ZBValidateBatchResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */; };
+		C028421E2A01564200CEB500 /* test.txt in Resources */ = {isa = PBXBuildFile; fileRef = C028421D2A01564200CEB500 /* test.txt */; };
+		C02842202A03CACF00CEB500 /* ZBActivityDataResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = C028421F2A03CACF00CEB500 /* ZBActivityDataResponse.swift */; };
+		C0BE36E72A03ED19008667F6 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = C0BE36E62A03ED19008667F6 /* README.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +48,13 @@
 
 /* Begin PBXFileReference section */
 		1C1108529D450647390518C3 /* Pods_Zero_Bounce_iOS_SDKTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Zero_Bounce_iOS_SDKTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		4502126C29C3781D00C12510 /* ZeroBounceSampleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZeroBounceSampleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4502126E29C3781D00C12510 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		4502127229C3781D00C12510 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
+		4502127529C3781D00C12510 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		4502127729C3781F00C12510 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		4502127A29C3781F00C12510 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		4502127C29C3781F00C12510 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C6B239DD8DCCF5A9914F78A /* Pods_Zero_Bounce_iOS_SDK.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Zero_Bounce_iOS_SDK.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		65E08EBF76C40EBD464CC798 /* Pods-Zero Bounce iOS SDK.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDK.release.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.release.xcconfig"; sourceTree = "<group>"; };
 		AF7878FA8AFF0369D416A167 /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; sourceTree = "<group>"; };
@@ -61,11 +77,22 @@
 		BCC4E27A22D39A7900BD7BF3 /* Zero Bounce iOS SDKTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Zero Bounce iOS SDKTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Zero_Bounce_iOS_SDKTests.swift; sourceTree = "<group>"; };
 		BCC4E28122D39A7900BD7BF3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBValidateBatchResponse.swift; sourceTree = "<group>"; };
+		C028421D2A01564200CEB500 /* test.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = test.txt; sourceTree = "<group>"; };
+		C028421F2A03CACF00CEB500 /* ZBActivityDataResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBActivityDataResponse.swift; sourceTree = "<group>"; };
+		C0BE36E62A03ED19008667F6 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
 		C24942BB9C61B00CEB128F90 /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDKTests.release.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.release.xcconfig"; sourceTree = "<group>"; };
 		D0DB22CE8F6F6894D3463EA5 /* Pods-Zero Bounce iOS SDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDK.debug.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		4502126929C3781D00C12510 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BCC4E26E22D39A7900BD7BF3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -106,9 +133,23 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		4502126D29C3781D00C12510 /* ZeroBounceSampleApp */ = {
+			isa = PBXGroup;
+			children = (
+				4502126E29C3781D00C12510 /* AppDelegate.swift */,
+				4502127229C3781D00C12510 /* ViewController.swift */,
+				4502127429C3781D00C12510 /* Main.storyboard */,
+				4502127729C3781F00C12510 /* Assets.xcassets */,
+				4502127929C3781F00C12510 /* LaunchScreen.storyboard */,
+				4502127C29C3781F00C12510 /* Info.plist */,
+			);
+			path = ZeroBounceSampleApp;
+			sourceTree = "<group>";
+		};
 		BCC4E26722D39A7900BD7BF3 = {
 			isa = PBXGroup;
 			children = (
+				4502126D29C3781D00C12510 /* ZeroBounceSampleApp */,
 				BCC4E27322D39A7900BD7BF3 /* Zero Bounce iOS SDK */,
 				BCC4E27E22D39A7900BD7BF3 /* Zero Bounce iOS SDKTests */,
 				BCC4E27222D39A7900BD7BF3 /* Products */,
@@ -122,6 +163,7 @@
 			children = (
 				BCC4E27122D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework */,
 				BCC4E27A22D39A7900BD7BF3 /* Zero Bounce iOS SDKTests.xctest */,
+				4502126C29C3781D00C12510 /* ZeroBounceSampleApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -129,19 +171,22 @@
 		BCC4E27322D39A7900BD7BF3 /* Zero Bounce iOS SDK */ = {
 			isa = PBXGroup;
 			children = (
-				BC458D8C22D5FD08004DEF30 /* ZBCreditsResponse.swift */,
-				BC458D8D22D5FD08004DEF30 /* ZBDeleteFileResponse.swift */,
-				BC458D9422D5FD08004DEF30 /* ZBError.swift */,
+				C0BE36E62A03ED19008667F6 /* README.md */,
+				BC458D9022D5FD08004DEF30 /* ZeroBounceSDK.swift */,
 				BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */,
-				BC458D9222D5FD08004DEF30 /* ZBFileStatusResponse.swift */,
+				BC458D9422D5FD08004DEF30 /* ZBError.swift */,
+				BC458D8C22D5FD08004DEF30 /* ZBCreditsResponse.swift */,
 				BC458D9122D5FD08004DEF30 /* ZBGetApiUsageResponse.swift */,
-				BC458D8F22D5FD08004DEF30 /* ZBGetFileResponse.swift */,
-				BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */,
-				BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */,
+				C028421F2A03CACF00CEB500 /* ZBActivityDataResponse.swift */,
 				BC458D9622D5FD08004DEF30 /* ZBValidateResponse.swift */,
+				C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */,
+				BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */,
+				BC458D9222D5FD08004DEF30 /* ZBFileStatusResponse.swift */,
+				BC458D8F22D5FD08004DEF30 /* ZBGetFileResponse.swift */,
+				BC458D8D22D5FD08004DEF30 /* ZBDeleteFileResponse.swift */,
+				BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */,
 				BC458D8E22D5FD08004DEF30 /* ZBValidateStatus.swift */,
 				BC458D9322D5FD08004DEF30 /* ZBValidateSubStatus.swift */,
-				BC458D9022D5FD08004DEF30 /* ZeroBounceSDK.swift */,
 				BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */,
 				BCC4E27522D39A7900BD7BF3 /* Info.plist */,
 			);
@@ -152,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				BCC4E27F22D39A7900BD7BF3 /* Zero_Bounce_iOS_SDKTests.swift */,
+				C028421D2A01564200CEB500 /* test.txt */,
 				BCC4E28122D39A7900BD7BF3 /* Info.plist */,
 			);
 			path = "Zero Bounce iOS SDKTests";
@@ -171,6 +217,23 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
+		4502126B29C3781D00C12510 /* ZeroBounceSampleApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4502127D29C3781F00C12510 /* Build configuration list for PBXNativeTarget "ZeroBounceSampleApp" */;
+			buildPhases = (
+				4502126829C3781D00C12510 /* Sources */,
+				4502126929C3781D00C12510 /* Frameworks */,
+				4502126A29C3781D00C12510 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ZeroBounceSampleApp;
+			productName = ZeroBounceSampleApp;
+			productReference = 4502126C29C3781D00C12510 /* ZeroBounceSampleApp.app */;
+			productType = "com.apple.product-type.application";
+		};
 		BCC4E27022D39A7900BD7BF3 /* Zero Bounce iOS SDK */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = BCC4E28522D39A7900BD7BF3 /* Build configuration list for PBXNativeTarget "Zero Bounce iOS SDK" */;
@@ -198,6 +261,7 @@
 				BCC4E27622D39A7900BD7BF3 /* Sources */,
 				BCC4E27722D39A7900BD7BF3 /* Frameworks */,
 				BCC4E27822D39A7900BD7BF3 /* Resources */,
+				00321BB7C1047349C51D3CB2 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -215,10 +279,13 @@
 		BCC4E26822D39A7900BD7BF3 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 1020;
+				LastSwiftUpdateCheck = 1420;
 				LastUpgradeCheck = 1020;
 				ORGANIZATIONNAME = "Mount Software";
 				TargetAttributes = {
+					4502126B29C3781D00C12510 = {
+						CreatedOnToolsVersion = 14.2;
+					};
 					BCC4E27022D39A7900BD7BF3 = {
 						CreatedOnToolsVersion = 10.2.1;
 						LastSwiftMigration = 1020;
@@ -234,6 +301,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				Base,
 			);
 			mainGroup = BCC4E26722D39A7900BD7BF3;
 			productRefGroup = BCC4E27222D39A7900BD7BF3 /* Products */;
@@ -242,15 +310,27 @@
 			targets = (
 				BCC4E27022D39A7900BD7BF3 /* Zero Bounce iOS SDK */,
 				BCC4E27922D39A7900BD7BF3 /* Zero Bounce iOS SDKTests */,
+				4502126B29C3781D00C12510 /* ZeroBounceSampleApp */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		4502126A29C3781D00C12510 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4502127B29C3781F00C12510 /* LaunchScreen.storyboard in Resources */,
+				4502127829C3781F00C12510 /* Assets.xcassets in Resources */,
+				4502127629C3781D00C12510 /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BCC4E26F22D39A7900BD7BF3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0BE36E72A03ED19008667F6 /* README.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,12 +338,30 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C028421E2A01564200CEB500 /* test.txt in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		00321BB7C1047349C51D3CB2 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
 		124A92E7FAA7285DDB203B0C /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -311,6 +409,15 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4502126829C3781D00C12510 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4502127329C3781D00C12510 /* ViewController.swift in Sources */,
+				4502126F29C3781D00C12510 /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BCC4E26D22D39A7900BD7BF3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -318,8 +425,10 @@
 				BC458D9E22D5FD08004DEF30 /* ZBGetApiUsageResponse.swift in Sources */,
 				BC458D9922D5FD08004DEF30 /* ZBCreditsResponse.swift in Sources */,
 				BC458D9822D5FD08004DEF30 /* ZBMultiPartRequest.swift in Sources */,
+				C02842202A03CACF00CEB500 /* ZBActivityDataResponse.swift in Sources */,
 				BC458D9D22D5FD08004DEF30 /* ZeroBounceSDK.swift in Sources */,
 				BC458D9B22D5FD08004DEF30 /* ZBValidateStatus.swift in Sources */,
+				C028421C2A01146300CEB500 /* ZBValidateBatchResponse.swift in Sources */,
 				BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */,
 				BC458D9F22D5FD08004DEF30 /* ZBFileStatusResponse.swift in Sources */,
 				BC458D9A22D5FD08004DEF30 /* ZBDeleteFileResponse.swift in Sources */,
@@ -349,7 +458,86 @@
 		};
 /* End PBXTargetDependency section */
 
+/* Begin PBXVariantGroup section */
+		4502127429C3781D00C12510 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4502127529C3781D00C12510 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+		4502127929C3781F00C12510 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4502127A29C3781F00C12510 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin XCBuildConfiguration section */
+		4502127E29C3781F00C12510 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ZeroBounceSampleApp/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sst.ZeroBounceSampleApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		4502127F29C3781F00C12510 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ZeroBounceSampleApp/Info.plist;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
+				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sst.ZeroBounceSampleApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		BCC4E28322D39A7900BD7BF3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -570,6 +758,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		4502127D29C3781F00C12510 /* Build configuration list for PBXNativeTarget "ZeroBounceSampleApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4502127E29C3781F00C12510 /* Debug */,
+				4502127F29C3781F00C12510 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		BCC4E26B22D39A7900BD7BF3 /* Build configuration list for PBXProject "Zero Bounce iOS SDK" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

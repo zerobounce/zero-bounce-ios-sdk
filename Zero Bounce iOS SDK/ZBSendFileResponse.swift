@@ -8,12 +8,12 @@
 
 import Foundation
 
-public struct ZBSendFileResponse: Codable {
+public struct ZBSendFileResponse: Codable, Equatable {
     
     let success: Bool?
     let message: String?
-    let fileName: String?
-    let fileId: String?
+    let fileName: String
+    let fileId: String
     
     enum CodingKeys: String, CodingKey {
         case success

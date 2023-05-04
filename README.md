@@ -2,19 +2,19 @@
 This SDK contains methods for interacting easily with ZeroBounce API.
 More information about ZeroBounce you can find in the [official documentation](https://www.zerobounce.net/docs/).
 
-### Installation
+### Installation (CocoaPods)
 Add the pod to your Podfile
 ```pod 'ZeroBounceSDK' ```
 and run 
 ```pod install```
 
 ## USAGE
-Import the sdk in your file:
+Import the SDK in your file:
 ```swift
 import ZeroBounceSDK
 ``` 
 
-Initialize the sdk with your api key:
+Initialize the SDK with your api key:
 ```swift 
 ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>")
 ```
@@ -26,35 +26,64 @@ Then you can use any of the SDK methods, for example:
 let email = "<EMAIL_ADDRESS>"   // The email address you want to validate
 let ipAddress = "127.0.0.1"     // The IP Address the email signed up from (Optional)
 
-ZeroBounceSDK.shared.validate(email, ipAddress) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.validate(email, ipAddress) { result in
+    switch result {
     case .Success(let response):
         NSLog("validate success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("validate failure error=\(String(describing: error))")
         switch (error) {
         case ZBError.notInitialized:
-
-            break;
+            break
+        case ZBError.decodeError(let messages):
+            /// decodeError is used to extract and decode errors and messages 
+            /// when they are not part of the response object
+            break
         default:
-            break;
+            break
         }
-        break;
+    }
+}
+```
+
+* ##### Validate up to 100 email addresses using Batch Email Validator
+```swift
+// The email addresses you want to validate
+let emails = [ 
+    ["email_address": "<EMAIL_ADDRESS_1>"], 
+    ["email_address": "<EMAIL_ADDRESS_2>", "ip_address": "127.0.0.1"]
+] 
+
+ZeroBounceSDK.shared.validateBatch(emails: emails) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("validate success response=\(response)")
+    case .Failure(let error):
+        NSLog("validate failure error=\(String(describing: error))")
     }
 }
 ```
 
 * ##### Check how many credits you have left on your account
 ```swift
-ZeroBounceSDK.shared.getCredits() { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.getCredits() { result in
+    switch result {
     case .Success(let response):
         NSLog("getCredits success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getCredits failure error=\(String(describing: error))")
-        break;
+    }
+}
+```
+
+* ##### Check if you email inbox has been active in the past 30, 60, 90, 180, 365, 730 or 1095 days
+```swift
+ZeroBounceSDK.shared.getActivityData(email: email) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("getActivityData success response=\(response)")
+    case .Failure(let error):
+        NSLog("getActivityData failure error=\(String(describing: error))")
     }
 }
 ```
@@ -64,14 +93,12 @@ ZeroBounceSDK.shared.getCredits() { (result) in
 let startDate = Date();    // The start date of when you want to view API usage
 let endDate = Date();      // The end date of when you want to view API usage
 
-ZeroBounceSDK.shared.getApiUsage(startDate, endDate) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.getApiUsage(startDate, endDate) { result in
+    switch result {
     case .Success(let response):
         NSLog("getApiUsage success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getApiUsage failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -95,14 +122,12 @@ ZeroBounceSDK.shared.sendFile(
     lastNameColumn,
     genderColumn,
     ipAddressColumn,
-    hasHeaderRow) { (result) in
-        switch (result) {
+    hasHeaderRow) { result in
+        switch result {
         case .Success(let response):
             NSLog("sendFile success response=\(response)")
-            break;
         case .Failure(let error):
             NSLog("sendFile failure error=\(String(describing: error))")
-            break;
         }
 }
 ```
@@ -111,14 +136,12 @@ ZeroBounceSDK.shared.sendFile(
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
-ZeroBounceSDK.shared.getfile(fileId) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.getfile(fileId) { result in
+    switch result {
     case .Success(let response):
         NSLog("getfile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getfile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -127,14 +150,12 @@ ZeroBounceSDK.shared.getfile(fileId) { (result) in
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
-ZeroBounceSDK.shared.fileStatus(fileId) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.fileStatus(fileId) { result in
+    switch result {
     case .Success(let response):
         NSLog("fileStatus success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("fileStatus failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -143,14 +164,12 @@ ZeroBounceSDK.shared.fileStatus(fileId) { (result) in
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
-ZeroBounceSDK.shared.deleteFile(fileId) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.deleteFile(fileId) { result in
+    switch result {
     case .Success(let response):
         NSLog("deleteFile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("deleteFile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -167,14 +186,12 @@ ZeroBounceSDK.shared.scoringSendFile(
     filePath,
     emailAddressColumn,
     returnUrl,
-    hasHeaderRow) { (result) in
-        switch (result) {
+    hasHeaderRow) { result in
+        switch result {
         case .Success(let response):
             NSLog("sendFile success response=\(response)")
-            break;
         case .Failure(let error):
             NSLog("sendFile failure error=\(String(describing: error))")
-            break;
         }
 }
 ```
@@ -183,14 +200,12 @@ ZeroBounceSDK.shared.scoringSendFile(
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
-ZeroBounceSDK.shared.scoringGetfile(fileId) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.scoringGetfile(fileId) { result in
+    switch result {
     case .Success(let response):
         NSLog("getfile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getfile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -199,14 +214,12 @@ ZeroBounceSDK.shared.scoringGetfile(fileId) { (result) in
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
-ZeroBounceSDK.shared.scoringFileStatus(fileId) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.scoringFileStatus(fileId) { result in
+    switch result {
     case .Success(let response):
         NSLog("fileStatus success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("fileStatus failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -215,14 +228,46 @@ ZeroBounceSDK.shared.scoringFileStatus(fileId) { (result) in
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
-ZeroBounceSDK.shared.scoringDeleteFile(fileId) { (result) in
-    switch (result) {
+ZeroBounceSDK.shared.scoringDeleteFile(fileId) { result in
+    switch result {
     case .Success(let response):
         NSLog("deleteFile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("deleteFile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
+
+## Sample App
+- You can also clone the repo and access the Sample App inside the project to check out some examples. Just initialize the SDK with your own API key and uncomment the endpoint that you want to test.
+
+**Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**
+* [disposable@example.com](mailto:disposable@example.com)
+* [invalid@example.com](mailto:invalid@example.com)
+* [valid@example.com](mailto:valid@example.com)
+* [toxic@example.com](mailto:toxic@example.com)
+* [donotmail@example.com](mailto:donotmail@example.com)
+* [spamtrap@example.com](mailto:spamtrap@example.com)
+* [abuse@example.com](mailto:abuse@example.com)
+* [unknown@example.com](mailto:unknown@example.com)
+* [catch_all@example.com](mailto:catch_all@example.com)
+* [antispam_system@example.com](mailto:antispam_system@example.com)
+* [does_not_accept_mail@example.com](mailto:does_not_accept_mail@example.com)
+* [exception_occurred@example.com](mailto:exception_occurred@example.com)
+* [failed_smtp_connection@example.com](mailto:failed_smtp_connection@example.com)
+* [failed_syntax_check@example.com](mailto:failed_syntax_check@example.com)
+* [forcible_disconnect@example.com](mailto:forcible_disconnect@example.com)
+* [global_suppression@example.com](mailto:global_suppression@example.com)
+* [greylisted@example.com](mailto:greylisted@example.com)
+* [leading_period_removed@example.com](mailto:leading_period_removed@example.com)
+* [mail_server_did_not_respond@example.com](mailto:mail_server_did_not_respond@example.com)
+* [mail_server_temporary_error@example.com](mailto:mail_server_temporary_error@example.com)
+* [mailbox_quota_exceeded@example.com](mailto:mailbox_quota_exceeded@example.com)
+* [mailbox_not_found@example.com](mailto:mailbox_not_found@example.com)
+* [no_dns_entries@example.com](mailto:no_dns_entries@example.com)
+* [possible_trap@example.com](mailto:possible_trap@example.com)
+* [possible_typo@example.com](mailto:possible_typo@example.com)
+* [role_based@example.com](mailto:role_based@example.com)
+* [timeout_exceeded@example.com](mailto:timeout_exceeded@example.com)
+* [unroutable_ip_address@example.com](mailto:unroutable_ip_address@example.com)
+* [free_email@example.com](mailto:free_email@example.com)
