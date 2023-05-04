@@ -25,18 +25,22 @@ public enum ZBError: LocalizedError {
                 return .decodeError(messages: [])
             }
             for (key, value) in response {
-                if key == "error", let message = value as? String {
+                if key.contains("error"), let message = value as? String {
                     messages.append(message)
-                }
-                if key == "message" {
+                } else if key.contains("message") {
                     if let message = value as? String {
                         messages.append(message)
                     } else {
                         if let messageList = value as? [String] {
-                            for message in messageList {
-                                messages.append(message)
-                            }
+                            messages.append(contentsOf: messageList)
                         }
+                    }
+                } else if key != "success" {
+                    /// Add value to messages
+                    if let message = value as? String {
+                        messages.append(message)
+                    } else if let messageList = value as? [String] {
+                        messages.append(contentsOf: messageList)
                     }
                 }
                 return .decodeError(messages: messages)

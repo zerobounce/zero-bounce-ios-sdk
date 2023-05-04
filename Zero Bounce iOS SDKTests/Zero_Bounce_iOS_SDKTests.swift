@@ -214,6 +214,39 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         wait(for: [requestExpectation], timeout: 60)
     }
     
+    func testValidateWithMessage() {
+        let email = "example@gmail.com"
+        let ipAddress = "1.1.1.1"
+        let apiEndpoint = URL(
+            string: "\(ZeroBounceSDK.shared.apiBaseUrl)/validate?api_key=\(ZeroBounceSDK.shared.apiKey!)&email=\(email)&ip_address=\(ipAddress)"
+        )!
+        let validateResponse = ["unexpected_message": "Message"]
+        
+        let mockedData = try! JSONEncoder().encode(validateResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.validate(email: email, ipAddress: ipAddress) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                NSLog("validate success response=\(response)")
+                XCTAssertTrue(false)
+            case .Failure(let error):
+                NSLog("validate failure error=\(String(describing: error))")
+                switch error as? ZBError {
+                case .decodeError(let messages):
+                    XCTAssertTrue(messages[0] == "Message")
+                default:
+                    XCTAssertTrue(false)
+                }
+            }
+        }
+
+        wait(for: [requestExpectation], timeout: 60)
+    }
+    
     func testValidateBatch() {
         let emails = [["email_address": "example@gmail.com"], ["email_address": "example2@gmail.com", "ip_address": "1.1.1.1"]]
         let apiEndpoint = URL(

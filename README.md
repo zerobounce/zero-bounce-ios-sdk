@@ -36,6 +36,8 @@ ZeroBounceSDK.shared.validate(email, ipAddress) { result in
         case ZBError.notInitialized:
             break
         case ZBError.decodeError(let messages):
+            /// decodeError is used to extract and decode errors and messages 
+            /// when they are not part of the response object
             break
         default:
             break
