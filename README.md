@@ -30,17 +30,16 @@ ZeroBounceSDK.shared.validate(email, ipAddress) { result in
     switch result {
     case .Success(let response):
         NSLog("validate success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("validate failure error=\(String(describing: error))")
         switch (error) {
         case ZBError.notInitialized:
-
-            break;
+            break
+        case ZBError.decodeError(let messages):
+            break
         default:
-            break;
+            break
         }
-        break;
     }
 }
 ```
@@ -69,10 +68,20 @@ ZeroBounceSDK.shared.getCredits() { result in
     switch result {
     case .Success(let response):
         NSLog("getCredits success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getCredits failure error=\(String(describing: error))")
-        break;
+    }
+}
+```
+
+* ##### Check if you email inbox has been active in the past 30, 60, 90, 180, 365, 730 or 1095 days
+```swift
+ZeroBounceSDK.shared.getActivityData(email: email) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("getActivityData success response=\(response)")
+    case .Failure(let error):
+        NSLog("getActivityData failure error=\(String(describing: error))")
     }
 }
 ```
@@ -86,10 +95,8 @@ ZeroBounceSDK.shared.getApiUsage(startDate, endDate) { result in
     switch result {
     case .Success(let response):
         NSLog("getApiUsage success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getApiUsage failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -117,10 +124,8 @@ ZeroBounceSDK.shared.sendFile(
         switch result {
         case .Success(let response):
             NSLog("sendFile success response=\(response)")
-            break;
         case .Failure(let error):
             NSLog("sendFile failure error=\(String(describing: error))")
-            break;
         }
 }
 ```
@@ -133,10 +138,8 @@ ZeroBounceSDK.shared.getfile(fileId) { result in
     switch result {
     case .Success(let response):
         NSLog("getfile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getfile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -149,10 +152,8 @@ ZeroBounceSDK.shared.fileStatus(fileId) { result in
     switch result {
     case .Success(let response):
         NSLog("fileStatus success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("fileStatus failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -165,10 +166,8 @@ ZeroBounceSDK.shared.deleteFile(fileId) { result in
     switch result {
     case .Success(let response):
         NSLog("deleteFile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("deleteFile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -189,10 +188,8 @@ ZeroBounceSDK.shared.scoringSendFile(
         switch result {
         case .Success(let response):
             NSLog("sendFile success response=\(response)")
-            break;
         case .Failure(let error):
             NSLog("sendFile failure error=\(String(describing: error))")
-            break;
         }
 }
 ```
@@ -205,10 +202,8 @@ ZeroBounceSDK.shared.scoringGetfile(fileId) { result in
     switch result {
     case .Success(let response):
         NSLog("getfile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("getfile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -221,10 +216,8 @@ ZeroBounceSDK.shared.scoringFileStatus(fileId) { result in
     switch result {
     case .Success(let response):
         NSLog("fileStatus success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("fileStatus failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
@@ -237,10 +230,8 @@ ZeroBounceSDK.shared.scoringDeleteFile(fileId) { result in
     switch result {
     case .Success(let response):
         NSLog("deleteFile success response=\(response)")
-        break;
     case .Failure(let error):
         NSLog("deleteFile failure error=\(String(describing: error))")
-        break;
     }
 }
 ```
