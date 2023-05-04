@@ -4,11 +4,11 @@ Pod::Spec.new do |s|
 s.platform = :ios
 s.ios.deployment_target = '9.0'
 s.name = "ZeroBounceSDK"
-s.summary = "ZeroBounceSDK provides wrappers over ZeroBounce api"
+s.summary = "ZeroBounceSDK provides wrappers over ZeroBounce API"
 s.requires_arc = true
 
 # 2
-s.version = "0.0.2"
+s.version = "0.1.0"
 
 # 3
 s.license = { :type => "MIT", :file => "LICENSE" }
@@ -17,10 +17,10 @@ s.license = { :type => "MIT", :file => "LICENSE" }
 s.author = { "Zero Bounce" => "integrations@zerobounce.net" }
 
 # 5 - Replace this URL with your own GitHub page's URL (from the address bar)
-s.homepage = "https://github.com/zerobounce-llc/zero-bounce-ios-sdk"
+s.homepage = "https://github.com/zerobounce/zero-bounce-ios-sdk"
 
 # 6 - Replace this URL with your own Git URL from "Quick Setup"
-s.source = { :git => "https://github.com/zerobounce-llc/zero-bounce-ios-sdk.git",
+s.source = { :git => "https://github.com/zerobounce/zero-bounce-ios-sdk.git",
 :tag => "#{s.version}" }
 
 # 7

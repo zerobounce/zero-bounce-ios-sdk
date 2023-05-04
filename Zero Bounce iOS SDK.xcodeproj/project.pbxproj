@@ -81,6 +81,7 @@
 		C028421D2A01564200CEB500 /* test.txt */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = test.txt; sourceTree = "<group>"; };
 		C028421F2A03CACF00CEB500 /* ZBActivityDataResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBActivityDataResponse.swift; sourceTree = "<group>"; };
 		C0BE36E62A03ED19008667F6 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
+		C0BE37082A04036E008667F6 /* LICENSE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = LICENSE.md; sourceTree = "<group>"; };
 		C24942BB9C61B00CEB128F90 /* Pods-Zero Bounce iOS SDKTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDKTests.release.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.release.xcconfig"; sourceTree = "<group>"; };
 		D0DB22CE8F6F6894D3463EA5 /* Pods-Zero Bounce iOS SDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDK.debug.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -149,6 +150,7 @@
 		BCC4E26722D39A7900BD7BF3 = {
 			isa = PBXGroup;
 			children = (
+				C0BE37082A04036E008667F6 /* LICENSE.md */,
 				4502126D29C3781D00C12510 /* ZeroBounceSampleApp */,
 				BCC4E27322D39A7900BD7BF3 /* Zero Bounce iOS SDK */,
 				BCC4E27E22D39A7900BD7BF3 /* Zero Bounce iOS SDKTests */,
