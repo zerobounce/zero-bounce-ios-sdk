@@ -8,7 +8,8 @@
 
 import Foundation
 
-public struct ZBValidateBatchResponse: Codable {
+public struct ZBValidateBatchResponse: Codable, Equatable {
+    
     /// An Array of validated emails
     let emailBatch: [ZBValidateResponse]
     
@@ -21,7 +22,7 @@ public struct ZBValidateBatchResponse: Codable {
     }
 }
 
-public struct ZBValidateBatchErrorResponse: Codable {
+public struct ZBValidateBatchErrorResponse: Codable, Equatable {
     let error: String
     let emailAddress: String
     

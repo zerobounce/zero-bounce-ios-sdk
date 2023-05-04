@@ -16,6 +16,7 @@ public class ZeroBounceSDK {
     
     let apiBaseUrl = "https://api.zerobounce.net/v2"
     let bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
+    let bulkApiScoringBaseUrl = "https://bulkapi.zerobounce.net/v2/scoring"
     var apiKey: String?
     let dateFormatter = DateFormatter()
     
@@ -89,6 +90,19 @@ public class ZeroBounceSDK {
         let endString = self.dateFormatter.string(from: endDate)
         
         sendJsonRequest(url: "\(apiBaseUrl)/getapiusage?api_key=\(apiKey)&start_date=\(startString)&end_date=\(endString)", completion: completion)
+    }
+    
+    //MARK: Activity Data
+    ///
+    /// - parameter email: The email inbox you want to check the activity data for
+    ///
+    public func getActivityData(email: String, completion: @escaping (ZBResult<ZBActivityDataResponse>) -> ()) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+        
+        sendJsonRequest(url: "\(apiBaseUrl)/activity?api_key=\(apiKey)&email=\(email)", completion: completion)
     }
     
     //MARK: FileStatus
@@ -243,6 +257,13 @@ public class ZeroBounceSDK {
             switch result {
             case .success(let response, let data):
                 
+                if let response = try? JSONSerialization.jsonObject(with: data, options: .mutableLeaves) as? [String: Any] {
+                    if let success = response["success"] as? Bool, success == false {
+                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                        return
+                    }
+                }
+                
                 let fileName = (response.suggestedFilename != nil) ? response.suggestedFilename! : "file_\(fileId).csv"
                 guard let text = String(data: data, encoding: .utf8) else {
                     completion(.Failure(ZBError.noData))
@@ -307,7 +328,7 @@ public class ZeroBounceSDK {
                     completion(.Success(value))
                 } catch {
                     NSLog("ZeroBounceSDK error \(error)")
-                    completion(.Failure(ZBError.decodeError))
+                    completion(.Failure(ZBError.decodeError(jsonData: data)))
                 }
                 break
             case .failure (let error):

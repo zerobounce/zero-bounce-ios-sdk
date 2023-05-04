@@ -8,9 +8,9 @@
 
 import Foundation
 
-public struct ZBValidateResponse : Codable {
+public struct ZBValidateResponse : Codable, Equatable {
     ///The email address you are validating.
-    let address: String?
+    let address: String
 
     ///[valid, invalid, catch-all, unknown, spamtrap, abuse, do_not_mail]
     let status: ZBValidateStatus?
@@ -64,9 +64,7 @@ public struct ZBValidateResponse : Codable {
     let country: String?
 
     ///The UTC time the email was validated.
-    let processedAt: String?
-
-    let error: String?
+    let processedAt: String
 
     enum CodingKeys: String, CodingKey {
         case address
@@ -88,6 +86,5 @@ public struct ZBValidateResponse : Codable {
         case zipCode = "zipcode"
         case country
         case processedAt = "processed_at"
-        case error
     }
 }

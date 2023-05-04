@@ -66,11 +66,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("getCredits failure error=\(String(describing: error))")
-                guard let zbError = error as? ZBError else {
-                    XCTAssertTrue(false)
-                    return
-                }
-                switch zbError {
+                switch error as? ZBError {
                 case .invalidResponse:
                     XCTAssertTrue(true)
                 default:
@@ -116,9 +112,36 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("getApiUsage success response=\(response)")
-                XCTAssertEqual(response.total, 1)
+                XCTAssertEqual(response, apiUsageResponse)
             case .Failure(let error):
                 NSLog("getApiUsage failure error=\(String(describing: error))")
+                XCTAssertTrue(false)
+            }
+        }
+
+        wait(for: [requestExpectation], timeout: 60)
+    }
+    
+    func testActivityData() {
+        let email = "example@gmail.com"
+        let apiEndpoint = URL(
+            string: "\(ZeroBounceSDK.shared.apiBaseUrl)/activity?api_key=\(ZeroBounceSDK.shared.apiKey!)&email=\(email)"
+        )!
+        let activityResponse = ZBActivityDataResponse(found: true, activeInDays: "20")
+        
+        let mockedData = try! JSONEncoder().encode(activityResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.getActivityData(email: email) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                NSLog("getActivityData success response=\(response)")
+                XCTAssertEqual(response, activityResponse)
+            case .Failure(let error):
+                NSLog("getActivityData failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
             }
         }
@@ -136,7 +159,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                                                   domain: "", didYouMean: "", domainAgeDays: "", mxRecord: "",
                                                   smtpProvider: "", firstName: nil, lastName: nil, gender: nil,
                                                   city: nil, region: nil, zipCode: nil, country: nil,
-                                                  processedAt: nil, error: nil)
+                                                  processedAt: "date")
         
         let mockedData = try! JSONEncoder().encode(validateResponse)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
@@ -148,10 +171,43 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.address, email)
+                XCTAssertEqual(response, validateResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
+            }
+        }
+
+        wait(for: [requestExpectation], timeout: 60)
+    }
+    
+    func testValidateWithError() {
+        let email = "example@gmail.com"
+        let ipAddress = "1.1.1.1"
+        let apiEndpoint = URL(
+            string: "\(ZeroBounceSDK.shared.apiBaseUrl)/validate?api_key=\(ZeroBounceSDK.shared.apiKey!)&email=\(email)&ip_address=\(ipAddress)"
+        )!
+        let validateResponse = ["error": "Error test"]
+        
+        let mockedData = try! JSONEncoder().encode(validateResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.validate(email: email, ipAddress: ipAddress) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                NSLog("validate success response=\(response)")
+                XCTAssertTrue(false)
+            case .Failure(let error):
+                NSLog("validate failure error=\(String(describing: error))")
+                switch error as? ZBError {
+                case .decodeError(let messages):
+                    XCTAssertTrue(messages[0] == "Error test")
+                default:
+                    XCTAssertTrue(false)
+                }
             }
         }
 
@@ -167,7 +223,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                                                   domain: "", didYouMean: "", domainAgeDays: "", mxRecord: "",
                                                   smtpProvider: "", firstName: nil, lastName: nil, gender: nil,
                                                   city: nil, region: nil, zipCode: nil, country: nil,
-                                                  processedAt: nil, error: nil)
+                                                  processedAt: "date")
         let validateBatchResponse = ZBValidateBatchResponse(emailBatch: [validateResponse], errors: [])
         
         let mockedData = try! JSONEncoder().encode(validateBatchResponse)
@@ -180,7 +236,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.emailBatch[0].address , "example@gmail.com")
+                XCTAssertEqual(response , validateBatchResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
@@ -208,11 +264,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                guard let zbError = error as? ZBError else {
-                    XCTAssertTrue(false)
-                    return
-                }
-                switch zbError {
+                switch error as? ZBError {
                 case .decodeError:
                     XCTAssertTrue(true)
                 default:
@@ -246,11 +298,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                guard let zbError = error as? ZBError else {
-                    XCTAssertTrue(false)
-                    return
-                }
-                switch zbError {
+                switch error as? ZBError {
                 case .notInitialized:
                     XCTAssertTrue(true)
                 default:
@@ -263,13 +311,14 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     }
     
     func testFileStatus() {
-        
         let fileId = "file_id"
         let apiEndpoint = URL(
             string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/filestatus?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
-        let fileStatusResponse = ZBFileStatusResponse(fileStatus: "Completed")
+        let fileStatusResponse = ZBFileStatusResponse(success: true, fileId: "fileId", fileName: "fileName",
+                                                      uploadDate: "date", fileStatus: "Completed",
+                                                      completePercentage: "100%", returnUrl: nil)
         
         let mockedData = try! JSONEncoder().encode(fileStatusResponse)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
@@ -281,7 +330,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.fileStatus, "Completed")
+                XCTAssertEqual(response, fileStatusResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
@@ -292,13 +341,15 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     }
     
     func testScoringFileStatus() {
-        
+        let completedStatus = "Completed"
         let fileId = "file_id"
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/scoring/filestatus?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/filestatus?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
-        let fileStatusResponse = ZBFileStatusResponse(fileStatus: "Completed")
+        let fileStatusResponse = ZBFileStatusResponse(success: true, fileId: "fileId", fileName: "fileName",
+                                                      uploadDate: "date", fileStatus: "Completed",
+                                                      completePercentage: "100%", returnUrl: nil)
         
         let mockedData = try! JSONEncoder().encode(fileStatusResponse)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
@@ -310,7 +361,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.fileStatus, "Completed")
+                XCTAssertEqual(response, fileStatusResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
@@ -321,7 +372,6 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     }
     
     func testDeleteFile() {
-        
         let fileId = "file_id"
         let apiEndpoint = URL(
             string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/deletefile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
@@ -339,7 +389,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.success, true)
+                XCTAssertEqual(response, fileDeleteResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
@@ -353,7 +403,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         
         let fileId = "file_id"
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/scoring/deletefile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/deletefile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
         let fileDeleteResponse = ZBDeleteFileResponse(success: true, message: nil, fileName: fileId, fileId: fileId)
@@ -368,7 +418,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.success, true)
+                XCTAssertEqual(response, fileDeleteResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
@@ -411,7 +461,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         
         let fileId = "fileId"
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/scoring/getFile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/getFile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
         let getFileResponse = ZBGetFileResponse(localFilePath: "path")
@@ -456,7 +506,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.success, true)
+                XCTAssertEqual(response, sendFileResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
@@ -490,11 +540,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                guard let zbError = error as? ZBError else {
-                    XCTAssertTrue(false)
-                    return
-                }
-                switch zbError {
+                switch error as? ZBError {
                 case .notInitialized:
                     XCTAssertTrue(true)
                 default:
@@ -511,7 +557,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let bundle = Bundle(for: type(of: self))
         let filePath = bundle.path(forResource: "test", ofType: "txt")!
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/scoring/sendFile"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/sendFile"
         )!
         
         let sendFileResponse = ZBSendFileResponse(success: true, message: nil, fileName: "fileName", fileId: "fileId")
@@ -526,7 +572,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                XCTAssertEqual(response.success, true)
+                XCTAssertEqual(response, sendFileResponse)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 XCTAssertTrue(false)
@@ -542,7 +588,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let bundle = Bundle(for: type(of: self))
         let filePath = bundle.path(forResource: "test", ofType: "txt")!
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/scoring/sendFile"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/sendFile"
         )!
         
         let sendFileResponse = ZBSendFileResponse(success: false, message: nil, fileName: "fileName", fileId: "fileId")
@@ -560,11 +606,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 XCTAssertTrue(false)
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
-                guard let zbError = error as? ZBError else {
-                    XCTAssertTrue(false)
-                    return
-                }
-                switch zbError {
+                switch error as? ZBError {
                 case .notInitialized:
                     XCTAssertTrue(true)
                 default:
