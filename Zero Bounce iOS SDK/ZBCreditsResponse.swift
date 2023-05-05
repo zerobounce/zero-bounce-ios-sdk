@@ -10,7 +10,7 @@ import Foundation
 
 public struct ZBCreditsResponse : Codable {
     
-    let credits: String?
+    public let credits: String
     
     enum CodingKeys : String, CodingKey {
         case credits = "Credits"

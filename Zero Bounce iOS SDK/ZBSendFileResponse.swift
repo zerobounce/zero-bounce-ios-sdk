@@ -10,10 +10,10 @@ import Foundation
 
 public struct ZBSendFileResponse: Codable, Equatable {
     
-    let success: Bool?
-    let message: String?
-    let fileName: String
-    let fileId: String
+    public let success: Bool?
+    public let message: String?
+    public let fileName: String
+    public let fileId: String
     
     enum CodingKeys: String, CodingKey {
         case success

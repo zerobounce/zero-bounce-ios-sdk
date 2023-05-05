@@ -9,13 +9,13 @@
 import Foundation
 
 public struct ZBFileStatusResponse : Codable, Equatable {
-    let success: Bool
-    let fileId: String
-    let fileName: String?
-    let uploadDate: String?
-    let fileStatus: String
-    let completePercentage: String?
-    let returnUrl: String?
+    public let success: Bool
+    public let fileId: String
+    public let fileName: String?
+    public let uploadDate: String?
+    public let fileStatus: String
+    public let completePercentage: String?
+    public let returnUrl: String?
     
     enum CodingKeys : String, CodingKey {
         case success

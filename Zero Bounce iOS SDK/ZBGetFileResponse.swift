@@ -9,7 +9,7 @@
 import Foundation
 
 public struct ZBGetFileResponse : Codable {
-    let localFilePath: String?
+    public let localFilePath: String?
     
     init(localFilePath: String?) {
         self.localFilePath = localFilePath

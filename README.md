@@ -70,6 +70,7 @@ ZeroBounceSDK.shared.getCredits() { result in
     switch result {
     case .Success(let response):
         NSLog("getCredits success response=\(response)")
+        let credits = response.credits
     case .Failure(let error):
         NSLog("getCredits failure error=\(String(describing: error))")
     }

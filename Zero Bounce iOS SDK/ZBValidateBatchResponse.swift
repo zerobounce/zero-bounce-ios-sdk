@@ -11,10 +11,10 @@ import Foundation
 public struct ZBValidateBatchResponse: Codable, Equatable {
     
     /// An Array of validated emails
-    let emailBatch: [ZBValidateResponse]
+    public let emailBatch: [ZBValidateResponse]
     
     /// An Array of errors encuontered, if any
-    let errors: [ZBValidateBatchErrorResponse]
+    public let errors: [ZBValidateBatchErrorResponse]
     
     enum CodingKeys: String, CodingKey {
         case emailBatch = "email_batch"
@@ -23,8 +23,8 @@ public struct ZBValidateBatchResponse: Codable, Equatable {
 }
 
 public struct ZBValidateBatchErrorResponse: Codable, Equatable {
-    let error: String
-    let emailAddress: String
+    public let error: String
+    public let emailAddress: String
     
     enum CodingKeys: String, CodingKey {
         case error

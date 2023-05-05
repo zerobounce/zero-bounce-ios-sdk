@@ -374,7 +374,6 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     }
     
     func testScoringFileStatus() {
-        let completedStatus = "Completed"
         let fileId = "file_id"
         let apiEndpoint = URL(
             string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/filestatus?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"

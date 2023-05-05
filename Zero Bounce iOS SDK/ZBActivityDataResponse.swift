@@ -9,8 +9,8 @@
 import Foundation
 
 public struct ZBActivityDataResponse: Codable, Equatable {
-    let found: Bool
-    let activeInDays: String?
+    public let found: Bool
+    public let activeInDays: String?
     
     enum CodingKeys: String, CodingKey {
         case found

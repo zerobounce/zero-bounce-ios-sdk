@@ -10,94 +10,94 @@ import Foundation
 
 public struct ZBGetApiUsageResponse : Codable, Equatable {
     /// Total number of times the API has been called
-    let total: Int
+    public let total: Int
     
     /// Total valid email addresses returned by the API
-    let statusValid: Int
+    public let statusValid: Int
     
     /// Total invalid email addresses returned by the API
-    let statusInvalid: Int
+    public let statusInvalid: Int
     
     /// Total catch-all email addresses returned by the API
-    let statusCatchAll: Int
+    public let statusCatchAll: Int
     
     /// Total do not mail email addresses returned by the API
-    let statusDoNotMail: Int
+    public let statusDoNotMail: Int
     
     /// Total spamtrap email addresses returned by the API
-    let statusSpamtrap: Int
+    public let statusSpamtrap: Int
     
     /// Total unknown email addresses returned by the API
-    let statusUnknown: Int
+    public let statusUnknown: Int
     
     /// Total number of times the API has a sub status of "toxic"
-    let subStatusToxic: Int
+    public let subStatusToxic: Int
     
     /// Total number of times the API has a sub status of "disposable"
-    let subStatusDisposable: Int
+    public let subStatusDisposable: Int
     
     /// Total number of times the API has a sub status of "role_based"
-    let subStatusRoleBased: Int
+    public let subStatusRoleBased: Int
     
     /// Total number of times the API has a sub status of "possible_trap"
-    let subStatusPossibleTrap: Int
+    public let subStatusPossibleTrap: Int
     
     /// Total number of times the API has a sub status of "global_suppression"
-    let subStatusGlobalSuppression: Int
+    public let subStatusGlobalSuppression: Int
     
     /// Total number of times the API has a sub status of "timeout_exceeded"
-    let subStatusTimeoutExceeded: Int
+    public let subStatusTimeoutExceeded: Int
     
     /// Total number of times the API has a sub status of "mail_server_temporary_error"
-    let subStatusMailServerTemporaryError: Int
+    public let subStatusMailServerTemporaryError: Int
     
     /// Total number of times the API has a sub status of "mail_server_did_not_respond"
-    let subStatusMailServerDidNotResponse: Int
+    public let subStatusMailServerDidNotResponse: Int
     
     /// Total number of times the API has a sub status of "greylisted"
-    let subStatusGreyListed: Int
+    public let subStatusGreyListed: Int
     
     /// Total number of times the API has a sub status of "antispam_system"
-    let subStatusAntiSpamSystem: Int
+    public let subStatusAntiSpamSystem: Int
     
     /// Total number of times the API has a sub status of "does_not_accept_mail"
-    let subStatusDoesNotAcceptMail: Int
+    public let subStatusDoesNotAcceptMail: Int
     
     /// Total number of times the API has a sub status of "exception_occurred"
-    let subStatusExceptionOccurred: Int
+    public let subStatusExceptionOccurred: Int
     
     /// Total number of times the API has a sub status of "failed_syntax_check"
-    let subStatusFailedSyntaxCheck: Int
+    public let subStatusFailedSyntaxCheck: Int
     
     /// Total number of times the API has a sub status of "mailbox_not_found"
-    let subStatusMailboxNotFound: Int
+    public let subStatusMailboxNotFound: Int
     
     /// Total number of times the API has a sub status of "unroutable_ip_address"
-    let subStatusUnRoutableIpAddress: Int
+    public let subStatusUnRoutableIpAddress: Int
     
     /// Total number of times the API has a sub status of "possible_typo"
-    let subStatusPossibleTypo: Int
+    public let subStatusPossibleTypo: Int
     
     /// Total number of times the API has a sub status of "no_dns_entries"
-    let subStatusNoDnsEntries: Int
+    public let subStatusNoDnsEntries: Int
     
     /// Total role based catch alls the API has a sub status of "role_based_catch_all"
-    let subStatusRoleBasedCatchAll: Int
+    public let subStatusRoleBasedCatchAll: Int
     
     /// Total number of times the API has a sub status of "mailbox_quota_exceeded"
-    let subStatusMailboxQuotaExceeded: Int
+    public let subStatusMailboxQuotaExceeded: Int
     
     /// Total forcible disconnects the API has a sub status of "forcible_disconnect"
-    let subStatusForcibleDisconnect: Int
+    public let subStatusForcibleDisconnect: Int
     
     /// Total failed SMTP connections the API has a sub status of "failed_smtp_connection"
-    let subStatusFailedSmtpConnection: Int
+    public let subStatusFailedSmtpConnection: Int
     
     /// Start date of query
-    let startDate: String?
+    public let startDate: String?
     
     /// End date of query
-    let endDate: String?
+    public let endDate: String?
     
     enum CodingKeys: String, CodingKey {
         case total
