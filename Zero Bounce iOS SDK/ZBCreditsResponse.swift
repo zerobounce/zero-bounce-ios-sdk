@@ -9,7 +9,6 @@
 import Foundation
 
 public struct ZBCreditsResponse : Codable {
-    
     public let credits: String
     
     enum CodingKeys : String, CodingKey {

@@ -9,7 +9,6 @@
 import Foundation
 
 public struct ZBDeleteFileResponse: Codable, Equatable {
-    
     public let success: Bool?
     public let message: String?
     public let fileName: String

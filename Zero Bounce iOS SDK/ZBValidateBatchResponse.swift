@@ -9,7 +9,6 @@
 import Foundation
 
 public struct ZBValidateBatchResponse: Codable, Equatable {
-    
     /// An Array of validated emails
     public let emailBatch: [ZBValidateResponse]
     

@@ -55,6 +55,7 @@ class ViewController: UIViewController {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
+                let address = response.address
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
             }

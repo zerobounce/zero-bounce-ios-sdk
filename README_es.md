@@ -32,7 +32,7 @@ ZeroBounceSDK.shared.validate(email, ipAddress) { result in
         NSLog("validate success response=\(response)")
     case .Failure(let error):
         NSLog("validate failure error=\(String(describing: error))")
-        switch (error) {
+        switch error as? ZBError {
         case ZBError.notInitialized:
             break
         case ZBError.decodeError(let messages):
