@@ -254,9 +254,7 @@ ZeroBounceSDK.shared.scoringDeleteFile(fileId) { result in
 * [toxic@example.com](mailto:toxic@example.com)
 * [donotmail@example.com](mailto:donotmail@example.com)
 * [spamtrap@example.com](mailto:spamtrap@example.com)
-* [abuse@example.com
-
-](mailto:abuse@example.com)
+* [abuse@example.com](mailto:abuse@example.com)
 * [unknown@example.com](mailto:unknown@example.com)
 * [catch_all@example.com](mailto:catch_all@example.com)
 * [antispam_system@example.com](mailto:antispam_system@example.com)
