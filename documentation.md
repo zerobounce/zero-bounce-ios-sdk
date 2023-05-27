@@ -1,13 +1,13 @@
 ##### Installation (CocoaPods)
 Add the pod to your Podfile
-```pod 'ZeroBounceSDK_India' ```
+```pod 'ZeroBounceSDK' ```
 and run 
 ```pod install```
 
 #### USAGE
 Import the SDK in your file:
 ```swift
-import ZeroBounceSDK_India
+import ZeroBounceSDK
 ``` 
 
 Initialize the SDK with your api key:
