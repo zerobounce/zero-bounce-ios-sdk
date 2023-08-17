@@ -523,7 +523,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let bundle = Bundle(for: type(of: self))
         let filePath = bundle.path(forResource: "test", ofType: "txt")!
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/sendFile"
+            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/sendfile"
         )!
         
         let sendFileResponse = ZBSendFileResponse(success: true, message: nil, fileName: "fileName", fileId: "fileId")
@@ -554,7 +554,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let bundle = Bundle(for: type(of: self))
         let filePath = bundle.path(forResource: "test", ofType: "txt")!
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/sendFile"
+            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/sendfile"
         )!
         
         let sendFileResponse = ZBSendFileResponse(success: false, message: nil, fileName: "fileName", fileId: "fileId")
@@ -589,7 +589,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let bundle = Bundle(for: type(of: self))
         let filePath = bundle.path(forResource: "test", ofType: "txt")!
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/sendFile"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/sendfile"
         )!
         
         let sendFileResponse = ZBSendFileResponse(success: true, message: nil, fileName: "fileName", fileId: "fileId")
@@ -620,7 +620,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let bundle = Bundle(for: type(of: self))
         let filePath = bundle.path(forResource: "test", ofType: "txt")!
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/sendFile"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/sendfile"
         )!
         
         let sendFileResponse = ZBSendFileResponse(success: false, message: nil, fileName: "fileName", fileId: "fileId")

@@ -221,7 +221,7 @@ public class ZeroBounceSDK {
                 parameters["ip_address_column"] = ipAddressColumn
             }
             do {
-                let r = try ZBMultiPartRequest.createFileRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/sendFile", parameters: parameters, filePathKey: "file", paths: [filePath])
+                let r = try ZBMultiPartRequest.createFileRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/sendfile", parameters: parameters, filePathKey: "file", paths: [filePath])
                 sendJsonRequest(request: r, completion: completion)
             } catch {
                 completion(ZBResult.Failure(error))
