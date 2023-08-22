@@ -253,7 +253,7 @@ public class ZeroBounceSDK {
             return
         }
         
-        sendRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/getFile?api_key=\(apiKey)&file_id=\(fileId)") { result in
+        sendRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/getfile?api_key=\(apiKey)&file_id=\(fileId)") { result in
             switch result {
             case .success(let response, let data):
                 

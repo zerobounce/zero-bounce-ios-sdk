@@ -464,7 +464,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         
         let fileId = "fileId"
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/getFile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
+            string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/getfile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
         let getFileResponse = ZBGetFileResponse(localFilePath: "path")
@@ -493,7 +493,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         
         let fileId = "fileId"
         let apiEndpoint = URL(
-            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/getFile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
+            string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/getfile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
         let getFileResponse = ZBGetFileResponse(localFilePath: "path")
