@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		06650474314B89618D95AB89 /* Pods_Zero_Bounce_iOS_SDKTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1C1108529D450647390518C3 /* Pods_Zero_Bounce_iOS_SDKTests.framework */; };
+		1CCDFC422A965A3500F35663 /* ZBEmailFinderResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CCDFC412A965A3500F35663 /* ZBEmailFinderResponse.swift */; };
+		1CCDFC442A965CB900F35663 /* ZBConfidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CCDFC432A965CB900F35663 /* ZBConfidence.swift */; };
 		4502126F29C3781D00C12510 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4502126E29C3781D00C12510 /* AppDelegate.swift */; };
 		4502127329C3781D00C12510 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4502127229C3781D00C12510 /* ViewController.swift */; };
 		4502127629C3781D00C12510 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4502127429C3781D00C12510 /* Main.storyboard */; };
@@ -48,6 +50,8 @@
 
 /* Begin PBXFileReference section */
 		1C1108529D450647390518C3 /* Pods_Zero_Bounce_iOS_SDKTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Zero_Bounce_iOS_SDKTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		1CCDFC412A965A3500F35663 /* ZBEmailFinderResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBEmailFinderResponse.swift; sourceTree = "<group>"; };
+		1CCDFC432A965CB900F35663 /* ZBConfidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBConfidence.swift; sourceTree = "<group>"; };
 		4502126C29C3781D00C12510 /* ZeroBounceSampleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ZeroBounceSampleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4502126E29C3781D00C12510 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4502127229C3781D00C12510 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
@@ -182,6 +186,7 @@
 				C028421F2A03CACF00CEB500 /* ZBActivityDataResponse.swift */,
 				BC458D9622D5FD08004DEF30 /* ZBValidateResponse.swift */,
 				C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */,
+				1CCDFC412A965A3500F35663 /* ZBEmailFinderResponse.swift */,
 				BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */,
 				BC458D9222D5FD08004DEF30 /* ZBFileStatusResponse.swift */,
 				BC458D8F22D5FD08004DEF30 /* ZBGetFileResponse.swift */,
@@ -189,6 +194,7 @@
 				BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */,
 				BC458D8E22D5FD08004DEF30 /* ZBValidateStatus.swift */,
 				BC458D9322D5FD08004DEF30 /* ZBValidateSubStatus.swift */,
+				1CCDFC432A965CB900F35663 /* ZBConfidence.swift */,
 				BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */,
 				BCC4E27522D39A7900BD7BF3 /* Info.plist */,
 			);
@@ -425,12 +431,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				BC458D9E22D5FD08004DEF30 /* ZBGetApiUsageResponse.swift in Sources */,
+				1CCDFC422A965A3500F35663 /* ZBEmailFinderResponse.swift in Sources */,
 				BC458D9922D5FD08004DEF30 /* ZBCreditsResponse.swift in Sources */,
 				BC458D9822D5FD08004DEF30 /* ZBMultiPartRequest.swift in Sources */,
 				C02842202A03CACF00CEB500 /* ZBActivityDataResponse.swift in Sources */,
 				BC458D9D22D5FD08004DEF30 /* ZeroBounceSDK.swift in Sources */,
 				BC458D9B22D5FD08004DEF30 /* ZBValidateStatus.swift in Sources */,
 				C028421C2A01146300CEB500 /* ZBValidateBatchResponse.swift in Sources */,
+				1CCDFC442A965CB900F35663 /* ZBConfidence.swift in Sources */,
 				BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */,
 				BC458D9F22D5FD08004DEF30 /* ZBFileStatusResponse.swift in Sources */,
 				BC458D9A22D5FD08004DEF30 /* ZBDeleteFileResponse.swift in Sources */,
