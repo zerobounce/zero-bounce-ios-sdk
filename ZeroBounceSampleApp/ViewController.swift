@@ -21,6 +21,7 @@ class ViewController: UIViewController {
 //        getApiUsage()
 //        validate()
 //        validateBatch()
+//        guessFormat()
     }
     
     func getCredits() {
@@ -28,9 +29,11 @@ class ViewController: UIViewController {
             switch result {
             case .Success(let response):
                 NSLog("getCredits success response=\(response)")
-                let credits = response.credits
+                // your implementation
+                
             case .Failure(let error):
                 NSLog("getCredits failure error=\(String(describing: error))")
+                // your implementation
             }
         }
     }
@@ -43,8 +46,11 @@ class ViewController: UIViewController {
             switch result {
             case .Success(let response):
                 NSLog("getApiUsage success response=\(response)")
+                // your implementation
+                
             case .Failure(let error):
                 NSLog("getApiUsage failure error=\(String(describing: error))")
+                // your implementation
             }
         }
     }
@@ -55,9 +61,11 @@ class ViewController: UIViewController {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
-                let address = response.address
+                // your implementation
+                
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
+                // your implementation
             }
         }
     }
@@ -71,8 +79,26 @@ class ViewController: UIViewController {
             switch result {
             case .Success(let response):
                 NSLog("validate success response=\(response)")
+                // your implementation
+                
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
+                // your implementation
+            }
+        }
+    }
+    
+    func guessFormat() {
+        let domain = "example.com"
+        ZeroBounceSDK.shared.guessFormat(domain: domain) { result in
+            switch result {
+            case .Success(let response):
+                NSLog("guessFormat success response=\(response)")
+                // your implementation
+                
+            case .Failure(let error):
+                NSLog("guessFormat failure error=\(String(describing: error))")
+                // your implementation
             }
         }
     }
