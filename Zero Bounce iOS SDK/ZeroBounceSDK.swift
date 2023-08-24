@@ -101,7 +101,7 @@ public class ZeroBounceSDK {
         )
     }
     
-    // MARK: GetCredits
+    // MARK: Get Credits
     ///
     /// This API will tell you how many credits you have left on your account. It's simple, fast and easy to use.
     ///
@@ -114,7 +114,7 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(apiBaseUrl)/getcredits?api_key=\(apiKey)", completion: completion)
     }
     
-    // MARK: GetApiUsage
+    // MARK: Get Api Usage
     ///
     /// - parameter startDate: The start date of when you want to view API usage
     /// - parameter endDate: The end date of when you want to view API usage
@@ -144,7 +144,7 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(apiBaseUrl)/activity?api_key=\(apiKey)&email=\(email)", completion: completion)
     }
     
-    // MARK: FileStatus
+    // MARK: File Status
     ///
     /// - parameter fileId: The returned file ID when calling sendFile API.
     ///
@@ -168,7 +168,7 @@ public class ZeroBounceSDK {
         sendJsonRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/filestatus?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
     }
     
-    // MARK: DeleteFile
+    // MARK: Delete File
     ///
     /// - parameter fileId: The returned file ID when calling sendfile API.
     ///
@@ -194,7 +194,7 @@ public class ZeroBounceSDK {
     
     
     
-    // MARK: SendFile
+    // MARK: Send File
     ///
     /// The sendfile API allows user to send a file for bulk email validation
     ///
@@ -293,7 +293,7 @@ public class ZeroBounceSDK {
     }
     
     
-    // MARK: GetFile
+    // MARK: Get File
     ///
     /// The getfile API allows users to get the validation results file for the file been submitted using sendfile API
     ///

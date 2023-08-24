@@ -8,7 +8,7 @@
 
 import Foundation
 
-public struct ZBDomainFormat: Codable {
+public struct ZBDomainFormat: Codable, Equatable {
     var format: String
     var confidence: ZBConfidence
 
@@ -18,7 +18,7 @@ public struct ZBDomainFormat: Codable {
     }
 }
 
-public struct ZBEmailFinderResponse: Codable {
+public struct ZBEmailFinderResponse: Codable, Equatable {
     public let email: String
     public let domain: String
     public let format: String
