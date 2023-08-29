@@ -9,11 +9,12 @@
 import Foundation
 
 public enum ZBValidateStatus: String, Codable {
-    case valid = "valid"
-    case invalid = "invalid"
+    case none = ""
+    case valid
+    case invalid
     case catchAll = "catch-all"
-    case unknown = "unknown"
+    case unknown
     case spamTrap = "spamtrap"
-    case abuse = "abuse"
+    case abuse
     case doNotMail = "do_not_mail"
 }

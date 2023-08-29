@@ -31,7 +31,7 @@ public enum ZBValidateSubStatus: String, Codable {
     case doesNotAcceptMail = "does_not_accept_mail"
     case aliasAddress = "alias_address"
     case roleBasedCatchAll = "role_based_catch_all"
-    case disposable = "disposable"
-    case toxic = "toxic"
-    case alternate = "alternate"
+    case disposable
+    case toxic
+    case alternate
 }
