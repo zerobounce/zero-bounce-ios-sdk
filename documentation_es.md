@@ -27,7 +27,7 @@ Luego puedes utilizar cualquiera de los métodos del SDK, por ejemplo:
 let email = "<DIRECCIÓN_DE_CORREO>"   // La dirección de correo electrónico que deseas validar
 let ipAddress = "127.0.0.1"     // La dirección IP desde la cual se registró el correo electrónico (opcional)
 
-ZeroBounceSDK.shared.validate(email, ipAddress) { result in
+ZeroBounceSDK.shared.validate(email: email, ipAddress: ipAddress) { result in
     switch result {
     case .success(let response):
         NSLog("validate success response=\(response)")
@@ -80,6 +80,8 @@ ZeroBounceSDK.shared.getCredits() { result in
 
 * ####### Verificar si tu bandeja de entrada de correo electrónico ha estado activa en los últimos 30, 60, 90, 180, 365, 730 o 1095 días
 ```swift
+let email = "<DIRECCIÓN_DE_CORREO>"   // La dirección de correo electrónico que deseas validar
+
 ZeroBounceSDK.shared.getActivityData(email: email) { result in
     switch result {
     case .success(let response):
@@ -97,7 +99,7 @@ let endDate = Date();      // La
 
  fecha de finalización hasta la cual deseas ver el uso de la API
 
-ZeroBounceSDK.shared.getApiUsage(startDate, endDate) { result in
+ZeroBounceSDK.shared.getApiUsage(startDate: startDate, endDate: endDate) { result in
     switch result {
     case .success(let response):
         NSLog("getApiUsage success response=\(response)")
@@ -119,20 +121,21 @@ let hasHeaderRow = true;            // Si es `true`, se considera que la primera
 let returnUrl = "https://dominio.com/llamada/despues/de/procesar/solicitud";
 
 ZeroBounceSDK.shared.sendFile(
-    filePath,
-    emailAddressColumn,
-    returnUrl,
-    firstNameColumn,
-    lastNameColumn,
-    genderColumn,
-    ipAddressColumn,
-    hasHeaderRow) { result in
-        switch result {
-        case .success(let response):
-            NSLog("sendFile success response=\(response)")
-        case .failure(let error):
-            NSLog("sendFile failure error=\(String(describing: error))")
-        }
+    filePath: filePath,
+    emailAddressColumn: emailAddressColumn,
+    returnUrl: returnUrl,
+    firstNameColumn: firstNameColumn,
+    lastNameColumn: lastNameColumn,
+    genderColumn: genderColumn,
+    ipAddressColumn: ipAddressColumn,
+    hasHeaderRow: hasHeaderRow
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("sendFile success response=\(response)")
+    case .Failure(let error):
+        NSLog("sendFile failure error=\(String(describing: error))")
+    }
 }
 ```
 
@@ -140,7 +143,7 @@ ZeroBounceSDK.shared.sendFile(
 ```swift
 let fileId = "<ID_DEL_ARCHIVO>";    // El ID de archivo devuelto al llamar a la API sendfile
 
-ZeroBounceSDK.shared.getfile(fileId) { result in
+ZeroBounceSDK.shared.getfile(fileId: fileId) { result in
     switch result {
     case .success(let response):
         NSLog("getfile success response=\(response)")
@@ -154,7 +157,7 @@ ZeroBounceSDK.shared.getfile(fileId) { result in
 ```swift
 let fileId = "<ID_DEL_ARCHIVO>";    // El ID de archivo devuelto al llamar a la API sendfile
 
-ZeroBounceSDK.shared.fileStatus(fileId) { result in
+ZeroBounceSDK.shared.fileStatus(fileId: fileId) { result in
     switch result {
     case .success(let response):
         NSLog("fileStatus success response=\(response)")
@@ -168,7 +171,7 @@ ZeroBounceSDK.shared.fileStatus(fileId) { result in
 ```swift
 let fileId = "<ID_DEL_ARCHIVO>";    // El ID de archivo devuelto al llamar a la API sendfile
 
-ZeroBounceSDK.shared.deleteFile(fileId) { result in
+ZeroBounceSDK.shared.deleteFile(fileId: fileId) { result in
     switch result {
     case .success(let response):
         NSLog("deleteFile success response=\(response)")
@@ -179,9 +182,7 @@ ZeroBounceSDK.shared.deleteFile(fileId) { result in
 ```
 
 ##### API de puntuación de AI
-*
-
-####### La API scoringSendFile permite enviar un archivo para la validación masiva de correos electrónicos
+* ####### La API scoringSendFile permite enviar un archivo para la validación masiva de correos electrónicos
 ```swift
 let filePath = File("<RUTA_DEL_ARCHIVO>") // El archivo csv o txt
 let emailAddressColumn = 3;         // El índice de la columna "email" en el archivo. El índice comienza en 1
@@ -189,16 +190,17 @@ let hasHeaderRow = true;            // Si es `true`, se considera que la primera
 let returnUrl = "https://dominio.com/llamada/despues/de/procesar/solicitud";
 
 ZeroBounceSDK.shared.scoringSendFile(
-    filePath,
-    emailAddressColumn,
-    returnUrl,
-    hasHeaderRow) { result in
-        switch result {
-        case .success(let response):
-            NSLog("sendFile success response=\(response)")
-        case .failure(let error):
-            NSLog("sendFile failure error=\(String(describing: error))")
-        }
+    filePath: filePath,
+    emailAddressColumn: emailAddressColumn,
+    returnUrl: returnUrl,
+    hasHeaderRow: hasHeaderRow
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("sendFile success response=\(response)")
+    case .Failure(let error):
+        NSLog("sendFile failure error=\(String(describing: error))")
+    }
 }
 ```
 
@@ -206,7 +208,7 @@ ZeroBounceSDK.shared.scoringSendFile(
 ```swift
 let fileId = "<ID_DEL_ARCHIVO>";    // El ID de archivo devuelto al llamar a la API scoringSendFile
 
-ZeroBounceSDK.shared.scoringGetfile(fileId) { result in
+ZeroBounceSDK.shared.scoringGetfile(fileId: fileId) { result in
     switch result {
     case .success(let response):
         NSLog("getfile success response=\(response)")
@@ -220,7 +222,7 @@ ZeroBounceSDK.shared.scoringGetfile(fileId) { result in
 ```swift
 let fileId = "<ID_DEL_ARCHIVO>";    // El ID de archivo devuelto al llamar a la API scoringSendFile
 
-ZeroBounceSDK.shared.scoringFileStatus(fileId) { result in
+ZeroBounceSDK.shared.scoringFileStatus(fileId: fileId) { result in
     switch result {
     case .success(let response):
         NSLog("fileStatus success response=\(response)")
@@ -234,7 +236,7 @@ ZeroBounceSDK.shared.scoringFileStatus(fileId) { result in
 ```swift
 let fileId = "<ID_DEL_ARCHIVO>";    // El ID de archivo devuelto al llamar a la API scoringSendFile
 
-ZeroBounceSDK.shared.scoringDeleteFile(fileId) { result in
+ZeroBounceSDK.shared.scoringDeleteFile(fileId: fileId) { result in
     switch result {
     case .success(let response):
         NSLog("deleteFile success response=\(response)")
