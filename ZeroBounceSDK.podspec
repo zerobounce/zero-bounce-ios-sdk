@@ -36,6 +36,6 @@ s.source_files = "Zero Bounce iOS SDK/*.{swift}"
 s.swift_version = "5"
 
 # 11
-s.readme = "https://github.com/zerobounce/zero-bounce-ios-sdk/blob/#{s.version}/README.md
+s.readme = "https://github.com/zerobounce/zero-bounce-ios-sdk/blob/#{s.version}/README.md"
 
 end
