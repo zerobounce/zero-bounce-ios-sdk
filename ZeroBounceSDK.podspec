@@ -8,7 +8,7 @@ s.summary = "ZeroBounceSDK provides wrappers over ZeroBounce API"
 s.requires_arc = true
 
 # 2
-s.version = "0.1.6"
+s.version = "0.1.7"
 
 # 3
 s.license = { :type => "MIT", :file => "LICENSE.md" }
@@ -36,6 +36,6 @@ s.source_files = "Zero Bounce iOS SDK/*.{swift}"
 s.swift_version = "5"
 
 # 11
-s.readme = "https://github.com/zerobounce/zero-bounce-ios-sdk/blob/0.1.6/README.md"
+s.readme = "https://github.com/zerobounce/zero-bounce-ios-sdk/blob/#{s.version}/documentation.md"
 
 end

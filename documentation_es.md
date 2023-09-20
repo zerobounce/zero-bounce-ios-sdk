@@ -65,6 +65,28 @@ ZeroBounceSDK.shared.validateBatch(emails: emails) { result in
 }
 ```
 
+* ####### Encuentre el correo electrónico y otros formatos de dominio según un nombre de dominio específico
+```swift
+let domain = "<DOMAIN_NAME>"   // El nombre de dominio para el que quiere encontrar el formato de correo electrónico.
+let firstName = "<FIRST_NAME>" // El primer nombre de la persona para la que se busca el formato de correo electrónico. [Opcional]
+let middleName = "<MIDDLE_NAME>" // El segundo nombre de la persona para la que se busca el formato de correo electrónico. [Opcional]
+let lastName = "<LAST_NAME>" // El apellido de la persona para la que se busca el formato de correo electrónico. [Opcional]
+
+ZeroBounceSDK.shared.guessFormat(
+    domain: domain,
+    firstName: firstName,
+    middleName: middleName,
+    lastName: lastName
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("guessFormat success response=\(response)")
+    case .Failure(let error):
+        NSLog("guessFormat failure error=\(String(describing: error))")
+    }
+}
+```
+
 * ####### Verificar cuántos créditos te quedan en tu cuenta
 ```swift
 ZeroBounceSDK.shared.getCredits() { result in
