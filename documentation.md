@@ -29,9 +29,9 @@ ZeroBounceSDK.shared.validate(email: email, ipAddress: ipAddress) { result in
     case .Failure(let error):
         NSLog("validate failure error=\(String(describing: error))")
         switch error as? ZBError {
-        case ZBError.notInitialized:
+        case .notInitialized:
             break
-        case ZBError.decodeError(let messages):
+        case .decodeError(let messages):
             /// decodeError is used to extract and decode errors and messages 
             /// when they are not part of the response object
             break
