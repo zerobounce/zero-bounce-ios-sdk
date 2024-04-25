@@ -34,4 +34,6 @@ public enum ZBValidateSubStatus: String, Codable {
     case disposable
     case toxic
     case alternate
+    case allowed
+    case blocked
 }
