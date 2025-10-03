@@ -106,7 +106,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             subStatusPossibleTypo: 0, subStatusNoDnsEntries: 0,
             subStatusRoleBasedCatchAll: 0, subStatusMailboxQuotaExceeded: 0,
             subStatusForcibleDisconnect: 0, subStatusFailedSmtpConnection: 0,
-            startDate: startString, endDate: endString
+            subStatusAcceptAll: 0, startDate: startString, endDate: endString
         )
         
         let mockedData = try! JSONEncoder().encode(apiUsageResponse)
