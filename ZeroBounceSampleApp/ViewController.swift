@@ -21,7 +21,8 @@ class ViewController: UIViewController {
 //        getApiUsage()
 //        validate()
 //        validateBatch()
-//        guessFormat()
+//        findEmail()
+//        findDomain()
     }
     
     func getCredits() {
@@ -88,9 +89,24 @@ class ViewController: UIViewController {
         }
     }
     
-    func guessFormat() {
+    func findEmail() {
         let domain = "example.com"
-        ZeroBounceSDK.shared.guessFormat(domain: domain) { result in
+        ZeroBounceSDK.shared.findEmail(domain: domain) { result in
+            switch result {
+            case .Success(let response):
+                NSLog("guessFormat success response=\(response)")
+                // your implementation
+                
+            case .Failure(let error):
+                NSLog("guessFormat failure error=\(String(describing: error))")
+                // your implementation
+            }
+        }
+    }
+    
+    func findDomain() {
+        let domain = "example.com"
+        ZeroBounceSDK.shared.findDomain(domain: domain) { result in
             switch result {
             case .Success(let response):
                 NSLog("guessFormat success response=\(response)")

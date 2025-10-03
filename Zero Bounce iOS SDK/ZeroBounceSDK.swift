@@ -69,6 +69,143 @@ public class ZeroBounceSDK {
     /// - parameter middleName: The middle name of the person whose email format is being searched
     /// - parameter lastName: The last name of the person whose email format is being searched
     ///
+    public func findEmail(
+        domain: String,
+        firstName: String? = nil,
+        middleName: String? = nil,
+        lastName: String? = nil,
+        completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
+    ) {
+        _findEmail(
+            domain: domain,
+            companyName: nil,
+            firstName: firstName,
+            middleName: middleName,
+            lastName: lastName,
+            completion: completion
+        )
+    }
+    
+    ///
+    /// - parameter companyName: The company name for which to find the email format
+    /// - parameter firstName: The first name of the person whose email format is being searched
+    /// - parameter middleName: The middle name of the person whose email format is being searched
+    /// - parameter lastName: The last name of the person whose email format is being searched
+    ///
+    public func findEmail(
+        companyName: String,
+        firstName: String? = nil,
+        middleName: String? = nil,
+        lastName: String? = nil,
+        completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
+    ) {
+        _findEmail(
+            domain: nil,
+            companyName: companyName,
+            firstName: firstName,
+            middleName: middleName,
+            lastName: lastName,
+            completion: completion
+        )
+    }
+    
+    private func _findEmail(
+        domain: String?,
+        companyName: String?,
+        firstName: String? = nil,
+        middleName: String? = nil,
+        lastName: String? = nil,
+        completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
+    ) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+        
+        var url = "\(apiBaseUrl)/guessformat?api_key=\(apiKey)"
+        
+        if let domain {
+            url += "&domain=\(domain)"
+        }
+        
+        if let companyName {
+            url += "&company_name=\(companyName)"
+        }
+        
+        if let firstName {
+            url += "&first_name=\(firstName)"
+        }
+        
+        if let middleName {
+            url += "&middle_name=\(middleName)"
+        }
+        
+        if let lastName {
+            url += "&last_name=\(lastName)"
+        }
+        
+        sendJsonRequest(
+            url: url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed)!,
+            completion: completion
+        )
+    }
+    
+    // MARK: Domain Search
+    ///
+    /// - parameter domain: The email domain for which to find the email format
+    ///
+    public func findDomain(
+        domain: String,
+        completion: @escaping (ZBResult<ZBDomainSearchResponse>) -> ()
+    ) {
+        _findDomain(
+            domain: domain,
+            companyName: nil,
+            completion: completion
+        )
+    }
+    
+    ///
+    /// - parameter companyName: The company name for which to find the email format
+    ///
+    public func findDomain(
+        companyName: String,
+        completion: @escaping (ZBResult<ZBDomainSearchResponse>) -> ()
+    ) {
+        _findDomain(
+            domain: nil,
+            companyName: companyName,
+            completion: completion
+        )
+    }
+    
+    private func _findDomain(
+        domain: String?,
+        companyName: String?,
+        completion: @escaping (ZBResult<ZBDomainSearchResponse>) -> ()
+    ) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+        
+        var url = "\(apiBaseUrl)/guessformat?api_key=\(apiKey)"
+        
+        if let domain {
+            url += "&domain=\(domain)"
+        }
+        
+        if let companyName {
+            url += "&company_name=\(companyName)"
+        }
+        
+        sendJsonRequest(
+            url: url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed)!,
+            completion: completion
+        )
+    }
+    
+    @available(*, unavailable, message: "Use findEmail() for Email Finder API, or findDomain() for Domain Search API")
     public func guessFormat(
         domain: String,
         firstName: String? = nil,
