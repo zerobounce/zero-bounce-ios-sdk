@@ -207,7 +207,7 @@ public class ZeroBounceSDK {
         )
     }
     
-    @available(*, unavailable, message: "Use findEmail() for Email Finder API, or findDomain() for Domain Search API")
+    @available(*, deprecated, message: "Use findEmail() for Email Finder API, or findDomain() for Domain Search API")
     public func guessFormat(
         domain: String,
         firstName: String? = nil,
