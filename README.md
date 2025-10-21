@@ -16,7 +16,7 @@ import ZeroBounceSDK
 
 Initialize the SDK with your api key and preferred api:
 ```swift 
-ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiUrl: API_DEFAULT_URL)
+ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiBaseUrl: .API_DEFAULT_URL)
 ```
 
 ## Examples

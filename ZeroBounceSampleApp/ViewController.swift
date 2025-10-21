@@ -13,7 +13,7 @@ class ViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiUrl: .API_DEFAULT_URL)
+        ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiBaseUrl: .API_DEFAULT_URL)
     }
     
     @IBAction func tappedButton(_ sender: Any) {

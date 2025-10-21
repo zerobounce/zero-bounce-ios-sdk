@@ -26,10 +26,10 @@ public class ZeroBounceSDK {
     
     public func initialize(
         apiKey: String,
-        apiUrl: ZBApiURL = .API_DEFAULT_URL
+        apiBaseUrl: ZBApiURL = .API_DEFAULT_URL
     ) {
         self.apiKey = apiKey
-        self.apiBaseUrl = apiUrl.rawValue
+        self.apiBaseUrl = apiBaseUrl.rawValue
     }
     
     // MARK: Validate
