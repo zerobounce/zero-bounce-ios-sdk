@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 51;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -15,6 +15,11 @@
 		4502127629C3781D00C12510 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4502127429C3781D00C12510 /* Main.storyboard */; };
 		4502127829C3781F00C12510 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4502127729C3781F00C12510 /* Assets.xcassets */; };
 		4502127B29C3781F00C12510 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4502127929C3781F00C12510 /* LaunchScreen.storyboard */; };
+		6FA422E02E8FF2D0001C6397 /* ZBDomainSearchResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA422DF2E8FF2CA001C6397 /* ZBDomainSearchResponse.swift */; };
+		6FA422E42E8FF3A5001C6397 /* ZBEmailConfidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FA422E32E8FF39E001C6397 /* ZBEmailConfidence.swift */; };
+		6FA422E52E90034E001C6397 /* Zero_Bounce_iOS_SDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCC4E27122D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework */; };
+		6FA422E62E90034E001C6397 /* Zero_Bounce_iOS_SDK.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = BCC4E27122D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6FB33E782E9F96FC00AD0A4B /* ZBApiURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6FB33E772E9F96FC00AD0A4B /* ZBApiURL.swift */; };
 		B5E10FBD021FE822975C0044 /* Pods_Zero_Bounce_iOS_SDK.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5C6B239DD8DCCF5A9914F78A /* Pods_Zero_Bounce_iOS_SDK.framework */; };
 		BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */; };
 		BC458D9822D5FD08004DEF30 /* ZBMultiPartRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */; };
@@ -39,6 +44,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		6FA422E72E90034E001C6397 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BCC4E26822D39A7900BD7BF3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BCC4E27022D39A7900BD7BF3;
+			remoteInfo = "Zero Bounce iOS SDK";
+		};
 		BCC4E27C22D39A7900BD7BF3 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = BCC4E26822D39A7900BD7BF3 /* Project object */;
@@ -47,6 +59,20 @@
 			remoteInfo = "Zero Bounce iOS SDK";
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6FA422E92E90034E001C6397 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				6FA422E62E90034E001C6397 /* Zero_Bounce_iOS_SDK.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		1C1108529D450647390518C3 /* Pods_Zero_Bounce_iOS_SDKTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Zero_Bounce_iOS_SDKTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -61,6 +87,9 @@
 		4502127C29C3781F00C12510 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C6B239DD8DCCF5A9914F78A /* Pods_Zero_Bounce_iOS_SDK.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Zero_Bounce_iOS_SDK.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		65E08EBF76C40EBD464CC798 /* Pods-Zero Bounce iOS SDK.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDK.release.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDK/Pods-Zero Bounce iOS SDK.release.xcconfig"; sourceTree = "<group>"; };
+		6FA422DF2E8FF2CA001C6397 /* ZBDomainSearchResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBDomainSearchResponse.swift; sourceTree = "<group>"; };
+		6FA422E32E8FF39E001C6397 /* ZBEmailConfidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBEmailConfidence.swift; sourceTree = "<group>"; };
+		6FB33E772E9F96FC00AD0A4B /* ZBApiURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZBApiURL.swift; sourceTree = "<group>"; };
 		AF7878FA8AFF0369D416A167 /* Pods-Zero Bounce iOS SDKTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; path = "Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests.debug.xcconfig"; sourceTree = "<group>"; };
 		BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBFileManager.swift; sourceTree = "<group>"; };
 		BC458D8B22D5FD08004DEF30 /* ZBMultiPartRequest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ZBMultiPartRequest.swift; sourceTree = "<group>"; };
@@ -95,6 +124,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6FA422E52E90034E001C6397 /* Zero_Bounce_iOS_SDK.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,6 +209,7 @@
 			children = (
 				C0BE36E62A03ED19008667F6 /* README.md */,
 				BC458D9022D5FD08004DEF30 /* ZeroBounceSDK.swift */,
+				6FB33E772E9F96FC00AD0A4B /* ZBApiURL.swift */,
 				BC458D8A22D5FD08004DEF30 /* ZBFileManager.swift */,
 				BC458D9422D5FD08004DEF30 /* ZBError.swift */,
 				BC458D8C22D5FD08004DEF30 /* ZBCreditsResponse.swift */,
@@ -187,6 +218,7 @@
 				BC458D9622D5FD08004DEF30 /* ZBValidateResponse.swift */,
 				C028421B2A01146300CEB500 /* ZBValidateBatchResponse.swift */,
 				1CCDFC412A965A3500F35663 /* ZBEmailFinderResponse.swift */,
+				6FA422DF2E8FF2CA001C6397 /* ZBDomainSearchResponse.swift */,
 				BC458D9522D5FD08004DEF30 /* ZBSendFileResponse.swift */,
 				BC458D9222D5FD08004DEF30 /* ZBFileStatusResponse.swift */,
 				BC458D8F22D5FD08004DEF30 /* ZBGetFileResponse.swift */,
@@ -195,6 +227,7 @@
 				BC458D8E22D5FD08004DEF30 /* ZBValidateStatus.swift */,
 				BC458D9322D5FD08004DEF30 /* ZBValidateSubStatus.swift */,
 				1CCDFC432A965CB900F35663 /* ZBConfidence.swift */,
+				6FA422E32E8FF39E001C6397 /* ZBEmailConfidence.swift */,
 				BCC4E27422D39A7900BD7BF3 /* Zero_Bounce_iOS_SDK.h */,
 				BCC4E27522D39A7900BD7BF3 /* Info.plist */,
 			);
@@ -232,10 +265,12 @@
 				4502126829C3781D00C12510 /* Sources */,
 				4502126929C3781D00C12510 /* Frameworks */,
 				4502126A29C3781D00C12510 /* Resources */,
+				6FA422E92E90034E001C6397 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6FA422E82E90034E001C6397 /* PBXTargetDependency */,
 			);
 			name = ZeroBounceSampleApp;
 			productName = ZeroBounceSampleApp;
@@ -361,9 +396,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Zero Bounce iOS SDKTests/Pods-Zero Bounce iOS SDKTests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -430,6 +469,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6FB33E782E9F96FC00AD0A4B /* ZBApiURL.swift in Sources */,
 				BC458D9E22D5FD08004DEF30 /* ZBGetApiUsageResponse.swift in Sources */,
 				1CCDFC422A965A3500F35663 /* ZBEmailFinderResponse.swift in Sources */,
 				BC458D9922D5FD08004DEF30 /* ZBCreditsResponse.swift in Sources */,
@@ -440,6 +480,7 @@
 				C028421C2A01146300CEB500 /* ZBValidateBatchResponse.swift in Sources */,
 				1CCDFC442A965CB900F35663 /* ZBConfidence.swift in Sources */,
 				BC458D9722D5FD08004DEF30 /* ZBFileManager.swift in Sources */,
+				6FA422E02E8FF2D0001C6397 /* ZBDomainSearchResponse.swift in Sources */,
 				BC458D9F22D5FD08004DEF30 /* ZBFileStatusResponse.swift in Sources */,
 				BC458D9A22D5FD08004DEF30 /* ZBDeleteFileResponse.swift in Sources */,
 				BC458DA222D5FD08004DEF30 /* ZBSendFileResponse.swift in Sources */,
@@ -447,6 +488,7 @@
 				BC458DA322D5FD08004DEF30 /* ZBValidateResponse.swift in Sources */,
 				BC458DA022D5FD08004DEF30 /* ZBValidateSubStatus.swift in Sources */,
 				BC458D9C22D5FD08004DEF30 /* ZBGetFileResponse.swift in Sources */,
+				6FA422E42E8FF3A5001C6397 /* ZBEmailConfidence.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -461,6 +503,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		6FA422E82E90034E001C6397 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BCC4E27022D39A7900BD7BF3 /* Zero Bounce iOS SDK */;
+			targetProxy = 6FA422E72E90034E001C6397 /* PBXContainerItemProxy */;
+		};
 		BCC4E27D22D39A7900BD7BF3 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = BCC4E27022D39A7900BD7BF3 /* Zero Bounce iOS SDK */;
@@ -497,6 +544,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G6Y82S28U5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ZeroBounceSampleApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -527,6 +575,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G6Y82S28U5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ZeroBounceSampleApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

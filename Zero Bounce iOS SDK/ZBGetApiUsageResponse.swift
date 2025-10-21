@@ -93,6 +93,9 @@ public struct ZBGetApiUsageResponse : Codable, Equatable {
     /// Total failed SMTP connections the API has a sub status of "failed_smtp_connection"
     public let subStatusFailedSmtpConnection: Int
     
+    /// Total number of times the API has a sub status of "accept_all"
+    public let subStatusAcceptAll: Int
+    
     /// Start date of query
     public let startDate: String?
     
@@ -128,6 +131,7 @@ public struct ZBGetApiUsageResponse : Codable, Equatable {
         case subStatusMailboxQuotaExceeded = "sub_status_mailbox_quota_exceeded"
         case subStatusForcibleDisconnect = "sub_status_forcible_disconnect"
         case subStatusFailedSmtpConnection = "sub_status_failed_smtp_connection"
+        case subStatusAcceptAll = "sub_status_accept_all"
         case startDate = "start_date"
         case endDate = "end_date"
     }

@@ -106,7 +106,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             subStatusPossibleTypo: 0, subStatusNoDnsEntries: 0,
             subStatusRoleBasedCatchAll: 0, subStatusMailboxQuotaExceeded: 0,
             subStatusForcibleDisconnect: 0, subStatusFailedSmtpConnection: 0,
-            startDate: startString, endDate: endString
+            subStatusAcceptAll: 0, startDate: startString, endDate: endString
         )
         
         let mockedData = try! JSONEncoder().encode(apiUsageResponse)
@@ -361,33 +361,29 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     }
     
     // MARK: Email finder
-    func testGuessFormat() {
+    func testFindEmail() {
         let domain = "example.com"
         let firstName = "Example"
-        let apiEndpoint = URL(
+        
+        let apiEndpointDomain = URL(
             string: "\(ZeroBounceSDK.shared.apiBaseUrl)/guessformat?api_key=\(apiKey)&domain=\(domain)&first_name=\(firstName)"
         )!
-        let emailFinderResponse = ZBEmailFinderResponse(
-            email: "example@example.com", domain: domain, format: "first", status: .valid,
-            subStatus: ZBValidateSubStatus.none, confidence: .medium, didYouMean: "", failureReason: "",
-            otherDomainFormats: [
-                ZBDomainFormat(format: "first.last", confidence: .medium),
-                ZBDomainFormat(format: "firstl", confidence: .low),
-                ZBDomainFormat(format: "last_first", confidence: .unknown)
-            ]
+        let emailFinderDomainResponse = ZBEmailFinderResponse(
+            email: "example@example.com", emailConfidence: .medium, domain: domain,
+            companyName: "", didYouMean: "", failureReason: ""
         )
         
-        let mockedData = try! JSONEncoder().encode(emailFinderResponse)
-        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
-        mock.register()
+        let mockedDataDomain = try! JSONEncoder().encode(emailFinderDomainResponse)
+        let mockDomain = Mock(url: apiEndpointDomain, dataType: .json, statusCode: 200, data: [.get: mockedDataDomain])
+        mockDomain.register()
 
-        let requestExpectation = expectation(description: "Request should finish")
-        ZeroBounceSDK.shared.guessFormat(domain: domain, firstName: firstName) { result in
-            defer { requestExpectation.fulfill() }
+        let domainRequestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.findEmail(domain: domain, firstName: firstName) { result in
+            defer { domainRequestExpectation.fulfill() }
             switch result {
             case .Success(let response):
                 NSLog("guessFormat success response=\(response)")
-                XCTAssertEqual(response, emailFinderResponse)
+                XCTAssertEqual(response, emailFinderDomainResponse)
                 
             case .Failure(let error):
                 NSLog("guessFormat failure error=\(String(describing: error))")
@@ -395,7 +391,45 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             }
         }
 
-        wait(for: [requestExpectation], timeout: 60)
+        wait(for: [domainRequestExpectation], timeout: 60)
+    }
+    
+    // MARK: Domain search
+    func testFindDomain() {
+        let domain = "example.com"
+        
+        let apiEndpointDomain = URL(
+            string: "\(ZeroBounceSDK.shared.apiBaseUrl)/guessformat?api_key=\(apiKey)&domain=\(domain)"
+        )!
+        let domainSearchDomainResponse = ZBDomainSearchResponse(
+            domain: domain, companyName: "", format: "first",
+            confidence: .medium, didYouMean: "", failureReason: "",
+            otherDomainFormats: [
+                ZBDomainFormat(format: "first.last", confidence: .medium),
+                ZBDomainFormat(format: "firstl", confidence: .low),
+                ZBDomainFormat(format: "last_first", confidence: .unknown)
+            ]
+        )
+
+        let mockedDataDomain = try! JSONEncoder().encode(domainSearchDomainResponse)
+        let mockDomain = Mock(url: apiEndpointDomain, dataType: .json, statusCode: 200, data: [.get: mockedDataDomain])
+        mockDomain.register()
+
+        let domainRequestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.findDomain(domain: domain) { result in
+            defer { domainRequestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                NSLog("guessFormat success response=\(response)")
+                XCTAssertEqual(response, domainSearchDomainResponse)
+                
+            case .Failure(let error):
+                NSLog("guessFormat failure error=\(String(describing: error))")
+                XCTAssertTrue(false)
+            }
+        }
+
+        wait(for: [domainRequestExpectation], timeout: 60)
     }
     
     // MARK: File Status

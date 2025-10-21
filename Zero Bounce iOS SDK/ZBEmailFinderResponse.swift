@@ -8,36 +8,20 @@
 
 import Foundation
 
-public struct ZBDomainFormat: Codable, Equatable {
-    var format: String
-    var confidence: ZBConfidence
-
-    enum CodingKeys: String, CodingKey {
-        case format
-        case confidence
-    }
-}
-
 public struct ZBEmailFinderResponse: Codable, Equatable {
     public let email: String
+    public let emailConfidence: ZBEmailConfidence
     public let domain: String
-    public let format: String
-    public let status: ZBValidateStatus
-    public let subStatus: ZBValidateSubStatus?
-    public let confidence: ZBConfidence
+    public let companyName: String
     public let didYouMean: String?
     public let failureReason: String?
-    public var otherDomainFormats: [ZBDomainFormat]
     
     enum CodingKeys: String, CodingKey {
         case email
+        case emailConfidence = "email_confidence"
         case domain
-        case format
-        case status
-        case subStatus = "sub_status"
-        case confidence
+        case companyName = "company_name"
         case didYouMean = "did_you_mean"
         case failureReason = "failure_reason"
-        case otherDomainFormats = "other_domain_formats"
     }
 }
