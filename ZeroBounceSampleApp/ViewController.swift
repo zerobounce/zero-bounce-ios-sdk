@@ -13,7 +13,7 @@ class ViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>")
+        ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiUrl: .API_DEFAULT_URL)
     }
     
     @IBAction func tappedButton(_ sender: Any) {
@@ -91,7 +91,8 @@ class ViewController: UIViewController {
     
     func findEmail() {
         let domain = "example.com"
-        ZeroBounceSDK.shared.findEmail(domain: domain) { result in
+        let firstName = "Example"
+        ZeroBounceSDK.shared.findEmail(domain: domain, firstName: firstName) { result in
             switch result {
             case .Success(let response):
                 NSLog("guessFormat success response=\(response)")

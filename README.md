@@ -14,9 +14,9 @@ Import the SDK in your file:
 import ZeroBounceSDK
 ``` 
 
-Initialize the SDK with your api key:
+Initialize the SDK with your api key and preferred api:
 ```swift 
-ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>")
+ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiUrl: API_DEFAULT_URL)
 ```
 
 ## Examples
@@ -68,7 +68,7 @@ ZeroBounceSDK.shared.validateBatch(emails: emails) { result in
 ```swift
 let domain = "<DOMAIN_NAME>" // The domain name for which to find the email format
 let companyName = "<COMPANY_NAME>" // The company name for which to find the email format
-let firstName = "<FIRST_NAME>" // The first name whose email format is being searched (Optional)
+let firstName = "<FIRST_NAME>" // The first name whose email format is being searched
 let middleName = "<MIDDLE_NAME>" // The middle name whose email format is being searched (Optional)
 let lastName = "<LAST_NAME>" // The last name whose email format is being searched (Optional)
 

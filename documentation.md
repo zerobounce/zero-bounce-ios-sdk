@@ -10,9 +10,9 @@ Import the SDK in your file:
 import ZeroBounceSDK
 ``` 
 
-Initialize the SDK with your api key:
+Initialize the SDK with your api key and preferred api:
 ```swift 
-ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>")
+ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiUrl: API_DEFAULT_URL)
 ```
 
 #### Examples
@@ -60,18 +60,61 @@ ZeroBounceSDK.shared.validateBatch(emails: emails) { result in
 }
 ```
 
-* ####### Find the email and other domain formats based on a given domain name
+* ##### Find the email based on a given domain name or company name
 ```swift
-let domain = "<DOMAIN_NAME>"   // The domain name for which to find the email format
-let firstName = "<FIRST_NAME>" // The first name whose email format is being searched (Optional)
+let domain = "<DOMAIN_NAME>" // The domain name for which to find the email format
+let companyName = "<COMPANY_NAME>" // The company name for which to find the email format
+let firstName = "<FIRST_NAME>" // The first name whose email format is being searched
 let middleName = "<MIDDLE_NAME>" // The middle name whose email format is being searched (Optional)
 let lastName = "<LAST_NAME>" // The last name whose email format is being searched (Optional)
 
-ZeroBounceSDK.shared.guessFormat(
+ZeroBounceSDK.shared.findEmail(
     domain: domain,
     firstName: firstName,
     middleName: middleName,
     lastName: lastName
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("guessFormat success response=\(response)")
+    case .Failure(let error):
+        NSLog("guessFormat failure error=\(String(describing: error))")
+    }
+}
+
+ZeroBounceSDK.shared.findEmail(
+    companyName: companyName,
+    firstName: firstName,
+    middleName: middleName,
+    lastName: lastName
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("guessFormat success response=\(response)")
+    case .Failure(let error):
+        NSLog("guessFormat failure error=\(String(describing: error))")
+    }
+}
+```
+
+* ##### Find the domain based on a given domain name or company name
+```swift
+let domain = "<DOMAIN_NAME>" // The domain name for which to find the email format
+let companyName = "<COMPANY_NAME>" // The company name for which to find the email format
+
+ZeroBounceSDK.shared.findEmail(
+    domain: domain
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("guessFormat success response=\(response)")
+    case .Failure(let error):
+        NSLog("guessFormat failure error=\(String(describing: error))")
+    }
+}
+
+ZeroBounceSDK.shared.findEmail(
+    companyName: companyName
 ) { result in
     switch result {
     case .Success(let response):

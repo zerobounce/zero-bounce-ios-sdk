@@ -14,9 +14,9 @@ Importa el SDK en tu archivo:
 import ZeroBounceSDK
 ```
 
-Inicializa el SDK con tu clave de API:
+Inicializa el SDK con tu clave de API y tu API preferida:
 ```swift
-ZeroBounceSDK.shared.initialize(apiKey: "<TU_CLAVE_DE_API>")
+ZeroBounceSDK.shared.initialize(apiKey: "<TU_CLAVE_DE_API>", apiUrl: API_DEFAULT_URL)
 ```
 
 #### Ejemplos
@@ -65,18 +65,61 @@ ZeroBounceSDK.shared.validateBatch(emails: emails) { result in
 }
 ```
 
-* ####### Encuentre el correo electrónico y otros formatos de dominio según un nombre de dominio específico
+* ##### Buscar el correo electrónico basándose en un nombre de dominio o nombre de empresa determinados.
 ```swift
-let domain = "<DOMAIN_NAME>"   // El nombre de dominio para el que quiere encontrar el formato de correo electrónico.
-let firstName = "<FIRST_NAME>" // El primer nombre de la persona para la que se busca el formato de correo electrónico. [Opcional]
-let middleName = "<MIDDLE_NAME>" // El segundo nombre de la persona para la que se busca el formato de correo electrónico. [Opcional]
-let lastName = "<LAST_NAME>" // El apellido de la persona para la que se busca el formato de correo electrónico. [Opcional]
+let domain = "<DOMAIN_NAME>" // El nombre de dominio para el que se debe buscar el formato de correo electrónico.
+let companyName = "<COMPANY_NAME>" // El nombre de la empresa para la que se debe buscar el formato de correo electrónico.
+let firstName = "<FIRST_NAME>" // El primer nombre cuyo formato de correo electrónico se está buscando
+let middleName = "<MIDDLE_NAME>" // The middle name whose email format is being searched (Optional)
+let lastName = "<LAST_NAME>" // El segundo nombre cuyo formato de correo electrónico se está buscando (opcional)
 
-ZeroBounceSDK.shared.guessFormat(
+ZeroBounceSDK.shared.findEmail(
     domain: domain,
     firstName: firstName,
     middleName: middleName,
     lastName: lastName
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("guessFormat success response=\(response)")
+    case .Failure(let error):
+        NSLog("guessFormat failure error=\(String(describing: error))")
+    }
+}
+
+ZeroBounceSDK.shared.findEmail(
+    companyName: companyName,
+    firstName: firstName,
+    middleName: middleName,
+    lastName: lastName
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("guessFormat success response=\(response)")
+    case .Failure(let error):
+        NSLog("guessFormat failure error=\(String(describing: error))")
+    }
+}
+```
+
+* ##### Buscar el dominio basándose en un nombre de dominio o nombre de empresa determinados.
+```swift
+let domain = "<DOMAIN_NAME>" // El nombre de dominio para el que se debe buscar el formato de correo electrónico.
+let companyName = "<COMPANY_NAME>" // El nombre de la empresa para la que se debe buscar el formato de correo electrónico.
+
+ZeroBounceSDK.shared.findEmail(
+    domain: domain
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("guessFormat success response=\(response)")
+    case .Failure(let error):
+        NSLog("guessFormat failure error=\(String(describing: error))")
+    }
+}
+
+ZeroBounceSDK.shared.findEmail(
+    companyName: companyName
 ) { result in
     switch result {
     case .Success(let response):

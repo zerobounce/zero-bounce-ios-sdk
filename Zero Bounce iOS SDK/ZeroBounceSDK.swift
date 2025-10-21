@@ -14,18 +14,22 @@ public class ZeroBounceSDK {
     
     static public let shared = ZeroBounceSDK()
     
-    let apiBaseUrl = "https://api.zerobounce.net/v2"
     let bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
     let bulkApiScoringBaseUrl = "https://bulkapi.zerobounce.net/v2/scoring"
     var apiKey: String?
+    var apiBaseUrl = ZBApiURL.API_DEFAULT_URL.rawValue
     let dateFormatter = DateFormatter()
     
     fileprivate init() {
         dateFormatter.dateFormat = "yyyy-MM-dd"
     }
     
-    public func initialize(apiKey: String) {
+    public func initialize(
+        apiKey: String,
+        apiUrl: ZBApiURL = .API_DEFAULT_URL
+    ) {
         self.apiKey = apiKey
+        self.apiBaseUrl = apiUrl.rawValue
     }
     
     // MARK: Validate
@@ -71,7 +75,7 @@ public class ZeroBounceSDK {
     ///
     public func findEmail(
         domain: String,
-        firstName: String? = nil,
+        firstName: String,
         middleName: String? = nil,
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
@@ -94,7 +98,7 @@ public class ZeroBounceSDK {
     ///
     public func findEmail(
         companyName: String,
-        firstName: String? = nil,
+        firstName: String,
         middleName: String? = nil,
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
@@ -112,7 +116,7 @@ public class ZeroBounceSDK {
     private func _findEmail(
         domain: String?,
         companyName: String?,
-        firstName: String? = nil,
+        firstName: String,
         middleName: String? = nil,
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
@@ -132,9 +136,7 @@ public class ZeroBounceSDK {
             url += "&company_name=\(companyName)"
         }
         
-        if let firstName {
-            url += "&first_name=\(firstName)"
-        }
+        url += "&first_name=\(firstName)"
         
         if let middleName {
             url += "&middle_name=\(middleName)"
