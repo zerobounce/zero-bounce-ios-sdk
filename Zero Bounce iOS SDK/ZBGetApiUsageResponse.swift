@@ -96,6 +96,24 @@ public struct ZBGetApiUsageResponse : Codable, Equatable {
     /// Total number of times the API has a sub status of "accept_all"
     public let subStatusAcceptAll: Int
     
+    /// Total number of times the API has a sub status of "mx_forward"
+    public let subStatusMxForward: Int
+    
+    /// Total number of times the API has a sub status of "alternate"
+    public let subStatusAlternate: Int
+    
+    /// Total number of times the API has a sub status of "allowed"
+    public let subStatusAllowed: Int
+    
+    /// Total number of times the API has a sub status of "blocked"
+    public let subStatusBlocked: Int
+    
+    /// Total number of times the API has a sub status of "gold"
+    public let subStatusGold: Int
+    
+    /// Total number of times the API has a sub status of "role_based_accept_all"
+    public let subStatusRoleBasedAcceptAll: Int
+    
     /// Start date of query
     public let startDate: String?
     
@@ -132,6 +150,12 @@ public struct ZBGetApiUsageResponse : Codable, Equatable {
         case subStatusForcibleDisconnect = "sub_status_forcible_disconnect"
         case subStatusFailedSmtpConnection = "sub_status_failed_smtp_connection"
         case subStatusAcceptAll = "sub_status_accept_all"
+        case subStatusMxForward = "sub_status_mx_forward"
+        case subStatusAlternate = "sub_status_alternate"
+        case subStatusAllowed = "sub_status_allowed"
+        case subStatusBlocked = "sub_status_blocked"
+        case subStatusGold = "sub_status_gold"
+        case subStatusRoleBasedAcceptAll = "sub_status_role_based_accept_all"
         case startDate = "start_date"
         case endDate = "end_date"
     }

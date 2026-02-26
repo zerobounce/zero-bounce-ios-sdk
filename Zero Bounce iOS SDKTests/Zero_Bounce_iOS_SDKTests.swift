@@ -106,7 +106,9 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             subStatusPossibleTypo: 0, subStatusNoDnsEntries: 0,
             subStatusRoleBasedCatchAll: 0, subStatusMailboxQuotaExceeded: 0,
             subStatusForcibleDisconnect: 0, subStatusFailedSmtpConnection: 0,
-            subStatusAcceptAll: 0, startDate: startString, endDate: endString
+            subStatusAcceptAll: 0, subStatusMxForward: 0, subStatusAlternate: 0,
+            subStatusAllowed: 0, subStatusBlocked: 0, subStatusGold: 0,
+            subStatusRoleBasedAcceptAll: 0, startDate: startString, endDate: endString
         )
         
         let mockedData = try! JSONEncoder().encode(apiUsageResponse)
@@ -440,11 +442,11 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         )!
         
         let fileStatusResponse = ZBFileStatusResponse(
-            success: true, fileId: "fileId", fileName: "fileName",
+            success: true, message: nil, fileId: "fileId", fileName: "fileName",
             uploadDate: "date", fileStatus: "Completed",
-            completePercentage: "100%", returnUrl: nil
+            completePercentage: "100%", errorReason: nil, returnUrl: nil
         )
-        
+
         let mockedData = try! JSONEncoder().encode(fileStatusResponse)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
         mock.register()
@@ -473,11 +475,11 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         )!
         
         let fileStatusResponse = ZBFileStatusResponse(
-            success: true, fileId: "fileId", fileName: "fileName",
+            success: true, message: nil, fileId: "fileId", fileName: "fileName",
             uploadDate: "date", fileStatus: "Completed",
-            completePercentage: "100%", returnUrl: nil
+            completePercentage: "100%", errorReason: nil, returnUrl: nil
         )
-        
+
         let mockedData = try! JSONEncoder().encode(fileStatusResponse)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
         mock.register()

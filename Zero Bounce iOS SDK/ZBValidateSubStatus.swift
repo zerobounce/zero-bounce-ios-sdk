@@ -19,7 +19,7 @@ public enum ZBValidateSubStatus: String, Codable {
     case failedSmtpConnection = "failed_smtp_connection"
     case mailboxQuotaExceeded = "mailbox_quota_exceeded"
     case exceptionOccurred = "exception_occurred"
-    case possible_traps = "possible_traps"
+    case possibleTrap = "possible_trap"
     case roleBased = "role_based"
     case globalSuppression = "global_suppression"
     case mailbox_not_found = "mailbox_not_found"
@@ -35,6 +35,9 @@ public enum ZBValidateSubStatus: String, Codable {
     case disposable
     case toxic
     case alternate
-    case allowed
+    case mxForward = "mx_forward"
     case blocked
+    case allowed
+    case roleBasedAcceptAll = "role_based_accept_all"
+    case gold
 }

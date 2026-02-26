@@ -364,6 +364,27 @@ public class ZeroBounceSDK {
     }
     
     ///
+    /// Send a file for bulk email validation from in-memory data (e.g. CSV built in memory).
+    ///
+    public func sendFile(
+        fileData: Data,
+        fileName: String,
+        emailAddressColumn: Int,
+        returnUrl: String? = nil,
+        firstNameColumn: Int? = nil,
+        lastNameColumn: Int? = nil,
+        genderColumn: Int? = nil,
+        ipAddressColumn: Int? = nil,
+        hasHeaderRow: Bool = false,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        _sendFileWithData(scoring: false, fileData: fileData, fileName: fileName, emailAddressColumn: emailAddressColumn,
+                          returnUrl: returnUrl, firstNameColumn: firstNameColumn, lastNameColumn: lastNameColumn,
+                          genderColumn: genderColumn, ipAddressColumn: ipAddressColumn, hasHeaderRow: hasHeaderRow,
+                          completion: completion)
+    }
+    
+    ///
     /// The scoringSendfile API allows user to send a file for bulk email validation (AI Scoring)
     ///
     public func scoringSendFile(
@@ -377,6 +398,21 @@ public class ZeroBounceSDK {
         _sendFile(scoring: true, filePath: filePath, emailAddressColumn: emailAddressColumn,
                   returnUrl: returnUrl, hasHeaderRow: hasHeaderRow,
                   completion: completion)
+    }
+    
+    ///
+    /// Send a file for bulk email scoring from in-memory data.
+    ///
+    public func scoringSendFile(
+        fileData: Data,
+        fileName: String,
+        emailAddressColumn: Int,
+        returnUrl: String? = nil,
+        hasHeaderRow: Bool = false,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        _sendFileWithData(scoring: true, fileData: fileData, fileName: fileName, emailAddressColumn: emailAddressColumn,
+                          returnUrl: returnUrl, hasHeaderRow: hasHeaderRow, completion: completion)
     }
     
     private func _sendFile(
@@ -424,6 +460,60 @@ public class ZeroBounceSDK {
                 url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/sendfile",
                 parameters: parameters,
                 filePathKey: "file", paths: [filePath]
+            )
+            sendJsonRequest(request: r, completion: completion)
+        } catch {
+            completion(ZBResult.Failure(error))
+        }
+    }
+    
+    private func _sendFileWithData(
+        scoring: Bool,
+        fileData: Data,
+        fileName: String,
+        emailAddressColumn: Int,
+        returnUrl: String? = nil,
+        firstNameColumn: Int? = nil,
+        lastNameColumn: Int? = nil,
+        genderColumn: Int? = nil,
+        ipAddressColumn: Int? = nil,
+        hasHeaderRow: Bool = false,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+        
+        var parameters = [
+            "api_key": apiKey,
+            "email_address_column": emailAddressColumn,
+            "has_header_row": hasHeaderRow,
+        ] as [String : Any]
+        
+        if let returnUrl = returnUrl {
+            parameters["return_url"] = returnUrl
+        }
+        if let firstNameColumn = firstNameColumn {
+            parameters["first_name_column"] = firstNameColumn
+        }
+        if let lastNameColumn = lastNameColumn {
+            parameters["last_name_column"] = lastNameColumn
+        }
+        if let genderColumn = genderColumn {
+            parameters["gender_column"] = genderColumn
+        }
+        if let ipAddressColumn = ipAddressColumn {
+            parameters["ip_address_column"] = ipAddressColumn
+        }
+        
+        do {
+            let r = try ZBMultiPartRequest.createFileRequestWithData(
+                url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/sendfile",
+                parameters: parameters,
+                filePathKey: "file",
+                fileData: fileData,
+                fileName: fileName
             )
             sendJsonRequest(request: r, completion: completion)
         } catch {

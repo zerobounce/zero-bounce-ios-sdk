@@ -311,6 +311,55 @@ ZeroBounceSDK.shared.scoringDeleteFile(fileId: fileId) { result in
 ## Sample App
 - You can also clone the repo and access the Sample App inside the project to check out some examples. Just initialize the SDK with your own API key and uncomment the endpoint that you want to test.
 
+## Running Unit Tests
+
+Unit tests are located in `Zero Bounce iOS SDKTests/Zero_Bounce_iOS_SDKTests.swift` and use XCTest with the [Mocker](https://github.com/WeTransfer/Mocker) library for HTTP mocking.
+
+### Option 1: Xcode (Recommended)
+
+1. Open `Zero Bounce iOS SDK.xcworkspace` in Xcode
+2. Select the **Zero Bounce iOS SDK** scheme
+3. Press **⌘U** (or **Product → Test**)
+
+### Option 2: Command Line (macOS)
+
+**Prerequisites:** macOS with Xcode and CocoaPods installed.
+
+```bash
+cd zero-bounce-ios-sdk
+
+# Install dependencies
+pod install
+
+# Run tests using Mac Catalyst (no iOS Simulator required)
+xcodebuild test \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -destination 'platform=macOS,variant=Mac Catalyst' \
+  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  ENABLE_USER_SCRIPT_SANDBOXING=NO
+```
+
+**With iOS Simulator** (requires iOS Simulator runtime installed via Xcode → Settings → Platforms):
+
+```bash
+xcodebuild test \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -destination 'platform=iOS Simulator,name=iPhone 16'
+```
+
+### Expected Output
+
+All 22 unit tests should pass:
+
+```
+Test Suite 'All tests' passed.
+   Executed 22 tests, with 0 failures (0 unexpected) in 0.370 seconds
+```
+
 **Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**
 * [disposable@example.com](mailto:disposable@example.com)
 * [invalid@example.com](mailto:invalid@example.com)

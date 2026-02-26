@@ -30,6 +30,49 @@ internal class ZBMultiPartRequest {
         return request
     }
     
+    /// Create request with file data (e.g. in-memory CSV) instead of file path.
+    static internal func createFileRequestWithData(url: String, parameters: [String: Any]?, filePathKey: String, fileData: Data, fileName: String) throws -> URLRequest {
+        let boundary = generateBoundaryString()
+        
+        var request = URLRequest(url: URL(string: url)!)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = createBodyWithData(parameters: parameters, filePathKey: filePathKey, fileData: fileData, fileName: fileName, boundary: boundary)
+        
+        return request
+    }
+    
+    static private func createBodyWithData(parameters: [String: Any]?, filePathKey: String, fileData: Data, fileName: String, boundary: String) -> Data {
+        var body = Data()
+        
+        if let parameters = parameters {
+            for (key, value) in parameters {
+                body.append("--\(boundary)\r\n")
+                body.append("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
+                body.append("\(value)\r\n")
+            }
+        }
+        
+        let mimetype = mimeTypeForFile(name: fileName)
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"\(filePathKey)\"; filename=\"\(fileName)\"\r\n")
+        body.append("Content-Type: \(mimetype)\r\n\r\n")
+        body.append(fileData)
+        body.append("\r\n")
+        
+        body.append("--\(boundary)--\r\n")
+        return body
+    }
+    
+    private static func mimeTypeForFile(name: String) -> String {
+        let pathExtension = (name as NSString).pathExtension
+        if let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, pathExtension as NSString, nil)?.takeRetainedValue(),
+           let mimetype = UTTypeCopyPreferredTagWithClass(uti, kUTTagClassMIMEType)?.takeRetainedValue() {
+            return mimetype as String
+        }
+        return "text/csv"
+    }
+    
     /// Create body of the `multipart/form-data` request
     ///
     /// - parameter parameters:   The optional dictionary containing keys and values to be passed to web service
