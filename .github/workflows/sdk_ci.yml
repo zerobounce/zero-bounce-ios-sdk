@@ -1,0 +1,29 @@
+# Run XCTest suite on every PR (macOS runner, Mac Catalyst destination).
+name: SDK CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CocoaPods dependencies
+        run: pod install
+
+      - name: Run tests (Mac Catalyst)
+        run: |
+          xcodebuild test \
+            -workspace "Zero Bounce iOS SDK.xcworkspace" \
+            -scheme "Zero Bounce iOS SDK" \
+            -destination 'platform=macOS,variant=Mac Catalyst' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO
