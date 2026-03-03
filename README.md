@@ -390,3 +390,7 @@ Test Suite 'All tests' passed.
 * [timeout_exceeded@example.com](mailto:timeout_exceeded@example.com)
 * [unroutable_ip_address@example.com](mailto:unroutable_ip_address@example.com)
 * [free_email@example.com](mailto:free_email@example.com)
+
+## Publish
+
+See the [sdk-docs (CocoaPods)](../sdk-docs/cocoapods/) guide in the SDKs repo for `pod trunk push` and release steps.
