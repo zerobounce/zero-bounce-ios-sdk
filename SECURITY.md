@@ -1,7 +1,5 @@
 # Security Policy
 
-<<<<<<< Updated upstream
-=======
 ## Reporting a Vulnerability
 
 If you think you've found a security issue, please report it privately instead of opening a public issue.
@@ -21,4 +19,3 @@ We focus on the current release line for fixes. Using the latest release is reco
 * The client uses HTTPS by default; avoid overriding to non-HTTPS in production.
 
 Thanks for helping keep things secure.
->>>>>>> Stashed changes
