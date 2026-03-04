@@ -14,7 +14,7 @@ s.version = "2.0.11"
 s.license = { :type => "MIT", :file => "LICENSE.md" }
 
 # 4 - Replace with your name and e-mail address
-s.author = { "Zero Bounce" => "github@zerobounce.net" }
+s.author = { "Zero Bounce" => "integrations@zerobounce.net" }
 
 # 5 - Replace this URL with your own GitHub page's URL (from the address bar)
 s.homepage = "https://github.com/zerobounce/zero-bounce-ios-sdk"
