@@ -21,7 +21,7 @@ s.homepage = "https://github.com/zerobounce/zero-bounce-ios-sdk"
 
 # 6 - Replace this URL with your own Git URL from "Quick Setup"
 s.source = { :git => "https://github.com/zerobounce/zero-bounce-ios-sdk.git",
-:tag => "#{s.version}" }
+:tag => "v#{s.version}" }
 
 # 7
 s.framework = "Foundation"
@@ -36,6 +36,6 @@ s.source_files = "Zero Bounce iOS SDK/*.{swift}"
 s.swift_version = "5"
 
 # 11
-s.readme = "https://github.com/zerobounce/zero-bounce-ios-sdk/blob/#{s.version}/documentation.md"
+s.readme = "https://github.com/zerobounce/zero-bounce-ios-sdk/blob/v#{s.version}/documentation.md"
 
 end
