@@ -181,6 +181,8 @@ let genderColumn = 3;               // The index of "gender" column in the file
 let ipAddressColumn = 3;            // The index of "IP address" column in the file
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
 let returnUrl = "https://domain.com/called/after/processing/request";
+// Optional: request phase 2 (catch-all) after phase 1 when Verify+ rules apply — see [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file)
+let allowPhase2: Bool? = true
 
 ZeroBounceSDK.shared.sendFile(
     filePath: filePath,
@@ -190,7 +192,8 @@ ZeroBounceSDK.shared.sendFile(
     lastNameColumn: lastNameColumn,
     genderColumn: genderColumn,
     ipAddressColumn: ipAddressColumn,
-    hasHeaderRow: hasHeaderRow
+    hasHeaderRow: hasHeaderRow,
+    allowPhase2: allowPhase2
 ) { result in
     switch result {
     case .Success(let response):
@@ -201,16 +204,34 @@ ZeroBounceSDK.shared.sendFile(
 }
 ```
 
+Bulk validation uses `https://bulkapi.zerobounce.net/v2`. See [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file), [v2 file status](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-file-status), and [v2 get file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-get-file). `ZBFileStatusResponse` includes `filePhase2Status` when the API returns it.
+
 * ##### The getfile API allows users to get the validation results file for the file been submitted using sendfile API
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
-ZeroBounceSDK.shared.getfile(fileId: fileId) { result in
+ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
     switch result {
     case .Success(let response):
-        NSLog("getfile success response=\(response)")
+        NSLog("getFile success response=\(response)")
     case .Failure(let error):
-        NSLog("getfile failure error=\(String(describing: error))")
+        NSLog("getFile failure error=\(String(describing: error))")
+    }
+}
+```
+
+Optional `download_type` and `activity_data` (validation only; JSON errors may still use HTTP 200 and are returned as `.Failure` with `ZBError.decodeError`):
+
+```swift
+ZeroBounceSDK.shared.getFile(
+    fileId: fileId,
+    options: ZBGetFileOptions(downloadType: .combined, activityData: true)
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("getFile success response=\(response)")
+    case .Failure(let error):
+        NSLog("getFile failure error=\(String(describing: error))")
     }
 }
 ```
@@ -251,6 +272,8 @@ let emailAddressColumn = 3;         // The index of "email" column in the file. 
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
 let returnUrl = "https://domain.com/called/after/processing/request";
 
+// `allowPhase2` is not used for scoring sendfile (validation bulk only).
+
 ZeroBounceSDK.shared.scoringSendFile(
     filePath: filePath,
     emailAddressColumn: emailAddressColumn,
@@ -270,12 +293,26 @@ ZeroBounceSDK.shared.scoringSendFile(
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
-ZeroBounceSDK.shared.scoringGetfile(fileId: fileId) { result in
+ZeroBounceSDK.shared.scoringGetFile(fileId: fileId) { result in
     switch result {
     case .Success(let response):
-        NSLog("getfile success response=\(response)")
+        NSLog("scoringGetFile success response=\(response)")
     case .Failure(let error):
-        NSLog("getfile failure error=\(String(describing: error))")
+        NSLog("scoringGetFile failure error=\(String(describing: error))")
+    }
+}
+```
+
+```swift
+ZeroBounceSDK.shared.scoringGetFile(
+    fileId: fileId,
+    options: ZBGetFileOptions(downloadType: .phase2, activityData: true) // activityData ignored for scoring
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("scoringGetFile success response=\(response)")
+    case .Failure(let error):
+        NSLog("scoringGetFile failure error=\(String(describing: error))")
     }
 }
 ```
@@ -342,22 +379,23 @@ xcodebuild test \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
-**With iOS Simulator** (requires iOS Simulator runtime installed via Xcode → Settings → Platforms):
+**With iOS Simulator** (requires a simulator runtime from Xcode → Settings → Components). Use a device name that exists on your Mac (`xcrun simctl list devices available`). `ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids embed/copy failures for the **Mocker** test dependency under some Xcode sandbox settings.
 
 ```bash
 xcodebuild test \
   -workspace "Zero Bounce iOS SDK.xcworkspace" \
   -scheme "Zero Bounce iOS SDK" \
-  -destination 'platform=iOS Simulator,name=iPhone 16'
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4' \
+  ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
 ### Expected Output
 
-All 22 unit tests should pass:
+All 25 unit tests should pass:
 
 ```
 Test Suite 'All tests' passed.
-   Executed 22 tests, with 0 failures (0 unexpected) in 0.370 seconds
+   Executed 25 tests, with 0 failures (0 unexpected) in 0.370 seconds
 ```
 
 **Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**

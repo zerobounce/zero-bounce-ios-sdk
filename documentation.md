@@ -177,6 +177,7 @@ let genderColumn = 3;               // The index of "gender" column in the file
 let ipAddressColumn = 3;            // The index of "IP address" column in the file
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
 let returnUrl = "https://domain.com/called/after/processing/request";
+let allowPhase2: Bool? = true // optional; [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file)
 
 ZeroBounceSDK.shared.sendFile(
     filePath: filePath,
@@ -186,7 +187,8 @@ ZeroBounceSDK.shared.sendFile(
     lastNameColumn: lastNameColumn,
     genderColumn: genderColumn,
     ipAddressColumn: ipAddressColumn,
-    hasHeaderRow: hasHeaderRow
+    hasHeaderRow: hasHeaderRow,
+    allowPhase2: allowPhase2
 ) { result in
     switch result {
     case .Success(let response):
@@ -197,16 +199,32 @@ ZeroBounceSDK.shared.sendFile(
 }
 ```
 
+Bulk base URL is `https://bulkapi.zerobounce.net/v2`. See [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file), [v2 file status](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-file-status), [v2 get file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-get-file).
+
 * ####### The getfile API allows users to get the validation results file for the file been submitted using sendfile API
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
-ZeroBounceSDK.shared.getfile(fileId: fileId) { result in
+ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
     switch result {
     case .Success(let response):
-        NSLog("getfile success response=\(response)")
+        NSLog("getFile success response=\(response)")
     case .Failure(let error):
-        NSLog("getfile failure error=\(String(describing: error))")
+        NSLog("getFile failure error=\(String(describing: error))")
+    }
+}
+```
+
+```swift
+ZeroBounceSDK.shared.getFile(
+    fileId: fileId,
+    options: ZBGetFileOptions(downloadType: .combined, activityData: true)
+) { result in
+    switch result {
+    case .Success(let response):
+        NSLog("getFile success response=\(response)")
+    case .Failure(let error):
+        NSLog("getFile failure error=\(String(describing: error))")
     }
 }
 ```
@@ -246,6 +264,7 @@ let filePath = File("<FILE_PATH>"); // The csv or txt file
 let emailAddressColumn = 3;         // The index of "email" column in the file. Index starts at 1
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
 let returnUrl = "https://domain.com/called/after/processing/request";
+// allowPhase2 is validation bulk only.
 
 ZeroBounceSDK.shared.scoringSendFile(
     filePath: filePath,
@@ -266,14 +285,21 @@ ZeroBounceSDK.shared.scoringSendFile(
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
-ZeroBounceSDK.shared.scoringGetfile(fileId: fileId) { result in
+ZeroBounceSDK.shared.scoringGetFile(fileId: fileId) { result in
     switch result {
     case .Success(let response):
-        NSLog("getfile success response=\(response)")
+        NSLog("scoringGetFile success response=\(response)")
     case .Failure(let error):
-        NSLog("getfile failure error=\(String(describing: error))")
+        NSLog("scoringGetFile failure error=\(String(describing: error))")
     }
 }
+```
+
+```swift
+ZeroBounceSDK.shared.scoringGetFile(
+    fileId: fileId,
+    options: ZBGetFileOptions(downloadType: .phase2)
+) { result in /* ... */ }
 ```
 
 * ####### Check the status of a file uploaded via "scoringSendFile" method
@@ -303,6 +329,42 @@ ZeroBounceSDK.shared.scoringDeleteFile(fileId: fileId) { result in
     }
 }
 ```
+
+#### Running unit tests
+
+Tests live in `Zero Bounce iOS SDKTests/Zero_Bounce_iOS_SDKTests.swift` and use [Mocker](https://github.com/WeTransfer/Mocker) for HTTP mocking.
+
+**From Xcode (recommended)**
+
+1. Run `pod install` in the repo root (CocoaPods).
+2. Open **`Zero Bounce iOS SDK.xcworkspace`** (not the `.xcodeproj` alone).
+3. Select the **Zero Bounce iOS SDK** scheme and press **⌘U** (Product → Test).
+
+**From the command line**
+
+```bash
+cd zero-bounce-ios-sdk
+pod install
+
+# iOS Simulator — use a device that exists on your Mac: xcrun simctl list devices available
+xcodebuild test \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4' \
+  ENABLE_USER_SCRIPT_SANDBOXING=NO
+
+# Mac Catalyst (no iOS Simulator required)
+xcodebuild test \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -destination 'platform=macOS,variant=Mac Catalyst' \
+  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  ENABLE_USER_SCRIPT_SANDBOXING=NO
+```
+
+`ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids build failures when embedding **Mocker.framework** into the test bundle under strict Xcode sandboxing. There are **25** unit tests; you should see **TEST SUCCEEDED** and **Executed 25 tests, with 0 failures**.
 
 #### Sample App
 - You can also clone the repo and access the Sample App inside the project to check out some examples. Just initialize the SDK with your own API key and uncomment the endpoint that you want to test.

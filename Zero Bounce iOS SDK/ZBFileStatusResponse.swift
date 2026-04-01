@@ -15,6 +15,8 @@ public struct ZBFileStatusResponse : Codable, Equatable {
     public let fileName: String?
     public let uploadDate: String?
     public let fileStatus: String
+    /// Present when the bulk API returns phase 2 state (e.g. after optional catch-all processing).
+    public let filePhase2Status: String?
     public let completePercentage: String?
     public let errorReason: String?
     public let returnUrl: String?
@@ -26,6 +28,7 @@ public struct ZBFileStatusResponse : Codable, Equatable {
         case fileName = "file_name"
         case uploadDate = "upload_date"
         case fileStatus = "file_status"
+        case filePhase2Status = "file_phase_2_status"
         case completePercentage = "complete_percentage"
         case errorReason = "error_reason"
         case returnUrl = "return_url"

@@ -444,6 +444,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let fileStatusResponse = ZBFileStatusResponse(
             success: true, message: nil, fileId: "fileId", fileName: "fileName",
             uploadDate: "date", fileStatus: "Completed",
+            filePhase2Status: "N/A",
             completePercentage: "100%", errorReason: nil, returnUrl: nil
         )
 
@@ -477,6 +478,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let fileStatusResponse = ZBFileStatusResponse(
             success: true, message: nil, fileId: "fileId", fileName: "fileName",
             uploadDate: "date", fileStatus: "Completed",
+            filePhase2Status: nil,
             completePercentage: "100%", errorReason: nil, returnUrl: nil
         )
 
@@ -735,6 +737,99 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             }
         }
 
+        wait(for: [requestExpectation], timeout: 60)
+    }
+    
+    func testGetFileJsonErrorWithHttp200() {
+        let fileId = "fileId"
+        let apiKey = ZeroBounceSDK.shared.apiKey!
+        var comp = URLComponents(string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/getfile")
+        comp?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "file_id", value: fileId)
+        ]
+        let apiEndpoint = comp!.url!
+        let errJson = "{\"success\":false,\"message\":\"Phase 2 download types are only available when phase 2 is enabled for this file.\"}".data(using: .utf8)!
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: errJson])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success:
+                XCTFail("expected failure")
+            case .Failure(let error):
+                guard let zbe = error as? ZBError else {
+                    XCTFail("wrong error type")
+                    return
+                }
+                guard case .decodeError(let msgs) = zbe else {
+                    XCTFail("expected decodeError")
+                    return
+                }
+                XCTAssertTrue(msgs.joined().contains("Phase 2"))
+            }
+        }
+        wait(for: [requestExpectation], timeout: 60)
+    }
+    
+    func testGetFileWithOptions_IncludesDownloadTypeAndActivityData() {
+        let fileId = "abc-id"
+        let apiKey = ZeroBounceSDK.shared.apiKey!
+        var comp = URLComponents(string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/getfile")
+        comp?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "file_id", value: fileId),
+            URLQueryItem(name: "download_type", value: "combined"),
+            URLQueryItem(name: "activity_data", value: "true")
+        ]
+        let apiEndpoint = comp!.url!
+        let getFileResponse = ZBGetFileResponse(localFilePath: "path")
+        let mockedData = try! JSONEncoder().encode(getFileResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        let opts = ZBGetFileOptions(downloadType: .combined, activityData: true)
+        ZeroBounceSDK.shared.getFile(fileId: fileId, options: opts) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                XCTAssertNotNil(response.localFilePath)
+            case .Failure:
+                XCTFail("unexpected failure")
+            }
+        }
+        wait(for: [requestExpectation], timeout: 60)
+    }
+    
+    func testScoringGetFileWithOptions_DoesNotAppendActivityData() {
+        let fileId = "id-1"
+        let apiKey = ZeroBounceSDK.shared.apiKey!
+        var comp = URLComponents(string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/getfile")
+        comp?.queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "file_id", value: fileId),
+            URLQueryItem(name: "download_type", value: "phase_2")
+        ]
+        let apiEndpoint = comp!.url!
+        let getFileResponse = ZBGetFileResponse(localFilePath: "path")
+        let mockedData = try! JSONEncoder().encode(getFileResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        let opts = ZBGetFileOptions(downloadType: .phase2, activityData: true)
+        ZeroBounceSDK.shared.scoringGetFile(fileId: fileId, options: opts) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                XCTAssertNotNil(response.localFilePath)
+            case .Failure:
+                XCTFail("unexpected failure")
+            }
+        }
         wait(for: [requestExpectation], timeout: 60)
     }
 }

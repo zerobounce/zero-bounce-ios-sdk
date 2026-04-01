@@ -1,0 +1,28 @@
+# Shrinks `docker build` context. (iOS/Xcode builds normally need a macOS image;
+# this file still helps if you add a macOS-based Dockerfile or shared tooling.)
+
+.git
+.github
+
+# Xcode / Swift build outputs
+**/build/
+**/DerivedData/
+.derivedDataIOS/
+*.xcresult
+*.xcresult/
+
+# IDE & OS noise
+**/.DS_Store
+**/xcuserdata/
+**/*.xcuserstate
+.idea/
+
+# CocoaPods — reinstall in the image with `pod install` if you add a macOS Dockerfile
+Pods/
+
+# SwiftPM caches
+.swiftpm/
+
+# Docs are not needed to compile
+*.md
+!README.md

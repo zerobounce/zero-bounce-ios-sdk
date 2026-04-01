@@ -19,37 +19,27 @@ public enum ZBError: LocalizedError {
     case saveFileError(message: String)
     
     static func decodeError(jsonData: Data) -> ZBError {
-        var messages: [String] = []
-        do {
-            guard let response = try JSONSerialization.jsonObject(with: jsonData, options: .mutableLeaves) as? [String: Any] else {
-                return .decodeError(messages: [])
-            }
-            for (key, value) in response {
-                if key.contains("error"), let message = value as? String {
-                    messages.append(message)
-                } else if key.contains("message") {
-                    if let message = value as? String {
-                        messages.append(message)
-                    } else {
-                        if let messageList = value as? [String] {
-                            messages.append(contentsOf: messageList)
-                        }
-                    }
-                } else if key != "success" {
-                    /// Add value to messages
-                    if let message = value as? String {
-                        messages.append(message)
-                    } else if let messageList = value as? [String] {
-                        messages.append(contentsOf: messageList)
-                    }
-                }
-                return .decodeError(messages: messages)
-            }
-        } catch {
-            /// No messages
-            NSLog("Response could not be decoded")
+        guard let response = try? JSONSerialization.jsonObject(with: jsonData, options: .mutableLeaves) as? [String: Any] else {
+            return .decodeError(messages: [])
         }
-        return .decodeError(messages: [])
+        var messages: [String] = []
+        for key in ["message", "error_message", "error"] {
+            if let s = response[key] as? String {
+                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { messages.append(t) }
+            }
+        }
+        if messages.isEmpty {
+            for (key, value) in response where key != "success" {
+                if let s = value as? String {
+                    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !t.isEmpty { messages.append(t) }
+                } else if let arr = value as? [String] {
+                    messages.append(contentsOf: arr)
+                }
+            }
+        }
+        return .decodeError(messages: messages)
     }
     
     public var errorDescription: String? {

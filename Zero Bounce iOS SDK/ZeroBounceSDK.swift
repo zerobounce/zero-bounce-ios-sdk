@@ -355,11 +355,12 @@ public class ZeroBounceSDK {
         genderColumn: Int? = nil,
         ipAddressColumn: Int? = nil,
         hasHeaderRow: Bool = false,
+        allowPhase2: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         _sendFile(scoring: false, filePath: filePath, emailAddressColumn: emailAddressColumn,
                   returnUrl: returnUrl, firstNameColumn: firstNameColumn, lastNameColumn:lastNameColumn, genderColumn: genderColumn,
-                  ipAddressColumn: ipAddressColumn, hasHeaderRow: hasHeaderRow,
+                  ipAddressColumn: ipAddressColumn, hasHeaderRow: hasHeaderRow, allowPhase2: allowPhase2,
                   completion: completion)
     }
     
@@ -376,11 +377,13 @@ public class ZeroBounceSDK {
         genderColumn: Int? = nil,
         ipAddressColumn: Int? = nil,
         hasHeaderRow: Bool = false,
+        allowPhase2: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         _sendFileWithData(scoring: false, fileData: fileData, fileName: fileName, emailAddressColumn: emailAddressColumn,
                           returnUrl: returnUrl, firstNameColumn: firstNameColumn, lastNameColumn: lastNameColumn,
                           genderColumn: genderColumn, ipAddressColumn: ipAddressColumn, hasHeaderRow: hasHeaderRow,
+                          allowPhase2: allowPhase2,
                           completion: completion)
     }
     
@@ -425,6 +428,7 @@ public class ZeroBounceSDK {
         genderColumn:Int? = nil,
         ipAddressColumn:Int? = nil,
         hasHeaderRow: Bool = false,
+        allowPhase2: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         
@@ -439,6 +443,9 @@ public class ZeroBounceSDK {
             "has_header_row": hasHeaderRow,
         ] as [String : Any]
         
+        if let returnUrl = returnUrl {
+            parameters["return_url"] = returnUrl
+        }
         if let firstNameColumn = firstNameColumn {
             parameters["first_name_column"] = firstNameColumn
         }
@@ -453,6 +460,9 @@ public class ZeroBounceSDK {
         
         if let ipAddressColumn = ipAddressColumn {
             parameters["ip_address_column"] = ipAddressColumn
+        }
+        if !scoring, let allowPhase2 = allowPhase2 {
+            parameters["allow_phase_2"] = allowPhase2 ? "true" : "false"
         }
         
         do {
@@ -478,6 +488,7 @@ public class ZeroBounceSDK {
         genderColumn: Int? = nil,
         ipAddressColumn: Int? = nil,
         hasHeaderRow: Bool = false,
+        allowPhase2: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         guard let apiKey = self.apiKey else {
@@ -506,6 +517,9 @@ public class ZeroBounceSDK {
         if let ipAddressColumn = ipAddressColumn {
             parameters["ip_address_column"] = ipAddressColumn
         }
+        if !scoring, let allowPhase2 = allowPhase2 {
+            parameters["allow_phase_2"] = allowPhase2 ? "true" : "false"
+        }
         
         do {
             let r = try ZBMultiPartRequest.createFileRequestWithData(
@@ -529,28 +543,74 @@ public class ZeroBounceSDK {
     /// - parameter fileId: The returned file ID when calling sendfile API
     ///
     public func getFile(fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
-        _getFile(scoring: false, fileId: fileId, completion: completion)
+        _getFile(scoring: false, fileId: fileId, options: nil, completion: completion)
+    }
+    
+    /// Validation bulk `getfile` with optional `download_type` and `activity_data`.
+    public func getFile(fileId: String, options: ZBGetFileOptions, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+        _getFile(scoring: false, fileId: fileId, options: options, completion: completion)
     }
     
     ///
     /// The scoringGetFile API allows users to get the validation results file for the file been submitted using scoringSendfile API
     ///
     public func scoringGetFile(fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
-        _getFile(scoring: true, fileId: fileId, completion: completion)
+        _getFile(scoring: true, fileId: fileId, options: nil, completion: completion)
     }
     
-    private func _getFile(scoring: Bool, fileId: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+    /// Scoring bulk `getfile` with optional `download_type` (`activityData` is ignored).
+    public func scoringGetFile(fileId: String, options: ZBGetFileOptions, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+        _getFile(scoring: true, fileId: fileId, options: options, completion: completion)
+    }
+    
+    private func buildGetFileURL(scoring: Bool, apiKey: String, fileId: String, options: ZBGetFileOptions?) -> URL? {
+        var comp = URLComponents(string: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/getfile")
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "file_id", value: fileId)
+        ]
+        if let options = options {
+            if let dt = options.downloadType {
+                items.append(URLQueryItem(name: "download_type", value: dt.queryValue))
+            }
+            if !scoring, let ad = options.activityData {
+                items.append(URLQueryItem(name: "activity_data", value: ad ? "true" : "false"))
+            }
+        }
+        comp?.queryItems = items
+        return comp?.url
+    }
+    
+    private func getFileJsonIndicatesFailure(_ d: [String: Any]) -> Bool {
+        if let success = d["success"] as? Bool, success == false { return true }
+        func nonEmpty(_ key: String) -> Bool {
+            guard let s = d[key] as? String else { return false }
+            return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        if nonEmpty("message") || nonEmpty("error") || nonEmpty("error_message") { return true }
+        return false
+    }
+    
+    private func _getFile(scoring: Bool, fileId: String, options: ZBGetFileOptions?, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
+        guard let requestURL = buildGetFileURL(scoring: scoring, apiKey: apiKey, fileId: fileId, options: options) else {
+            completion(ZBResult.Failure(ZBError.invalidEndpoint))
+            return
+        }
         
-        sendRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/getfile?api_key=\(apiKey)&file_id=\(fileId)") { result in
+        sendRequest(url: requestURL.absoluteString) { result in
             switch result {
             case .success(let response, let data):
                 
-                if let response = try? JSONSerialization.jsonObject(with: data, options: .mutableLeaves) as? [String: Any] {
-                    if let success = response["success"] as? Bool, success == false {
+                if let dict = try? JSONSerialization.jsonObject(with: data, options: .mutableLeaves) as? [String: Any] {
+                    if self.getFileJsonIndicatesFailure(dict) {
+                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                        return
+                    }
+                    if dict["success"] != nil {
                         completion(.Failure(ZBError.decodeError(jsonData: data)))
                         return
                     }
