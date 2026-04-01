@@ -20,7 +20,9 @@
 # CocoaPods — reinstall in the image with `pod install` if you add a macOS Dockerfile
 Pods/
 
-# SwiftPM caches
+# SwiftPM — local build output & tooling
+.build/
+**/.build/
 .swiftpm/
 
 # Docs are not needed to compile
