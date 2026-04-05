@@ -8,7 +8,7 @@ s.summary = "ZeroBounceSDK provides wrappers over ZeroBounce API"
 s.requires_arc = true
 
 # 2
-s.version = "2.0.12"
+s.version = "2.1.0"
 
 # 3
 s.license = { :type => "MIT", :file => "LICENSE.md" }
