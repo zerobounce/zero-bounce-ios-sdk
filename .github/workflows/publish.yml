@@ -34,7 +34,7 @@ jobs:
             exit 1
           fi
           TAG_VERSION="${TAG#v}"
-          PODSPEC_VERSION=$(grep 's.version' ZeroBounceSDK.podspec | sed -n 's/.*"\([^"]*\)".*/\1/p')
+          PODSPEC_VERSION=$(grep -E '^\s*s\.version\s*=' ZeroBounceSDK.podspec | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
           if [ -z "$PODSPEC_VERSION" ]; then
             echo "Error: Could not read s.version from ZeroBounceSDK.podspec"
             exit 1
