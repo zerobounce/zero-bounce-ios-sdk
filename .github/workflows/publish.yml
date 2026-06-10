@@ -1,0 +1,112 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        type: string
+        description: Tag to publish (e.g. v2.1.2)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tag:
+    name: Validate tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag }}
+
+      - name: Verify tag and podspec version
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            echo "Error: Tag is required."
+            exit 1
+          fi
+          if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Error: Tag '$TAG' does not exist."
+            exit 1
+          fi
+          TAG_VERSION="${TAG#v}"
+          PODSPEC_VERSION=$(grep 's.version' ZeroBounceSDK.podspec | sed -n 's/.*"\([^"]*\)".*/\1/p')
+          if [ -z "$PODSPEC_VERSION" ]; then
+            echo "Error: Could not read s.version from ZeroBounceSDK.podspec"
+            exit 1
+          fi
+          if [ "$PODSPEC_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: podspec version ($PODSPEC_VERSION) does not match tag ($TAG)."
+            exit 1
+          fi
+          echo "Publishing tag: $TAG (podspec $PODSPEC_VERSION)"
+
+  publish:
+    name: Test and publish to CocoaPods
+    needs: [validate-tag]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: macos-latest
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag }}
+
+      - name: Install CocoaPods dependencies
+        run: pod install
+
+      - name: Run tests (Mac Catalyst)
+        run: |
+          xcodebuild test \
+            -workspace "Zero Bounce iOS SDK.xcworkspace" \
+            -scheme "Zero Bounce iOS SDK" \
+            -destination 'platform=macOS,variant=Mac Catalyst' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO
+
+      - name: Lint podspec
+        run: pod spec lint ZeroBounceSDK.podspec --allow-warnings
+
+      - name: Push to CocoaPods trunk
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+        run: |
+          if [ -z "$COCOAPODS_TRUNK_TOKEN" ]; then
+            echo "Error: COCOAPODS_TRUNK_TOKEN secret is not set."
+            exit 1
+          fi
+          pod trunk push ZeroBounceSDK.podspec --allow-warnings
+
+  release:
+    name: Create GitHub Release
+    needs: [publish]
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag }}
+          fetch-depth: 0
+
+      - name: Create release if missing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, skipping."
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "$TAG" \
+              --generate-notes
+          fi
