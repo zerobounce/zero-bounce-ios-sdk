@@ -431,27 +431,7 @@ Test Suite 'All tests' passed.
 
 ## Publish
 
-Publishing to CocoaPods uses **GitHub Actions** (same manual tag workflow as Java, C#, and PHP).
+1. Bump `s.version` in `ZeroBounceSDK.podspec`, commit, tag (`vX.Y.Z`), push tag.
+2. **Actions → Publish → Run workflow** with that tag.
 
-### One-time setup
-
-1. **CocoaPods trunk token** — register if needed ([guide](https://guides.cocoapods.org/making/getting-setup-with-trunk.html)), then get the token:
-   ```bash
-   pod trunk me --verbose
-   # or: grep -A2 'trunk.cocoapods.org' ~/.netrc
-   ```
-2. In [zero-bounce-ios-sdk](https://github.com/zerobounce/zero-bounce-ios-sdk) → **Settings → Secrets → Actions**, add:
-   - **`COCOAPODS_TRUNK_TOKEN`** — trunk session token (password from `~/.netrc`)
-
-### Release steps
-
-1. Bump `s.version` in `ZeroBounceSDK.podspec` (and `MARKETING_VERSION` in the Xcode project if you keep them aligned).
-2. Commit, tag (`v2.1.2`), and push the tag.
-3. **Actions → Publish → Run workflow** and enter the tag, or:
-   ```bash
-   gh workflow run publish.yml -f tag=v2.1.2
-   ```
-
-The workflow runs tests, lints the podspec, pushes to [CocoaPods](https://cocoapods.org/pods/ZeroBounceSDK), and creates a GitHub release if missing.
-
-See also the [sdk-docs (CocoaPods)](../sdk-docs/cocoapods/) guide.
+Registry: [ZeroBounceSDK on CocoaPods](https://cocoapods.org/pods/ZeroBounceSDK)
