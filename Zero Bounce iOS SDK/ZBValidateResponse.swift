@@ -42,6 +42,9 @@ public struct ZBValidateResponse : Codable, Equatable {
     ///The SMTP Provider of the email or [null] [BETA].
     public let smtpProvider: String?
 
+    ///[true/false or null] Is the domain name a catch-all (the domain email server responds with valid to any SMTP checks and emailing to an invalid might not bounce)?
+    public let catchallDomain: Bool? = nil
+
     ///The first name of the owner of the email when available or [null].
     public let firstName: String?
 
@@ -78,6 +81,7 @@ public struct ZBValidateResponse : Codable, Equatable {
         case mxFound = "mx_found"
         case mxRecord = "mx_record"
         case smtpProvider = "smtp_provider"
+        case catchallDomain = "catchall_domain"
         case firstName = "firstname"
         case lastName = "lastname"
         case gender
