@@ -269,7 +269,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     // MARK: Validate Batch
     func testValidateBatch() {
         let emails = [["email_address": "example@gmail.com"], ["email_address": "example2@gmail.com", "ip_address": "1.1.1.1"]]
-        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/validatebatch")!
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.apiBaseUrl)/validatebatch")!
         let validateResponse = ZBValidateResponse(
             address: "example@gmail.com", status: .valid, subStatus: nil, account: "",
             domain: "", didYouMean: "", domainAgeDays: "", mxRecord: "",
@@ -301,7 +301,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     
     func testValidateBatchDecodeError() {
         let emails = [["email_address": "example@gmail.com"], ["email_address": "example2@gmail.com", "ip_address": "1.1.1.1"]]
-        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/validatebatch")!
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.apiBaseUrl)/validatebatch")!
         
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.post: Data()])
         mock.register()
@@ -332,7 +332,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     func testValidateBatchNotInitializedError() {
         let emails = [["email_address": "example@gmail.com"], ["email_address": "example2@gmail.com", "ip_address": "1.1.1.1"]]
         ZeroBounceSDK.shared.apiKey = nil
-        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/validatebatch")!
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.apiBaseUrl)/validatebatch")!
         
         let validateBatchResponse = ZBValidateBatchResponse(emailBatch: [], errors: [])
         let mockedData = try! JSONEncoder().encode(validateBatchResponse)

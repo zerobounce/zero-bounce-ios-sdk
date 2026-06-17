@@ -63,7 +63,7 @@ public class ZeroBounceSDK {
         ]
         
         let jsonDataParams = try? JSONSerialization.data(withJSONObject: params)
-        sendPostJsonRequest(url: "\(bulkApiBaseUrl)/validatebatch", params: jsonDataParams, completion: completion)
+        sendPostJsonRequest(url: "\(apiBaseUrl)/validatebatch", params: jsonDataParams, completion: completion)
     }
     
     // MARK: Email Finder
