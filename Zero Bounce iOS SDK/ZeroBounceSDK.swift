@@ -622,7 +622,7 @@ public class ZeroBounceSDK {
                     return
                 }
                 
-                print("Zero Bounce SDK getFile data: \(text), fileName=\(fileName)")
+                print("Zero Bounce SDK getFile fileName=\(fileName)")
                 ZBFileManager.writeFile(text: text, to: fileName) { writeResult in
                     switch writeResult {
                     case .success(let path):
@@ -649,19 +649,18 @@ public class ZeroBounceSDK {
     private func sendJsonRequest<T: Codable>(url: String, completion: @escaping (ZBResult<T>) -> ()) {
         var r = URLRequest(url: URL(string: url)!)
         r.httpMethod = "GET"
-        
-        NSLog("ZeroBounceSDK request url=\(url)")
+        r.timeoutInterval = 120
         sendJsonRequest(request: r, completion: completion)
     }
     
     private func sendPostJsonRequest<T: Codable>(url: String, params: Data?, completion: @escaping (ZBResult<T>) -> ()) {
         var r = URLRequest(url: URL(string: url)!)
         r.httpMethod = "POST"
+        r.timeoutInterval = 120
         
         guard let data = params else { return }
         r.httpBody = data
         
-        NSLog("ZeroBounceSDK request url=\(url)")
         sendJsonRequest(request: r, completion: completion)
     }
     
@@ -719,9 +718,6 @@ public class ZeroBounceSDK {
                 result(RequestResult.failure(ZBError.noData))
                 return
             }
-            
-            let json = String(data: data, encoding: .utf8)
-            NSLog("ZeroBounceSDK data json: \(String(describing: json))")
             
             result(RequestResult.success(response, data))
         }).resume()
