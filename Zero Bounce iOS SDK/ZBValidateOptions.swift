@@ -13,10 +13,13 @@ public struct ZBValidateOptions {
     public var activityData: Bool?
     /// Maps to verify_plus.
     public var verifyPlus: Bool?
+    /// When true, uses form-encoded POST for /validate.
+    public var usePost: Bool
 
-    public init(timeout: Int? = nil, activityData: Bool? = nil, verifyPlus: Bool? = nil) {
+    public init(timeout: Int? = nil, activityData: Bool? = nil, verifyPlus: Bool? = nil, usePost: Bool = false) {
         self.timeout = timeout
         self.activityData = activityData
         self.verifyPlus = verifyPlus
+        self.usePost = usePost
     }
 }

@@ -70,6 +70,24 @@ public class ZeroBounceSDK {
             URLQueryItem(name: "ip_address", value: ipAddressPart),
         ]
         if let options = options {
+            if options.usePost {
+                var fields: [String: String] = [
+                    "api_key": apiKey,
+                    "email": email,
+                    "ip_address": ipAddressPart,
+                ]
+                if let timeout = options.timeout {
+                    fields["timeout"] = String(timeout)
+                }
+                if let activityData = options.activityData {
+                    fields["activity_data"] = activityData ? "true" : "false"
+                }
+                if let verifyPlus = options.verifyPlus {
+                    fields["verify_plus"] = verifyPlus ? "true" : "false"
+                }
+                sendFormPostRequest(url: apiBaseUrl + "/validate", formFields: fields, completion: completion)
+                return
+            }
             if let timeout = options.timeout {
                 items.append(URLQueryItem(name: "timeout", value: String(timeout)))
             }
