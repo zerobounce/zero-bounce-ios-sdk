@@ -44,7 +44,7 @@ public class ZeroBounceSDK {
         }
         
         let ipAddressPart = ipAddress != nil ? "\(ipAddress!)" : ""
-        sendJsonRequest(url: makeURL("/validate", [
+        sendJsonRequest(url: makeURL("/validate", queryItems: [
             URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "email", value: email),
             URLQueryItem(name: "ip_address", value: ipAddressPart),
@@ -146,7 +146,7 @@ public class ZeroBounceSDK {
         if let lastName {
             items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", items), completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     // MARK: Domain Search
@@ -195,7 +195,7 @@ public class ZeroBounceSDK {
         if let companyName {
             items.append(URLQueryItem(name: "company_name", value: companyName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", items), completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     @available(*, deprecated, message: "Use findEmail() for Email Finder API, or findDomain() for Domain Search API")
@@ -224,7 +224,7 @@ public class ZeroBounceSDK {
         if let lastName {
             items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", items), completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     // MARK: Get Credits
@@ -237,7 +237,7 @@ public class ZeroBounceSDK {
             return
         }
         
-        sendJsonRequest(url: makeURL("/getcredits", [URLQueryItem(name: "api_key", value: apiKey)]), completion: completion)
+        sendJsonRequest(url: makeURL("/getcredits", queryItems: [URLQueryItem(name: "api_key", value: apiKey)]), completion: completion)
     }
     
     // MARK: Get Api Usage
@@ -254,7 +254,7 @@ public class ZeroBounceSDK {
         let startString = self.dateFormatter.string(from: startDate)
         let endString = self.dateFormatter.string(from: endDate)
         
-        sendJsonRequest(url: makeURL("/getapiusage", [
+        sendJsonRequest(url: makeURL("/getapiusage", queryItems: [
             URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "start_date", value: startString),
             URLQueryItem(name: "end_date", value: endString),
@@ -271,7 +271,7 @@ public class ZeroBounceSDK {
             return
         }
         
-        sendJsonRequest(url: makeURL("/activity", [URLQueryItem(name: "api_key", value: apiKey), URLQueryItem(name: "email", value: email)]), completion: completion)
+        sendJsonRequest(url: makeURL("/activity", queryItems: [URLQueryItem(name: "api_key", value: apiKey), URLQueryItem(name: "email", value: email)]), completion: completion)
     }
     
     // MARK: File Status
