@@ -30,6 +30,12 @@ public struct ZBValidateResponse : Codable, Equatable {
     ///Age of the email domain in days or [null].
     public let domainAgeDays: String?
 
+    ///Last activity bucket when activity_data was requested.
+    public let activeInDays: String? = nil
+
+    ///First date activity was detected (YYYY-MM-DD).
+    public let activeFirstSeen: String? = nil
+
     ///[true/false] If the email comes from a free provider.
     public let freeEmail: Bool = false
 
@@ -77,6 +83,8 @@ public struct ZBValidateResponse : Codable, Equatable {
         case domain
         case didYouMean = "did_you_mean"
         case domainAgeDays = "domain_age_days"
+        case activeInDays = "active_in_days"
+        case activeFirstSeen = "active_first_seen"
         case freeEmail = "free_email"
         case mxFound = "mx_found"
         case mxRecord = "mx_record"

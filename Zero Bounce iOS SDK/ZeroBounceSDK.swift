@@ -38,17 +38,46 @@ public class ZeroBounceSDK {
     /// - parameter ipAddress: The IP Address the email signed up from (Can be blank)
     ///
     public func validate(email: String, ipAddress: String? = nil, completion: @escaping (ZBResult<ZBValidateResponse>) -> ()) {
+        validate(email: email, ipAddress: ipAddress, options: nil, completion: completion)
+    }
+
+    public func validate(
+        email: String,
+        ipAddress: String? = nil,
+        options: ZBValidateOptions?,
+        completion: @escaping (ZBResult<ZBValidateResponse>) -> ()
+    ) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
-        
+        if let options = options, let timeout = options.timeout {
+            if timeout < 3 || timeout > 60 {
+                completion(ZBResult.Failure(ZBError.decodeError(messages: [
+                    "Invalid parameter: timeout (must be between 3 and 60 seconds)"
+                ])))
+                return
+            }
+        }
+
         let ipAddressPart = ipAddress != nil ? "\(ipAddress!)" : ""
-        sendJsonRequest(url: makeURL("/validate", queryItems: [
+        var items: [URLQueryItem] = [
             URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "email", value: email),
             URLQueryItem(name: "ip_address", value: ipAddressPart),
-        ]), completion: completion)
+        ]
+        if let options = options {
+            if let timeout = options.timeout {
+                items.append(URLQueryItem(name: "timeout", value: String(timeout)))
+            }
+            if let activityData = options.activityData {
+                items.append(URLQueryItem(name: "activity_data", value: activityData ? "true" : "false"))
+            }
+            if let verifyPlus = options.verifyPlus {
+                items.append(URLQueryItem(name: "verify_plus", value: verifyPlus ? "true" : "false"))
+            }
+        }
+        sendJsonRequest(url: makeURL("/validate", queryItems: items), completion: completion)
     }
     
     // MARK: Validate Batch
@@ -56,16 +85,43 @@ public class ZeroBounceSDK {
     /// - parameter emails: List of email addresses you want to validate
     ///
     public func validateBatch(emails: [[String:String]], completion: @escaping (ZBResult<ZBValidateBatchResponse>) -> ()) {
+        validateBatch(emails: emails, options: nil, completion: completion)
+    }
+
+    public func validateBatch(
+        emails: [[String:String]],
+        options: ZBValidateOptions?,
+        completion: @escaping (ZBResult<ZBValidateBatchResponse>) -> ()
+    ) {
         guard let apiKey = self.apiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
-        
-        let params: [String: Any] = [
+        if let options = options, let timeout = options.timeout {
+            if timeout < 10 || timeout > 120 {
+                completion(ZBResult.Failure(ZBError.decodeError(messages: [
+                    "Invalid parameter: timeout (must be between 10 and 120 seconds)"
+                ])))
+                return
+            }
+        }
+
+        var params: [String: Any] = [
             "api_key": apiKey,
             "email_batch": emails
         ]
-        
+        if let options = options {
+            if let timeout = options.timeout {
+                params["timeout"] = timeout
+            }
+            if let activityData = options.activityData {
+                params["activity_data"] = activityData
+            }
+            if let verifyPlus = options.verifyPlus {
+                params["verify_plus"] = verifyPlus
+            }
+        }
+
         let jsonDataParams = try? JSONSerialization.data(withJSONObject: params)
         sendPostJsonRequest(url: "\(apiBaseUrl)/validatebatch", params: jsonDataParams, completion: completion)
     }
