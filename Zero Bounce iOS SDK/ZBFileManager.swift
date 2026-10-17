@@ -33,7 +33,12 @@ internal class ZBFileManager {
             return
         }
         
-        let file = writePath.appendingPathComponent(fileNamed)
+        let safeName = (fileNamed as NSString).lastPathComponent
+        guard !safeName.isEmpty, safeName != ".", safeName != "..", safeName != "/" else {
+            result(.failure(ZBError.saveFileError(message: "Invalid file name")))
+            return
+        }
+        let file = writePath.appendingPathComponent(safeName)
         
         do {
             try text.write(to: file, atomically: false, encoding: .utf8)
