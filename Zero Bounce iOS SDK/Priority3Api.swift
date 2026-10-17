@@ -308,6 +308,26 @@ internal final class Priority3Api {
         postBulkRootForm(path: "/scoreS3file", fields: fields, completion: completion)
     }
 
+    func listS3files(
+        bucket: String?,
+        search: String?,
+        completion: @escaping (ZeroBounceSDK.ZBResult<[ZBS3ListFileEntry]>) -> ()
+    ) {
+        guard let apiKey = sdk.apiKey else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        var query: [String: String] = ["api_key": apiKey]
+        if let bucket = bucket, !bucket.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            query["bucket"] = bucket
+        }
+        if let search = search, !search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            query["search"] = search
+        }
+        let url = sdk.priority3QueryURL(base: sdk.bulkApiRootUrl + "/listS3files", query: query)
+        sdk.priority3SendJson(url: url, completion: completion)
+    }
+
     func exportS3File(
         fileId: String,
         exportBucket: String,

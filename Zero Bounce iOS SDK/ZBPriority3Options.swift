@@ -50,3 +50,15 @@ public struct ZBScoreS3FileOptions {
         self.fileName = fileName
     }
 }
+
+public struct ZBS3ListFileEntry: Codable {
+    public let name: String
+    public let size: Int
+    public let lastModified: String
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case size
+        case lastModified = "last_modified"
+    }
+}

@@ -579,6 +579,14 @@ public class ZeroBounceSDK {
         }
         priority3Api.exportS3File(fileId: fileId, exportBucket: exportBucket, completion: completion)
     }
+
+    public func listS3files(bucket: String? = nil, search: String? = nil, completion: @escaping (ZBResult<[ZBS3ListFileEntry]>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.listS3files(bucket: bucket, search: search, completion: completion)
+    }
     
     // MARK: File Status
     ///

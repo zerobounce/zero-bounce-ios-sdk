@@ -205,6 +205,29 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         wait(for: [requestExpectation], timeout: 60)
     }
 
+    func testListS3files() {
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.bulkApiRootUrl)/listS3files")!
+        let payload = """
+        [{"name":"uploads/list.csv","size":100,"last_modified":"2024-01-01T00:00:00Z"}]
+        """.data(using: .utf8)!
+        let mock = Mock(url: apiEndpoint, ignoreQuery: true, dataType: .json, statusCode: 200, data: [.get: payload])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.listS3files(bucket: "my-bucket", search: "list") { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let entries):
+                XCTAssertEqual(entries.count, 1)
+                XCTAssertEqual(entries[0].name, "uploads/list.csv")
+                XCTAssertEqual(entries[0].size, 100)
+            case .Failure:
+                XCTFail("listS3files should succeed")
+            }
+        }
+        wait(for: [requestExpectation], timeout: 60)
+    }
+
     func testAddFilter() {
         let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.apiBaseUrl)/filters/add")!
         let mockedData = "{\"success\":true}".data(using: .utf8)!
