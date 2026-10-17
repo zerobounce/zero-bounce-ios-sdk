@@ -160,6 +160,55 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
 
         wait(for: [requestExpectation], timeout: 60)
     }
+
+    // MARK: Score Email
+    func testScoreEmail() {
+        let email = "mark@gmail.com"
+        let apiEndpoint = URL(
+            string: "\(ZeroBounceSDK.shared.apiBaseUrl)/scoring?api_key=\(ZeroBounceSDK.shared.apiKey!)&email=\(email)"
+        )!
+        let scoreResponse = ZBScoreEmailResponse(email: email, score: 10)
+
+        let mockedData = try! JSONEncoder().encode(scoreResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.scoreEmail(email: email) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                XCTAssertEqual(response, scoreResponse)
+            case .Failure:
+                XCTFail("scoreEmail should succeed")
+            }
+        }
+
+        wait(for: [requestExpectation], timeout: 60)
+    }
+
+    func testScoreEmailPost() {
+        let email = "mark@gmail.com"
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.apiBaseUrl)/scoring")!
+        let scoreResponse = ZBScoreEmailResponse(email: email, score: 10)
+
+        let mockedData = try! JSONEncoder().encode(scoreResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.post: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.scoreEmailPost(email: email) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                XCTAssertEqual(response, scoreResponse)
+            case .Failure:
+                XCTFail("scoreEmailPost should succeed")
+            }
+        }
+
+        wait(for: [requestExpectation], timeout: 60)
+    }
     
     // MARK: Validate
     func testValidate() {

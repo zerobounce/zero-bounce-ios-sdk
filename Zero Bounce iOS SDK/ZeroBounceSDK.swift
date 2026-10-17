@@ -327,6 +327,44 @@ public class ZeroBounceSDK {
         
         sendJsonRequest(url: makeURL("/activity", queryItems: [URLQueryItem(name: "api_key", value: apiKey), URLQueryItem(name: "email", value: email)]), completion: completion)
     }
+
+    // MARK: Score Email
+    ///
+    /// Real-time AI scoring for a single email (GET /scoring).
+    ///
+    public func scoreEmail(email: String, completion: @escaping (ZBResult<ZBScoreEmailResponse>) -> ()) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+
+        sendJsonRequest(
+            url: makeURL("/scoring", queryItems: [
+                URLQueryItem(name: "api_key", value: apiKey),
+                URLQueryItem(name: "email", value: email),
+            ]),
+            completion: completion
+        )
+    }
+
+    ///
+    /// Real-time AI scoring for a single email (POST /scoring, form-encoded).
+    ///
+    public func scoreEmailPost(email: String, completion: @escaping (ZBResult<ZBScoreEmailResponse>) -> ()) {
+        guard let apiKey = self.apiKey else {
+            completion(ZBResult.Failure(ZBError.notInitialized))
+            return
+        }
+
+        sendFormPostRequest(
+            url: apiBaseUrl + "/scoring",
+            formFields: [
+                "api_key": apiKey,
+                "email": email,
+            ],
+            completion: completion
+        )
+    }
     
     // MARK: File Status
     ///
@@ -730,6 +768,25 @@ public class ZeroBounceSDK {
         r.httpBody = data
         
         sendJsonRequest(request: r, completion: completion)
+    }
+
+    private func sendFormPostRequest<T: Codable>(
+        url: String,
+        formFields: [String: String],
+        completion: @escaping (ZBResult<T>) -> ()
+    ) {
+        guard let urlValue = URL(string: url) else {
+            completion(.Failure(ZBError.invalidEndpoint))
+            return
+        }
+        var components = URLComponents()
+        components.queryItems = formFields.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var request = URLRequest(url: urlValue)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+        sendJsonRequest(request: request, completion: completion)
     }
     
     private enum RequestResult {
