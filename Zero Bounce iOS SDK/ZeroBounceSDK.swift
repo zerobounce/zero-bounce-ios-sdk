@@ -44,7 +44,11 @@ public class ZeroBounceSDK {
         }
         
         let ipAddressPart = ipAddress != nil ? "\(ipAddress!)" : ""
-        sendJsonRequest(url: "\(apiBaseUrl)/validate?api_key=\(apiKey)&email=\(email)&ip_address=\(ipAddressPart)", completion: completion)
+        sendJsonRequest(url: makeURL("/validate", queryItems: [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "email", value: email),
+            URLQueryItem(name: "ip_address", value: ipAddressPart),
+        ]), completion: completion)
     }
     
     // MARK: Validate Batch
@@ -126,30 +130,21 @@ public class ZeroBounceSDK {
             return
         }
         
-        var url = "\(apiBaseUrl)/guessformat?api_key=\(apiKey)"
-        
+        var items: [URLQueryItem] = [URLQueryItem(name: "api_key", value: apiKey)]
         if let domain {
-            url += "&domain=\(domain)"
+            items.append(URLQueryItem(name: "domain", value: domain))
         }
-        
         if let companyName {
-            url += "&company_name=\(companyName)"
+            items.append(URLQueryItem(name: "company_name", value: companyName))
         }
-        
-        url += "&first_name=\(firstName)"
-        
+        items.append(URLQueryItem(name: "first_name", value: firstName))
         if let middleName {
-            url += "&middle_name=\(middleName)"
+            items.append(URLQueryItem(name: "middle_name", value: middleName))
         }
-        
         if let lastName {
-            url += "&last_name=\(lastName)"
+            items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        
-        sendJsonRequest(
-            url: url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed)!,
-            completion: completion
-        )
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     // MARK: Domain Search
@@ -191,20 +186,14 @@ public class ZeroBounceSDK {
             return
         }
         
-        var url = "\(apiBaseUrl)/guessformat?api_key=\(apiKey)"
-        
+        var items: [URLQueryItem] = [URLQueryItem(name: "api_key", value: apiKey)]
         if let domain {
-            url += "&domain=\(domain)"
+            items.append(URLQueryItem(name: "domain", value: domain))
         }
-        
         if let companyName {
-            url += "&company_name=\(companyName)"
+            items.append(URLQueryItem(name: "company_name", value: companyName))
         }
-        
-        sendJsonRequest(
-            url: url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed)!,
-            completion: completion
-        )
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     @available(*, deprecated, message: "Use findEmail() for Email Finder API, or findDomain() for Domain Search API")
@@ -220,24 +209,20 @@ public class ZeroBounceSDK {
             return
         }
         
-        var url = "\(apiBaseUrl)/guessformat?api_key=\(apiKey)&domain=\(domain)"
-        
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "domain", value: domain),
+        ]
         if let firstName {
-            url += "&first_name=\(firstName)"
+            items.append(URLQueryItem(name: "first_name", value: firstName))
         }
-        
         if let middleName {
-            url += "&middle_name=\(middleName)"
+            items.append(URLQueryItem(name: "middle_name", value: middleName))
         }
-        
         if let lastName {
-            url += "&last_name=\(lastName)"
+            items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        
-        sendJsonRequest(
-            url: url.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed)!,
-            completion: completion
-        )
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     // MARK: Get Credits
@@ -250,7 +235,7 @@ public class ZeroBounceSDK {
             return
         }
         
-        sendJsonRequest(url: "\(apiBaseUrl)/getcredits?api_key=\(apiKey)", completion: completion)
+        sendJsonRequest(url: makeURL("/getcredits", queryItems: [URLQueryItem(name: "api_key", value: apiKey)]), completion: completion)
     }
     
     // MARK: Get Api Usage
@@ -267,7 +252,11 @@ public class ZeroBounceSDK {
         let startString = self.dateFormatter.string(from: startDate)
         let endString = self.dateFormatter.string(from: endDate)
         
-        sendJsonRequest(url: "\(apiBaseUrl)/getapiusage?api_key=\(apiKey)&start_date=\(startString)&end_date=\(endString)", completion: completion)
+        sendJsonRequest(url: makeURL("/getapiusage", queryItems: [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "start_date", value: startString),
+            URLQueryItem(name: "end_date", value: endString),
+        ]), completion: completion)
     }
     
     // MARK: Activity Data
@@ -280,7 +269,7 @@ public class ZeroBounceSDK {
             return
         }
         
-        sendJsonRequest(url: "\(apiBaseUrl)/activity?api_key=\(apiKey)&email=\(email)", completion: completion)
+        sendJsonRequest(url: makeURL("/activity", queryItems: [URLQueryItem(name: "api_key", value: apiKey), URLQueryItem(name: "email", value: email)]), completion: completion)
     }
     
     // MARK: File Status
@@ -304,7 +293,10 @@ public class ZeroBounceSDK {
             return
         }
         
-        sendJsonRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/filestatus?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
+        sendJsonRequest(url: makeBulkURL(scoring: scoring, subpath: "/filestatus", queryItems: [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "file_id", value: fileId),
+        ]), completion: completion)
     }
     
     // MARK: Delete File
@@ -328,7 +320,10 @@ public class ZeroBounceSDK {
             return
         }
         
-        sendJsonRequest(url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/deletefile?api_key=\(apiKey)&file_id=\(fileId)", completion: completion)
+        sendJsonRequest(url: makeBulkURL(scoring: scoring, subpath: "/deletefile", queryItems: [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "file_id", value: fileId),
+        ]), completion: completion)
     }
     
     
@@ -646,8 +641,25 @@ public class ZeroBounceSDK {
         case Failure(Error)
     }
     
+    private func makeURL(_ path: String, queryItems: [URLQueryItem]) -> String {
+        var components = URLComponents(string: apiBaseUrl + path)!
+        components.queryItems = queryItems
+        return components.url!.absoluteString
+    }
+
+    private func makeBulkURL(scoring: Bool, subpath: String, queryItems: [URLQueryItem]) -> String {
+        let base = "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")"
+        var components = URLComponents(string: base + subpath)!
+        components.queryItems = queryItems
+        return components.url!.absoluteString
+    }
+
     private func sendJsonRequest<T: Codable>(url: String, completion: @escaping (ZBResult<T>) -> ()) {
-        var r = URLRequest(url: URL(string: url)!)
+        guard let urlValue = URL(string: url) else {
+            completion(.Failure(ZBError.invalidEndpoint))
+            return
+        }
+        var r = URLRequest(url: urlValue)
         r.httpMethod = "GET"
         r.timeoutInterval = 120
         sendJsonRequest(request: r, completion: completion)
