@@ -130,16 +130,14 @@ public class ZeroBounceSDK {
             return
         }
         
-        var items: [URLQueryItem] = [
-            URLQueryItem(name: "api_key", value: apiKey),
-            URLQueryItem(name: "first_name", value: firstName),
-        ]
+        var items: [URLQueryItem] = [URLQueryItem(name: "api_key", value: apiKey)]
         if let domain {
             items.append(URLQueryItem(name: "domain", value: domain))
         }
         if let companyName {
             items.append(URLQueryItem(name: "company_name", value: companyName))
         }
+        items.append(URLQueryItem(name: "first_name", value: firstName))
         if let middleName {
             items.append(URLQueryItem(name: "middle_name", value: middleName))
         }
