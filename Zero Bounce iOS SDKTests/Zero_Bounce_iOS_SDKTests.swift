@@ -161,6 +161,69 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         wait(for: [requestExpectation], timeout: 60)
     }
 
+    // MARK: Priority 3
+    func testSendEmailFinderFile() {
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.bulkApiRootUrl)/email-finder/sendfile")!
+        let sendResponse = ZBSendFileResponse(success: true, message: "", fileName: "out.csv", fileId: "f1")
+        let mockedData = try! JSONEncoder().encode(sendResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.post: mockedData])
+        mock.register()
+
+        let csvPath = NSTemporaryDirectory() + "finder-p3.csv"
+        try! "domain,name\nacme.com,Jane\n".write(toFile: csvPath, atomically: true, encoding: .utf8)
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.sendEmailFinderFile(filePath: csvPath, domainColumn: 1) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                XCTAssertEqual(response.fileId, "f1")
+            case .Failure:
+                XCTFail("sendEmailFinderFile should succeed")
+            }
+        }
+        wait(for: [requestExpectation], timeout: 60)
+    }
+
+    func testValidateS3File() {
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.bulkApiRootUrl)/validateS3file")!
+        let sendResponse = ZBSendFileResponse(success: true, message: "", fileName: "", fileId: "s3-1")
+        let mockedData = try! JSONEncoder().encode(sendResponse)
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.post: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.validateS3File(options: ZBValidateS3FileOptions(fileName: "bucket/key.csv")) { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                XCTAssertEqual(response.fileId, "s3-1")
+            case .Failure:
+                XCTFail("validateS3File should succeed")
+            }
+        }
+        wait(for: [requestExpectation], timeout: 60)
+    }
+
+    func testAddFilter() {
+        let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.apiBaseUrl)/filters/add")!
+        let mockedData = "{\"success\":true}".data(using: .utf8)!
+        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.post: mockedData])
+        mock.register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.addFilter(rule: "allow", target: "email", value: "user@example.com") { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let dict):
+                XCTAssertEqual(dict["success"] as? Bool, true)
+            case .Failure:
+                XCTFail("addFilter should succeed")
+            }
+        }
+        wait(for: [requestExpectation], timeout: 60)
+    }
+
     // MARK: Score Email
     func testScoreEmail() {
         let email = "mark@gmail.com"

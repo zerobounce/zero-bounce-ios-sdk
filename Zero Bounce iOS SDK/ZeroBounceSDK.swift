@@ -14,12 +14,15 @@ public class ZeroBounceSDK {
     
     static public let shared = ZeroBounceSDK()
     
-    let bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
-    let bulkApiScoringBaseUrl = "https://bulkapi.zerobounce.net/v2/scoring"
+    var bulkApiRootUrl = "https://bulkapi.zerobounce.net"
+    var bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
+    var bulkApiScoringBaseUrl = "https://bulkapi.zerobounce.net/v2/scoring"
     var apiKey: String?
     var apiBaseUrl = ZBApiURL.API_DEFAULT_URL.rawValue
     let dateFormatter = DateFormatter()
     
+    private lazy var priority3Api = Priority3Api(sdk: self)
+
     fileprivate init() {
         dateFormatter.dateFormat = "yyyy-MM-dd"
     }
@@ -364,6 +367,199 @@ public class ZeroBounceSDK {
             ],
             completion: completion
         )
+    }
+
+    // MARK: Priority 3 — bulk finder, list evaluator, filters, S3
+
+    public func sendEmailFinderFile(
+        filePath: String,
+        domainColumn: Int,
+        options: ZBEmailFinderSendFileOptions? = nil,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.sendEmailFinderFile(filePath: filePath, domainColumn: domainColumn, options: options, completion: completion)
+    }
+
+    public func sendEmailFinderFileData(
+        fileData: Data,
+        fileName: String,
+        domainColumn: Int,
+        options: ZBEmailFinderSendFileOptions? = nil,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.sendEmailFinderFileData(fileData: fileData, fileName: fileName, domainColumn: domainColumn, options: options, completion: completion)
+    }
+
+    public func emailFinderFileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.bulkRootFileStatus(baseUrl: "\(bulkApiRootUrl)/email-finder", fileId: fileId, completion: completion)
+    }
+
+    public func emailFinderGetFile(fileId: String, downloadPath: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.bulkRootGetFile(baseUrl: "\(bulkApiRootUrl)/email-finder", fileId: fileId, downloadPath: downloadPath, completion: completion)
+    }
+
+    public func emailFinderDeleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.bulkRootDeleteFile(baseUrl: "\(bulkApiRootUrl)/email-finder", fileId: fileId, completion: completion)
+    }
+
+    public func sendDomainSearchFile(
+        filePath: String,
+        domainColumn: Int,
+        options: ZBDomainSearchSendFileOptions? = nil,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.sendDomainSearchFile(filePath: filePath, domainColumn: domainColumn, options: options, completion: completion)
+    }
+
+    public func sendDomainSearchFileData(
+        fileData: Data,
+        fileName: String,
+        domainColumn: Int,
+        options: ZBDomainSearchSendFileOptions? = nil,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.sendDomainSearchFileData(fileData: fileData, fileName: fileName, domainColumn: domainColumn, options: options, completion: completion)
+    }
+
+    public func domainSearchFileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.bulkRootFileStatus(baseUrl: "\(bulkApiRootUrl)/domain-search", fileId: fileId, completion: completion)
+    }
+
+    public func domainSearchGetFile(fileId: String, downloadPath: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.bulkRootGetFile(baseUrl: "\(bulkApiRootUrl)/domain-search", fileId: fileId, downloadPath: downloadPath, completion: completion)
+    }
+
+    public func domainSearchDeleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.bulkRootDeleteFile(baseUrl: "\(bulkApiRootUrl)/domain-search", fileId: fileId, completion: completion)
+    }
+
+    public func sendListEvaluatorFile(
+        filePath: String,
+        emailAddressColumn: Int,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.sendListEvaluatorFile(filePath: filePath, emailAddressColumn: emailAddressColumn, completion: completion)
+    }
+
+    public func sendListEvaluatorFileData(
+        fileData: Data,
+        fileName: String,
+        emailAddressColumn: Int,
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.sendListEvaluatorFileData(fileData: fileData, fileName: fileName, emailAddressColumn: emailAddressColumn, completion: completion)
+    }
+
+    public func getListEvaluatorResult(fileId: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.getListEvaluatorResult(fileId: fileId, completion: completion)
+    }
+
+    public func sendEvaluatedFile(filePath: String, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.sendEvaluatedFile(filePath: filePath, completion: completion)
+    }
+
+    public func addFilter(rule: String, target: String, value: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.addFilter(rule: rule, target: target, value: value, completion: completion)
+    }
+
+    public func listFilters(usePost: Bool = false, completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.listFilters(usePost: usePost, completion: completion)
+    }
+
+    public func deleteFilter(rule: String, target: String, value: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.deleteFilter(rule: rule, target: target, value: value, completion: completion)
+    }
+
+    public func validateS3File(options: ZBValidateS3FileOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.validateS3File(options: options, completion: completion)
+    }
+
+    public func scoreS3File(options: ZBScoreS3FileOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.scoreS3File(options: options, completion: completion)
+    }
+
+    public func exportS3File(fileId: String, exportBucket: String, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard apiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.exportS3File(fileId: fileId, exportBucket: exportBucket, completion: completion)
     }
     
     // MARK: File Status
@@ -734,6 +930,11 @@ public class ZeroBounceSDK {
         case Success(T)
         case Failure(Error)
     }
+
+    public enum ZBDictionaryResult {
+        case Success([String: Any])
+        case Failure(Error)
+    }
     
     private func makeURL(_ path: String, queryItems: [URLQueryItem]) -> String {
         var components = URLComponents(string: apiBaseUrl + path)!
@@ -846,5 +1047,117 @@ public class ZeroBounceSDK {
             
             result(RequestResult.success(response, data))
         }).resume()
+    }
+
+    internal func priority3QueryURL(base: String, query: [String: String]) -> String {
+        var components = URLComponents(string: base)!
+        components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
+        return components.url!.absoluteString
+    }
+
+    internal func priority3SendJson<T: Codable>(url: String, completion: @escaping (ZBResult<T>) -> ()) {
+        sendJsonRequest(url: url, completion: completion)
+    }
+
+    internal func priority3SendJsonRequest<T: Codable>(request: URLRequest, completion: @escaping (ZBResult<T>) -> ()) {
+        sendJsonRequest(request: request, completion: completion)
+    }
+
+    internal func priority3FormPostSendFile(
+        url: String,
+        formFields: [String: String],
+        completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        sendFormPostRequest(url: url, formFields: formFields, completion: completion)
+    }
+
+    internal func priority3SendDictionary(url: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        sendRequest(url: url) { result in
+            switch result {
+            case .success(_, let data):
+                do {
+                    let object = try JSONSerialization.jsonObject(with: data, options: [])
+                    if let dict = object as? [String: Any] {
+                        completion(.Success(dict))
+                    } else {
+                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                    }
+                } catch {
+                    completion(.Failure(error))
+                }
+            case .failure(let error):
+                completion(.Failure(error))
+            }
+        }
+    }
+
+    internal func priority3FormPostDictionary(
+        url: String,
+        formFields: [String: String],
+        completion: @escaping (ZBDictionaryResult) -> ()
+    ) {
+        guard let urlValue = URL(string: url) else {
+            completion(.Failure(ZBError.invalidEndpoint))
+            return
+        }
+        var components = URLComponents()
+        components.queryItems = formFields.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var request = URLRequest(url: urlValue)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 120
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
+        sendRequest(request: request) { result in
+            switch result {
+            case .success(_, let data):
+                do {
+                    let object = try JSONSerialization.jsonObject(with: data, options: [])
+                    if let dict = object as? [String: Any] {
+                        completion(.Success(dict))
+                    } else {
+                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                    }
+                } catch {
+                    completion(.Failure(error))
+                }
+            case .failure(let error):
+                completion(.Failure(error))
+            }
+        }
+    }
+
+    internal func priority3Download(
+        url: String,
+        downloadPath: String,
+        completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()
+    ) {
+        sendRequest(url: url) { result in
+            switch result {
+            case .success(_, let data):
+                let bodyStr = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if bodyStr.hasPrefix("{") {
+                    if let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                        if let success = dict["success"] as? Bool, success == false {
+                            completion(.Failure(ZBError.decodeError(jsonData: data)))
+                            return
+                        }
+                        if dict["message"] != nil || dict["error"] != nil || dict["error_message"] != nil {
+                            completion(.Failure(ZBError.decodeError(jsonData: data)))
+                            return
+                        }
+                    }
+                }
+                do {
+                    let outURL = URL(fileURLWithPath: downloadPath)
+                    try FileManager.default.createDirectory(at: outURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try data.write(to: outURL)
+                    completion(.Success(ZBGetFileResponse(localFilePath: downloadPath)))
+                } catch {
+                    completion(.Failure(error))
+                }
+            case .failure(let error):
+                completion(.Failure(error))
+            }
+        }
     }
 }
