@@ -69,13 +69,9 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 
             case .Failure(let error):
                 NSLog("getCredits failure error=\(String(describing: error))")
-                switch error as? ZBError {
-                case .invalidResponse:
-                    XCTAssertTrue(true)
-                    
-                default:
-                    XCTAssertTrue(false)
-                }
+                let text = (error as? LocalizedError)?.errorDescription ?? ""
+                XCTAssertLessThan(text.count, 500)
+                XCTAssertNil(text.range(of: "<html"))
             }
         }
 
@@ -966,5 +962,393 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             }
         }
         wait(for: [requestExpectation], timeout: 60)
+    }
+}
+
+private struct OfflineRecord {
+    let method: String
+    let host: String
+    let path: String
+    let apiKey: String
+    let query: String
+    let body: String
+}
+
+private final class OfflineURLProtocol: URLProtocol {
+    static var enabled = false
+    static var records: [OfflineRecord] = []
+    static let lock = NSLock()
+
+    override class func canInit(with request: URLRequest) -> Bool { enabled }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let url = request.url!
+        let method = request.httpMethod ?? "GET"
+        let bodyData = OfflineURLProtocol.bodyData(from: request)
+        let body = String(data: bodyData, encoding: .utf8) ?? ""
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        func query(_ name: String) -> String {
+            items.first { $0.name == name }?.value ?? ""
+        }
+        var apiKey = query("api_key")
+        if apiKey.isEmpty, let range = body.range(of: "api_key=") {
+            let rest = body[range.upperBound...]
+            apiKey = String(rest.prefix { $0 != "&" }).removingPercentEncoding ?? ""
+        }
+        if apiKey.isEmpty, let data = body.data(using: .utf8),
+           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let key = object["api_key"] as? String {
+            apiKey = key
+        }
+        if apiKey.isEmpty, let range = body.range(of: "name=\"api_key\"") {
+            let rest = body[range.upperBound...]
+            if let blank = rest.range(of: "\r\n\r\n") {
+                apiKey = String(rest[blank.upperBound...].prefix { $0 != "\r" })
+            }
+        }
+        let record = OfflineRecord(
+            method: method,
+            host: url.host ?? "",
+            path: url.path,
+            apiKey: apiKey,
+            query: url.query ?? "",
+            body: body
+        )
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.records.append(record)
+        OfflineURLProtocol.lock.unlock()
+        usleep(UInt32(Int.random(in: 0...20) * 1000))
+
+        let (status, type, payload) = OfflineURLProtocol.answer(record)
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: [
+            "Content-Type": type
+        ])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+
+    private static func bodyData(from request: URLRequest) -> Data {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return Data() }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 4096)
+        defer { buffer.deallocate() }
+        while stream.hasBytesAvailable {
+            let count = stream.read(buffer, maxLength: 4096)
+            if count <= 0 { break }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
+
+    private static func htmlPage() -> Data {
+        var page = "<!DOCTYPE html><html><head><title>Access denied | zerobounce.net | Zero Bounce</title></head><body>"
+        for _ in 0..<20000 { page += "<p>blocked</p>" }
+        page += "</body></html>"
+        return Data(page.utf8)
+    }
+
+    private static func answer(_ request: OfflineRecord) -> (Int, String, Data) {
+        let key = request.apiKey
+        if key.hasPrefix("html-403-") || key.hasPrefix("html-200-") {
+            return (key.hasPrefix("html-403-") ? 403 : 200, "text/html", htmlPage())
+        }
+        if key.hasPrefix("empty-") { return (200, "application/json", Data()) }
+        if key.hasPrefix("malformed-") {
+            return (200, "application/json", Data(("<<<not-json>>>" + String(repeating: "x", count: 5000)).utf8))
+        }
+        if key.hasPrefix("cf-json-") {
+            let json = #"{"type":"https://developers.cloudflare.com/support/error-1020/","title":"Error 1020: Access denied","status":403,"error_code":1020,"cloudflare_error":true}"#
+            return (403, "application/json", Data(json.utf8))
+        }
+        if key.hasPrefix("double-error-") {
+            return (400, "text/plain", Data("Error: Error: api_key is invalid".utf8))
+        }
+        if request.path.contains("validatebatch") && key.hasPrefix("batch-account-") {
+            let json = #"{"email_batch":[],"errors":[{"error":"Invalid API Key or your account ran out of credits","email_address":"all"}]}"#
+            return (200, "application/json", Data(json.utf8))
+        }
+        if request.path.contains("validatebatch") && key.hasPrefix("batch-partial-") {
+            let json = #"{"email_batch":[{"address":"good@example.com","status":"valid","processed_at":"2010-01-01"}],"errors":[{"error":"Invalid email address","email_address":"bad@"}]}"#
+            return (200, "application/json", Data(json.utf8))
+        }
+        if request.path.contains("getfile") {
+            return (200, "application/octet-stream", Data("email\n\(key)@example.com\n".utf8))
+        }
+        if request.path.contains("getcredits") {
+            return (200, "application/json", Data("{\"Credits\":\"7\"}".utf8))
+        }
+        if request.path.hasSuffix("/validate") {
+            let json = "{\"address\":\"\(key)\",\"status\":\"valid\",\"processed_at\":\"2010-01-01\"}"
+            return (200, "application/json", Data(json.utf8))
+        }
+        if request.path.contains("validatebatch") {
+            let json = "{\"email_batch\":[{\"address\":\"\(key)\",\"status\":\"valid\",\"processed_at\":\"2010-01-01\"}],\"errors\":[]}"
+            return (200, "application/json", Data(json.utf8))
+        }
+        if request.path.contains("/scoring") && !request.path.contains("sendfile") && !request.path.contains("getfile") {
+            let json = "{\"email\":\"\(key)\",\"score\":10}"
+            return (200, "application/json", Data(json.utf8))
+        }
+        let json = "{\"success\":true,\"message\":\"ok\",\"file_id\":\"\(key)\",\"file_name\":\"f.csv\",\"email\":\"\(key)\",\"domain\":\"\(key)\"}"
+        return (200, "application/json", Data(json.utf8))
+    }
+}
+
+final class OfflineApiTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        OfflineURLProtocol.enabled = true
+        OfflineURLProtocol.records = []
+        URLProtocol.registerClass(OfflineURLProtocol.self)
+    }
+
+    override func tearDown() {
+        OfflineURLProtocol.enabled = false
+        URLProtocol.unregisterClass(OfflineURLProtocol.self)
+        super.tearDown()
+    }
+
+    private func onlyRequest() -> OfflineRecord {
+        XCTAssertEqual(OfflineURLProtocol.records.count, 1)
+        return OfflineURLProtocol.records[0]
+    }
+
+    private func shortMessage(_ error: Error) -> String {
+        let text = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        XCTAssertLessThan(text.count, 500, text)
+        XCTAssertNil(text.range(of: "<html"))
+        XCTAssertNil(text.range(of: "Error: Error:"))
+        return text
+    }
+
+    func testOfflineCreditsValidateAndBatch() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "credits-key")
+        let exp = expectation(description: "credits")
+        sdk.getCredits { result in
+            if case .Success(let response) = result {
+                XCTAssertEqual(response.credits, "7")
+            } else { XCTFail("credits") }
+            exp.fulfill()
+        }
+        wait(for: [exp], timeout: 5)
+        let credits = onlyRequest()
+        XCTAssertEqual(credits.method, "GET")
+        XCTAssertEqual(credits.host, "api.zerobounce.net")
+        XCTAssertEqual(credits.path, "/v2/getcredits")
+        XCTAssertEqual(credits.apiKey, "credits-key")
+
+        OfflineURLProtocol.records = []
+        sdk.initialize(apiKey: "validate-key")
+        let options = ZBValidateOptions(activityData: false, verifyPlus: true)
+        let validate = expectation(description: "validate")
+        sdk.validate(email: "person@example.com", ipAddress: "", options: options) { result in
+            if case .Success(let response) = result {
+                XCTAssertEqual(response.address, "validate-key")
+            } else { XCTFail("validate") }
+            validate.fulfill()
+        }
+        wait(for: [validate], timeout: 5)
+        let validated = onlyRequest()
+        XCTAssertEqual(validated.path, "/v2/validate")
+        XCTAssertTrue(validated.query.contains("activity_data=false"))
+        XCTAssertTrue(validated.query.contains("verify_plus=true"))
+        XCTAssertFalse(validated.query.contains("timeout="))
+
+        OfflineURLProtocol.records = []
+        let posted = expectation(description: "post")
+        sdk.validate(email: "person@example.com", ipAddress: "203.0.113.5", options: ZBValidateOptions(timeout: 15, usePost: true)) { _ in
+            posted.fulfill()
+        }
+        wait(for: [posted], timeout: 5)
+        let post = onlyRequest()
+        XCTAssertEqual(post.method, "POST")
+        XCTAssertTrue(post.body.contains("timeout=15"))
+        XCTAssertFalse(post.body.contains("activity_data"))
+
+        OfflineURLProtocol.records = []
+        sdk.initialize(apiKey: "batch-key")
+        let batch = expectation(description: "batch")
+        sdk.validateBatch(emails: [
+            ["email_address": "a@example.com", "ip_address": ""],
+            ["email_address": "b@example.com", "ip_address": "203.0.113.9"]
+        ]) { result in
+            if case .Success(let response) = result {
+                XCTAssertEqual(response.emailBatch.first?.address, "batch-key")
+            } else { XCTFail("batch") }
+            batch.fulfill()
+        }
+        wait(for: [batch], timeout: 5)
+        let batched = onlyRequest()
+        XCTAssertEqual(batched.host, "api.zerobounce.net")
+        XCTAssertEqual(batched.path, "/v2/validatebatch")
+        XCTAssertTrue(batched.body.contains("null"))
+        XCTAssertTrue(batched.body.contains("203.0.113.9"))
+    }
+
+    func testOfflineErrorsAndSeparateClients() {
+        let html = ZeroBounceSDK()
+        html.initialize(apiKey: "html-403-user")
+        let denied = expectation(description: "403")
+        html.getCredits { result in
+            if case .Failure(let error) = result {
+                let text = self.shortMessage(error)
+                XCTAssertTrue(text.contains("Access denied"), text)
+            } else { XCTFail("html succeeded") }
+            denied.fulfill()
+        }
+        wait(for: [denied], timeout: 5)
+
+        let page = ZeroBounceSDK()
+        page.initialize(apiKey: "html-200-user")
+        let html200 = expectation(description: "200")
+        page.validate(email: "a@example.com", ipAddress: "") { result in
+            if case .Failure(let error) = result {
+                XCTAssertTrue(self.shortMessage(error).contains("Access denied"))
+            } else { XCTFail("html 200 succeeded") }
+            html200.fulfill()
+        }
+        wait(for: [html200], timeout: 5)
+
+        let empty = ZeroBounceSDK()
+        empty.initialize(apiKey: "empty-user")
+        let emptyExp = expectation(description: "empty")
+        empty.validate(email: "a@example.com", ipAddress: "") { result in
+            if case .Failure(let error) = result {
+                XCTAssertTrue(self.shortMessage(error).contains("Empty response"))
+            } else { XCTFail("empty succeeded") }
+            emptyExp.fulfill()
+        }
+        wait(for: [emptyExp], timeout: 5)
+
+        let bad = ZeroBounceSDK()
+        bad.initialize(apiKey: "malformed-user")
+        let badExp = expectation(description: "malformed")
+        bad.validate(email: "a@example.com", ipAddress: "") { result in
+            if case .Failure(let error) = result {
+                let text = self.shortMessage(error)
+                XCTAssertTrue(text.contains("not valid JSON"), text)
+                XCTAssertNil(text.range(of: "<<<not-json>>>"))
+            } else { XCTFail("malformed succeeded") }
+            badExp.fulfill()
+        }
+        wait(for: [badExp], timeout: 5)
+
+        let doubled = ZeroBounceSDK()
+        doubled.initialize(apiKey: "double-error-user")
+        let doubleExp = expectation(description: "double")
+        doubled.getActivityData(email: "a@example.com") { result in
+            if case .Failure(let error) = result {
+                let text = self.shortMessage(error)
+                XCTAssertTrue(text.contains("api_key is invalid"), text)
+            } else { XCTFail("double succeeded") }
+            doubleExp.fulfill()
+        }
+        wait(for: [doubleExp], timeout: 5)
+
+        let cloud = ZeroBounceSDK()
+        cloud.initialize(apiKey: "cf-json-user")
+        let cloudExp = expectation(description: "cf")
+        cloud.getCredits { result in
+            if case .Failure(let error) = result {
+                let text = self.shortMessage(error)
+                XCTAssertNil(text.range(of: "developers.cloudflare.com"))
+                XCTAssertTrue(text.contains("Access denied"), text)
+            } else { XCTFail("cloudflare succeeded") }
+            cloudExp.fulfill()
+        }
+        wait(for: [cloudExp], timeout: 5)
+
+        let account = ZeroBounceSDK()
+        account.initialize(apiKey: "batch-account-user")
+        let accountExp = expectation(description: "account")
+        account.validateBatch(emails: [["email_address": "a@example.com", "ip_address": ""]]) { result in
+            if case .Failure(let error) = result {
+                let text = self.shortMessage(error)
+                XCTAssertTrue(text.contains("Invalid API Key"))
+                XCTAssertTrue(text.contains("ran out of credits"))
+            } else { XCTFail("account error succeeded") }
+            accountExp.fulfill()
+        }
+        wait(for: [accountExp], timeout: 5)
+
+        let partial = ZeroBounceSDK()
+        partial.initialize(apiKey: "batch-partial-user")
+        let partialExp = expectation(description: "partial")
+        partial.validateBatch(emails: [
+            ["email_address": "good@example.com", "ip_address": ""],
+            ["email_address": "bad@", "ip_address": ""]
+        ]) { result in
+            if case .Success(let response) = result {
+                XCTAssertEqual(response.emailBatch.first?.address, "good@example.com")
+                XCTAssertEqual(response.errors.first?.emailAddress, "bad@")
+            } else { XCTFail("partial failed") }
+            partialExp.fulfill()
+        }
+        wait(for: [partialExp], timeout: 5)
+
+        let missing = ZeroBounceSDK()
+        missing.initialize(apiKey: "")
+        OfflineURLProtocol.records = []
+        let missingExp = expectation(description: "missing")
+        missing.getCredits { result in
+            if case .Failure(let error) = result {
+                XCTAssertTrue(self.shortMessage(error).contains("not initialized"))
+            } else { XCTFail("empty key succeeded") }
+            missingExp.fulfill()
+        }
+        wait(for: [missingExp], timeout: 5)
+        XCTAssertEqual(OfflineURLProtocol.records.count, 0)
+    }
+
+    func testOfflineFinderFileAndConcurrency() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "file-key")
+        var finder = ZBEmailFinderSendFileOptions()
+        finder.hasHeaderRow = false
+        let finderExp = expectation(description: "finder file")
+        let csv = FileManager.default.temporaryDirectory.appendingPathComponent("offline.csv")
+        try? Data("domain\nexample.com\n".utf8).write(to: csv)
+        sdk.sendEmailFinderFile(filePath: csv.path, domainColumn: 1, options: finder) { _ in
+            finderExp.fulfill()
+        }
+        wait(for: [finderExp], timeout: 5)
+        let sent = onlyRequest()
+        XCTAssertEqual(sent.path, "/email-finder/sendfile")
+        XCTAssertEqual(sent.host, "bulkapi.zerobounce.net")
+        XCTAssertTrue(sent.body.contains("has_header_row"))
+        XCTAssertTrue(sent.body.contains("false"))
+
+        let group = DispatchGroup()
+        let concurrent = NSLock()
+        var echoes: [Int: String] = [:]
+        for index in 0..<8 {
+            group.enter()
+            DispatchQueue.global().async {
+                let client = ZeroBounceSDK()
+                client.initialize(apiKey: "conc-\(index)")
+                client.validate(email: "person@example.com", ipAddress: "") { result in
+                    if case .Success(let response) = result {
+                        concurrent.lock()
+                        echoes[index] = response.address
+                        concurrent.unlock()
+                    }
+                    group.leave()
+                }
+            }
+        }
+        XCTAssertEqual(group.wait(timeout: .now() + 8), .success)
+        let keys = OfflineURLProtocol.records.filter { $0.apiKey.hasPrefix("conc-") }
+        XCTAssertEqual(keys.count, 8)
+        for index in 0..<8 {
+            XCTAssertEqual(echoes[index], "conc-\(index)")
+        }
     }
 }

@@ -42,6 +42,78 @@ public enum ZBError: LocalizedError {
         return .decodeError(messages: messages)
     }
     
+    static func message(from data: Data, statusCode: Int) -> String {
+        let body = String(data: data, encoding: .utf8) ?? ""
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return "Empty response from ZeroBounce (HTTP \(statusCode))"
+        }
+        let prefix = String(trimmed.prefix(2000)).lowercased()
+        if prefix.contains("<!doctype html") || prefix.contains("<html") || prefix.contains("<head") || prefix.contains("<body") {
+            if let title = htmlTitle(in: body), !title.isEmpty {
+                return "ZeroBounce returned an HTML error page (\"\(title)\") instead of an API response."
+            }
+            return "ZeroBounce returned an HTML error page instead of an API response."
+        }
+        if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
+            if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                if let title = object["title"] as? String,
+                   title.contains("Access denied") || title.contains("1020"),
+                   (object["cloudflare_error"] as? Bool) == true {
+                    return title
+                }
+                for key in ["message", "error_message", "error"] {
+                    if let value = object[key] as? String {
+                        let text = stripErrorPrefix(value)
+                        if !text.isEmpty { return text }
+                    }
+                }
+                for (key, value) in object where key != "success" && (key.contains("message") || key.contains("error")) {
+                    if let text = value as? String {
+                        let stripped = stripErrorPrefix(text)
+                        if !stripped.isEmpty { return stripped }
+                    }
+                }
+            } else if trimmed.count > 1000 {
+                return "ZeroBounce returned a response that is not valid JSON."
+            }
+            if trimmed.count > 1000 {
+                return "ZeroBounce returned a response that is not valid JSON."
+            }
+            return trimmed
+        }
+        if trimmed.count > 1000 {
+            return "ZeroBounce returned a response that is not valid JSON."
+        }
+        let message = stripErrorPrefix(trimmed)
+        if message.isEmpty {
+            return "Empty response from ZeroBounce (HTTP \(statusCode))"
+        }
+        return message
+    }
+
+    private static func stripErrorPrefix(_ value: String) -> String {
+        var message = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        while message.hasPrefix("Error:") || message.hasPrefix("[Error]:") {
+            if message.hasPrefix("Error:") {
+                message = String(message.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                message = String(message.dropFirst(8)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return message
+    }
+
+    private static func htmlTitle(in body: String) -> String? {
+        let lower = body.lowercased()
+        guard let start = lower.range(of: "<title"),
+              let open = lower.range(of: ">", range: start.upperBound..<lower.endIndex),
+              let close = lower.range(of: "</title>", range: open.upperBound..<lower.endIndex) else {
+            return nil
+        }
+        return String(body[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public var errorDescription: String? {
         switch self {
         case .notInitialized:

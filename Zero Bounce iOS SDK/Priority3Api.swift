@@ -56,7 +56,9 @@ internal final class Priority3Api {
     private func buildEmailFinderFields(domainColumn: Int, options: ZBEmailFinderSendFileOptions?) -> [String: Any] {
         var fields: [String: Any] = ["domain_column": domainColumn]
         guard let options = options else { return fields }
-        if options.hasHeaderRow == true { fields["has_header_row"] = "true" }
+        if let hasHeaderRow = options.hasHeaderRow {
+            fields["has_header_row"] = hasHeaderRow ? "true" : "false"
+        }
         if options.firstNameColumn > 0 { fields["first_name_column"] = options.firstNameColumn }
         if options.lastNameColumn > 0 { fields["last_name_column"] = options.lastNameColumn }
         if options.middleNameColumn > 0 { fields["middle_name_column"] = options.middleNameColumn }
@@ -104,7 +106,9 @@ internal final class Priority3Api {
 
     private func buildDomainSearchFields(domainColumn: Int, options: ZBDomainSearchSendFileOptions?) -> [String: Any] {
         var fields: [String: Any] = ["domain_column": domainColumn]
-        if options?.hasHeaderRow == true { fields["has_header_row"] = "true" }
+        if let hasHeaderRow = options?.hasHeaderRow {
+            fields["has_header_row"] = hasHeaderRow ? "true" : "false"
+        }
         return fields
     }
 

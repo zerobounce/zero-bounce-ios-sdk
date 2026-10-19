@@ -23,7 +23,12 @@ public class ZeroBounceSDK {
     
     private lazy var priority3Api = Priority3Api(sdk: self)
 
-    fileprivate init() {
+    var normalizedApiKey: String? {
+        guard let apiKey = apiKey, !apiKey.isEmpty else { return nil }
+        return apiKey
+    }
+
+    public init() {
         dateFormatter.dateFormat = "yyyy-MM-dd"
     }
     
@@ -50,7 +55,7 @@ public class ZeroBounceSDK {
         options: ZBValidateOptions?,
         completion: @escaping (ZBResult<ZBValidateResponse>) -> ()
     ) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -114,7 +119,7 @@ public class ZeroBounceSDK {
         options: ZBValidateOptions?,
         completion: @escaping (ZBResult<ZBValidateBatchResponse>) -> ()
     ) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -127,9 +132,20 @@ public class ZeroBounceSDK {
             }
         }
 
+        let emailBatch: [[String: Any]] = emails.map { item in
+            var mapped: [String: Any] = [:]
+            for (key, value) in item {
+                if key == "ip_address" && value.isEmpty {
+                    mapped[key] = NSNull()
+                } else {
+                    mapped[key] = value
+                }
+            }
+            return mapped
+        }
         var params: [String: Any] = [
             "api_key": apiKey,
-            "email_batch": emails
+            "email_batch": emailBatch
         ]
         if let options = options {
             if let timeout = options.timeout {
@@ -144,7 +160,17 @@ public class ZeroBounceSDK {
         }
 
         let jsonDataParams = try? JSONSerialization.data(withJSONObject: params)
-        sendPostJsonRequest(url: "\(apiBaseUrl)/validatebatch", params: jsonDataParams, completion: completion)
+        sendPostJsonRequest(url: "\(apiBaseUrl)/validatebatch", params: jsonDataParams) { (result: ZBResult<ZBValidateBatchResponse>) in
+            if case .Success(let response) = result,
+               let account = response.errors.first(where: { $0.emailAddress == "all" }) {
+                let text = account.error.isEmpty
+                    ? "Invalid API Key or your account ran out of credits"
+                    : account.error
+                completion(.Failure(ZBError.decodeError(messages: [text])))
+                return
+            }
+            completion(result)
+        }
     }
     
     // MARK: Email Finder
@@ -202,7 +228,7 @@ public class ZeroBounceSDK {
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
     ) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -258,7 +284,7 @@ public class ZeroBounceSDK {
         companyName: String?,
         completion: @escaping (ZBResult<ZBDomainSearchResponse>) -> ()
     ) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -281,7 +307,7 @@ public class ZeroBounceSDK {
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
     ) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -307,7 +333,7 @@ public class ZeroBounceSDK {
     /// This API will tell you how many credits you have left on your account. It's simple, fast and easy to use.
     ///
     public func getCredits(completion: @escaping (ZBResult<ZBCreditsResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -321,7 +347,7 @@ public class ZeroBounceSDK {
     /// - parameter endDate: The end date of when you want to view API usage
     ///
     public func getApiUsage(startDate: Date, endDate: Date, completion: @escaping (ZBResult<ZBGetApiUsageResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -341,7 +367,7 @@ public class ZeroBounceSDK {
     /// - parameter email: The email inbox you want to check the activity data for
     ///
     public func getActivityData(email: String, completion: @escaping (ZBResult<ZBActivityDataResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -354,7 +380,7 @@ public class ZeroBounceSDK {
     /// Real-time AI scoring for a single email (GET /scoring).
     ///
     public func scoreEmail(email: String, completion: @escaping (ZBResult<ZBScoreEmailResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -372,7 +398,7 @@ public class ZeroBounceSDK {
     /// Real-time AI scoring for a single email (POST /scoring, form-encoded).
     ///
     public func scoreEmailPost(email: String, completion: @escaping (ZBResult<ZBScoreEmailResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -395,7 +421,7 @@ public class ZeroBounceSDK {
         options: ZBEmailFinderSendFileOptions? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -409,7 +435,7 @@ public class ZeroBounceSDK {
         options: ZBEmailFinderSendFileOptions? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -417,7 +443,7 @@ public class ZeroBounceSDK {
     }
 
     public func emailFinderFileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -425,7 +451,7 @@ public class ZeroBounceSDK {
     }
 
     public func emailFinderGetFile(fileId: String, downloadPath: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -433,7 +459,7 @@ public class ZeroBounceSDK {
     }
 
     public func emailFinderDeleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -446,7 +472,7 @@ public class ZeroBounceSDK {
         options: ZBDomainSearchSendFileOptions? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -460,7 +486,7 @@ public class ZeroBounceSDK {
         options: ZBDomainSearchSendFileOptions? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -468,7 +494,7 @@ public class ZeroBounceSDK {
     }
 
     public func domainSearchFileStatus(fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -476,7 +502,7 @@ public class ZeroBounceSDK {
     }
 
     public func domainSearchGetFile(fileId: String, downloadPath: String, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -484,7 +510,7 @@ public class ZeroBounceSDK {
     }
 
     public func domainSearchDeleteFile(fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -496,7 +522,7 @@ public class ZeroBounceSDK {
         emailAddressColumn: Int,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -509,7 +535,7 @@ public class ZeroBounceSDK {
         emailAddressColumn: Int,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -517,7 +543,7 @@ public class ZeroBounceSDK {
     }
 
     public func getListEvaluatorResult(fileId: String, completion: @escaping (ZBDictionaryResult) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -525,7 +551,7 @@ public class ZeroBounceSDK {
     }
 
     public func sendEvaluatedFile(filePath: String, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -533,7 +559,7 @@ public class ZeroBounceSDK {
     }
 
     public func addFilter(rule: String, target: String, value: String, completion: @escaping (ZBDictionaryResult) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -541,7 +567,7 @@ public class ZeroBounceSDK {
     }
 
     public func listFilters(usePost: Bool = false, completion: @escaping (ZBDictionaryResult) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -549,7 +575,7 @@ public class ZeroBounceSDK {
     }
 
     public func deleteFilter(rule: String, target: String, value: String, completion: @escaping (ZBDictionaryResult) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -557,7 +583,7 @@ public class ZeroBounceSDK {
     }
 
     public func validateS3File(options: ZBValidateS3FileOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -565,7 +591,7 @@ public class ZeroBounceSDK {
     }
 
     public func scoreS3File(options: ZBScoreS3FileOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -573,7 +599,7 @@ public class ZeroBounceSDK {
     }
 
     public func exportS3File(fileId: String, exportBucket: String, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -581,7 +607,7 @@ public class ZeroBounceSDK {
     }
 
     public func listS3files(bucket: String? = nil, search: String? = nil, completion: @escaping (ZBResult<[ZBS3ListFileEntry]>) -> ()) {
-        guard apiKey != nil else {
+        guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -604,7 +630,7 @@ public class ZeroBounceSDK {
     }
     
     private func _fileStatus(scoring: Bool, fileId: String, completion: @escaping (ZBResult<ZBFileStatusResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -631,7 +657,7 @@ public class ZeroBounceSDK {
     }
     
     private func _deleteFile(scoring: Bool, fileId: String, completion: @escaping (ZBResult<ZBDeleteFileResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -743,7 +769,7 @@ public class ZeroBounceSDK {
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -802,7 +828,7 @@ public class ZeroBounceSDK {
         allowPhase2: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -903,7 +929,7 @@ public class ZeroBounceSDK {
     }
     
     private func _getFile(scoring: Bool, fileId: String, options: ZBGetFileOptions?, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
-        guard let apiKey = self.apiKey else {
+        guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
@@ -915,6 +941,13 @@ public class ZeroBounceSDK {
         sendRequest(url: requestURL.absoluteString) { result in
             switch result {
             case .success(let response, let data):
+                if ZBError.message(from: data, statusCode: 200).contains("HTML error page")
+                    || data.isEmpty {
+                    completion(.Failure(ZBError.decodeError(messages: [
+                        ZBError.message(from: data, statusCode: 200)
+                    ])))
+                    return
+                }
                 
                 if let dict = try? JSONSerialization.jsonObject(with: data, options: .mutableLeaves) as? [String: Any] {
                     if self.getFileJsonIndicatesFailure(dict) {
@@ -1029,8 +1062,9 @@ public class ZeroBounceSDK {
                     let value = try JSONDecoder().decode(T.self, from: data)
                     completion(.Success(value))
                 } catch {
-                    NSLog("ZeroBounceSDK error \(error)")
-                    completion(.Failure(ZBError.decodeError(jsonData: data)))
+                    completion(.Failure(ZBError.decodeError(messages: [
+                        ZBError.message(from: data, statusCode: 200)
+                    ])))
                 }
                 
             case .failure (let error):
@@ -1060,18 +1094,21 @@ public class ZeroBounceSDK {
                 return
             }
             
-            NSLog("ZeroBounceSDK statusCode: \(statusCode)")
+            let body = data ?? Data()
             guard 200..<299 ~= statusCode else {
-                result(RequestResult.failure(ZBError.invalidResponse(statusCode: statusCode)))
+                result(RequestResult.failure(ZBError.decodeError(messages: [
+                    ZBError.message(from: body, statusCode: statusCode)
+                ])))
+                return
+            }
+            if body.isEmpty || ZBError.message(from: body, statusCode: statusCode).contains("HTML error page") {
+                result(RequestResult.failure(ZBError.decodeError(messages: [
+                    ZBError.message(from: body, statusCode: statusCode)
+                ])))
                 return
             }
             
-            guard let data = data else {
-                result(RequestResult.failure(ZBError.noData))
-                return
-            }
-            
-            result(RequestResult.success(response, data))
+            result(RequestResult.success(response, body))
         }).resume()
     }
 
