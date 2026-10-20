@@ -293,6 +293,36 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     }
     
     // MARK: Validate
+    // MARK: - sub_status decoding (RD-66)
+
+    private func decodeValidateResponse(status: String, subStatus: String) throws -> ZBValidateResponse {
+        let json = """
+        {"address":"agent@example.com","status":"\(status)","sub_status":"\(subStatus)"}
+        """.data(using: .utf8)!
+        return try JSONDecoder().decode(ZBValidateResponse.self, from: json)
+    }
+
+    func testSubStatusAiAgentMailboxWithValidStatus() throws {
+        let response = try decodeValidateResponse(status: "valid", subStatus: "ai_agent_mailbox")
+        XCTAssertEqual(response.status, .valid)
+        XCTAssertEqual(response.subStatus, .aiAgentMailbox)
+    }
+
+    func testSubStatusAiAgentMailboxWithCatchAllStatus() throws {
+        let response = try decodeValidateResponse(status: "catch-all", subStatus: "ai_agent_mailbox")
+        XCTAssertEqual(response.status, .catchAll)
+        XCTAssertEqual(response.subStatus, .aiAgentMailbox)
+    }
+
+    func testUnknownSubStatusDecodesToUnknownInsteadOfThrowing() throws {
+        // Before RD-66 this threw DecodingError.dataCorrupted and failed the
+        // entire validate response, because synthesised Codable rejects an
+        // unrecognised raw value and Optional only covers a missing/null key.
+        let response = try decodeValidateResponse(status: "valid", subStatus: "some_future_sub_status")
+        XCTAssertEqual(response.status, .valid)
+        XCTAssertEqual(response.subStatus, .unknown)
+    }
+
     func testValidate() {
         let email = "example@gmail.com"
         let ipAddress = "1.1.1.1"
