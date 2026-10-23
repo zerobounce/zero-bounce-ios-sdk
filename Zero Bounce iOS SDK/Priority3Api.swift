@@ -175,7 +175,7 @@ internal final class Priority3Api {
             return
         }
         sendBulkRootMultipart(
-            url: "\(sdk.bulkApiBaseUrl)/listevaluator/",
+            url: "\(sdk.listEvaluatorBaseUrl)/",
             filePath: filePath,
             fields: ["email_address_column": emailAddressColumn],
             completion: completion
@@ -193,7 +193,7 @@ internal final class Priority3Api {
             return
         }
         sendBulkRootMultipartData(
-            url: "\(sdk.bulkApiBaseUrl)/listevaluator/",
+            url: "\(sdk.listEvaluatorBaseUrl)/",
             fileData: fileData,
             fileName: fileName,
             fields: ["email_address_column": emailAddressColumn],
@@ -209,8 +209,17 @@ internal final class Priority3Api {
             completion(.Failure(ZBError.notInitialized))
             return
         }
+        let trimmed = fileId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_id"])))
+            return
+        }
+        // The file id is one path segment, so a slash in it must stay encoded.
         sdk.priority3SendDictionary(
-            url: sdk.priority3QueryURL(base: "\(sdk.bulkApiBaseUrl)/listevaluator/\(fileId)/", query: ["api_key": apiKey]),
+            url: sdk.priority3QueryURL(
+                base: "\(sdk.listEvaluatorBaseUrl)/\(ZeroBounceSDK.escapePathSegment(trimmed))/",
+                query: ["api_key": apiKey]
+            ),
             completion: completion
         )
     }
@@ -348,6 +357,236 @@ internal final class Priority3Api {
         postBulkRootForm(
             path: "/exportS3file",
             fields: ["file_id": fileId, "export_bucket": exportBucket],
+            completion: completion
+        )
+    }
+
+    // MARK: S3 email finder / domain search, SFTP/FTP bulk
+
+    func emailFinderS3File(
+        options: ZBBulkFileJobOptions,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        bulkRootFileJob(path: "/emailFinderS3file", options: options, fileNameRequired: true, completion: completion)
+    }
+
+    func domainSearchS3File(
+        options: ZBBulkFileJobOptions,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        bulkRootFileJob(path: "/domainSearchS3file", options: options, fileNameRequired: true, completion: completion)
+    }
+
+    /// The server, path and protocol are never sent by the SDK; they come from
+    /// your ZeroBounce settings.
+    ///
+    /// This is the one job whose file_name the docs list as optional: leave
+    /// `options.fileName` nil to use the input bucket from those settings.
+    func validateSFTPFile(
+        options: ZBBulkFileJobOptions,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        bulkRootFileJob(path: "/validateSFTPfile", options: options, fileNameRequired: false, completion: completion)
+    }
+
+    func scoreSFTPFile(
+        options: ZBBulkFileJobOptions,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        bulkRootFileJob(path: "/scoreSFTPfile", options: options, fileNameRequired: true, completion: completion)
+    }
+
+    func emailFinderSFTPFile(
+        options: ZBBulkFileJobOptions,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        bulkRootFileJob(path: "/emailFinderSFTPfile", options: options, fileNameRequired: true, completion: completion)
+    }
+
+    func domainSearchSFTPFile(
+        options: ZBBulkFileJobOptions,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        bulkRootFileJob(path: "/domainSearchSFTPfile", options: options, fileNameRequired: true, completion: completion)
+    }
+
+    /// Note the field name: this endpoint takes export_path, not the
+    /// export_bucket that `exportS3File` sends. Pass nil to use the export path
+    /// from your ZeroBounce settings.
+    func exportSFTPFile(
+        fileId: String,
+        exportPath: String?,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        exportBulkFile(
+            path: "/exportSFTPfile",
+            destinationField: "export_path",
+            fileId: fileId,
+            destination: exportPath,
+            completion: completion
+        )
+    }
+
+    /// POSTs one of the six documented S3 / SFTP file jobs on the bulkapi root.
+    ///
+    /// Booleans go on the wire as the strings "true"/"false", and an option the
+    /// caller left unset is not sent at all.
+    private func bulkRootFileJob(
+        path: String,
+        options: ZBBulkFileJobOptions,
+        fileNameRequired: Bool,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        let blank = options.fileName != nil
+            && options.fileName!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        if (options.fileName == nil && fileNameRequired) || blank {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_name"])))
+            return
+        }
+
+        var fields: [String: String] = ["has_header_row": options.hasHeaderRow ? "true" : "false"]
+        if let fileName = options.fileName { fields["file_name"] = fileName }
+        if let removeDuplicates = options.removeDuplicates {
+            fields["remove_duplicates"] = removeDuplicates ? "true" : "false"
+        }
+        if let returnUrl = options.returnUrl { fields["return_url"] = returnUrl }
+
+        postBulkRootForm(path: path, fields: fields, completion: completion)
+    }
+
+    private func exportBulkFile(
+        path: String,
+        destinationField: String,
+        fileId: String,
+        destination: String?,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) {
+        if fileId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_id"])))
+            return
+        }
+        if let destination = destination,
+           destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: \(destinationField)"])))
+            return
+        }
+
+        var fields: [String: String] = ["file_id": fileId]
+        if let destination = destination { fields[destinationField] = destination }
+        postBulkRootForm(path: path, fields: fields, completion: completion)
+    }
+
+    // MARK: Inbox Placement Tester (/api/ipt)
+    //
+    // Its own host, the API key on the query string, camelCase JSON bodies, and
+    // PUT and DELETE as well as GET and POST. Spends the account's inbox-test
+    // credits.
+
+    func getInboxPlacementProviders(completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()) {
+        inboxPlacementRequest(method: "GET", path: "/providers", query: [:], body: nil, completion: completion)
+    }
+
+    func getInboxPlacementTestTypes(completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()) {
+        inboxPlacementRequest(method: "GET", path: "/test-types", query: [:], body: nil, completion: completion)
+    }
+
+    func createInboxPlacementTest(
+        name: String,
+        options: ZBCreateInboxPlacementTestOptions?,
+        completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+    ) {
+        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: name"])))
+            return
+        }
+        var body: [String: Any] = ["name": name]
+        if let options = options {
+            if let testType = options.testType { body["testType"] = testType }
+            if let senderEmail = options.senderEmail { body["senderEmail"] = senderEmail }
+            if let providerIds = options.providerIds { body["providerIds"] = providerIds }
+            if let seedIds = options.seedIds { body["seedIds"] = seedIds }
+            if let webhookUrl = options.webhookUrl { body["webhookUrl"] = webhookUrl }
+        }
+        inboxPlacementRequest(method: "POST", path: "/test", query: [:], body: body, completion: completion)
+    }
+
+    func getInboxPlacementTest(
+        testId: String,
+        completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+    ) {
+        guard let segment = inboxPlacementTestSegment(testId, completion) else { return }
+        inboxPlacementRequest(method: "GET", path: "/test/\(segment)", query: [:], body: nil, completion: completion)
+    }
+
+    func listInboxPlacementTests(
+        options: ZBListInboxPlacementTestsOptions?,
+        completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+    ) {
+        var query: [String: String] = [:]
+        if let options = options {
+            if let status = options.status { query["status"] = status }
+            if let page = options.page { query["page"] = String(page) }
+            if let pageSize = options.pageSize { query["pageSize"] = String(pageSize) }
+        }
+        inboxPlacementRequest(method: "GET", path: "/test", query: query, body: nil, completion: completion)
+    }
+
+    func deleteInboxPlacementTest(
+        testId: String,
+        completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+    ) {
+        guard let segment = inboxPlacementTestSegment(testId, completion) else { return }
+        inboxPlacementRequest(method: "DELETE", path: "/test/\(segment)", query: [:], body: nil, completion: completion)
+    }
+
+    func getInboxPlacementWebhook(completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()) {
+        inboxPlacementRequest(method: "GET", path: "/webhook", query: [:], body: nil, completion: completion)
+    }
+
+    func setInboxPlacementWebhook(
+        webhookUrl: String,
+        completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+    ) {
+        if webhookUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: webhook_url"])))
+            return
+        }
+        inboxPlacementRequest(
+            method: "PUT", path: "/webhook", query: [:],
+            body: ["webhookUrl": webhookUrl], completion: completion
+        )
+    }
+
+    private func inboxPlacementTestSegment(
+        _ testId: String,
+        _ completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+    ) -> String? {
+        let trimmed = testId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: test_id"])))
+            return nil
+        }
+        return ZeroBounceSDK.escapePathSegment(trimmed)
+    }
+
+    private func inboxPlacementRequest(
+        method: String,
+        path: String,
+        query: [String: String],
+        body: [String: Any]?,
+        completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+    ) {
+        guard let apiKey = sdk.apiKey else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        var params = query
+        // The API key goes on the query string here, not in the body.
+        params["api_key"] = apiKey
+        sdk.priority3JsonDictionaryRequest(
+            method: method,
+            url: sdk.priority3QueryURL(base: sdk.inboxPlacementBaseUrl + path, query: params),
+            body: body,
             completion: completion
         )
     }

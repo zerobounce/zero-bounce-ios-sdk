@@ -13,7 +13,10 @@ public struct ZBValidateResponse : Codable, Equatable {
     public let address: String
 
     ///[valid, invalid, catch-all, unknown, spamtrap, abuse, do_not_mail]
-    public let status: ZBValidateStatus
+    ///
+    ///Absent while a greylist retry is still running, which answers with
+    ///`message` instead of a result.
+    public let status: ZBValidateStatus?
 
     ///[antispam_system, greylisted, ..., possible_trap, ..., mx_forward, blocked, allowed, accept_all, role_based_accept_all, gold]
     public let subStatus: ZBValidateSubStatus?
@@ -72,8 +75,19 @@ public struct ZBValidateResponse : Codable, Equatable {
     ///The country of the IP passed in.
     public let country: String?
 
-    ///The UTC time the email was validated.
-    public let processedAt: String
+    ///The UTC time the email was validated. Absent while a greylist retry is
+    ///still running, which answers with `message` instead of a result.
+    public let processedAt: String?
+
+    ///Returned with domain_info.
+    public let domainWebsiteExists: String?
+
+    ///Returned with domain_info.
+    public let domainRegistrantCompanyName: String?
+
+    ///The API's "Message" key, returned instead of a result while a greylist
+    ///retry is still running.
+    public let message: String?
 
     enum CodingKeys: String, CodingKey {
         case address
@@ -98,5 +112,8 @@ public struct ZBValidateResponse : Codable, Equatable {
         case zipCode = "zipcode"
         case country
         case processedAt = "processed_at"
+        case domainWebsiteExists = "domain_website_exists"
+        case domainRegistrantCompanyName = "domain_registrant_company_name"
+        case message = "Message"
     }
 }

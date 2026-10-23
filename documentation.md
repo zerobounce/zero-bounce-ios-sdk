@@ -366,7 +366,105 @@ xcodebuild test \
 
 `ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids build failures when embedding **Mocker.framework** into the test bundle under strict Xcode sandboxing. There are **25** unit tests; you should see **TEST SUCCEEDED** and **Executed 25 tests, with 0 failures**.
 
-#### Sample App
+#### Validate options
+
+`validate` takes a `ZBValidateOptions`. An option left `nil` is not sent, and
+booleans go on the wire as the strings `"true"`/`"false"`.
+
+```swift
+ZeroBounceSDK.shared.validate(
+    email: "<EMAIL>",
+    options: ZBValidateOptions(
+        timeout: 30,                 // 3-60 seconds
+        activityData: true,          // fills activeInDays / activeFirstSeen
+        verifyPlus: true,
+        domainInfo: true,            // fills domainWebsiteExists / domainRegistrantCompanyName
+        greylistProcessing: true,
+        callbackUrl: "https://example.com/greylist",
+        usePost: true                // form-encoded POST /v2/validate instead of GET
+    )
+) { result in print(result) }
+```
+
+`callbackUrl` is where the greylist retry posts its result, so it is rejected
+without `greylistProcessing: true` — before any request is sent. While that
+retry is still running the API answers with a `Message` and **no** `status` or
+`processed_at`, so `ZBValidateResponse.status` and `.processedAt` are optional
+and the text lands on `.message`.
+
+## S3 and SFTP/FTP bulk
+
+Queue a job on a file that already sits in your Amazon S3 bucket, or on your
+SFTP/FTP server. See the [S3](https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api)
+and [SFTP](https://www.zerobounce.net/docs/api-integrations/sftp_bulk_api) docs.
+These live on the bulkapi host *without* the `/v2` path.
+
+```swift
+let zb = ZeroBounceSDK.shared
+
+// Amazon S3. fileName is the full path, as returned by listS3files.
+zb.emailFinderS3File(options: ZBBulkFileJobOptions(fileName: "lists/leads.csv")) { _ in }
+zb.domainSearchS3File(
+    options: ZBBulkFileJobOptions(
+        fileName: "lists/leads.csv",
+        removeDuplicates: true,
+        returnUrl: "https://example.com/zerobounce-done"
+    )
+) { _ in }
+
+// SFTP/FTP. The server, path and protocol come from your ZeroBounce settings.
+// fileName may be left nil for validateSFTPFile alone, which then uses the
+// input bucket from those settings.
+zb.validateSFTPFile(options: ZBBulkFileJobOptions()) { _ in }
+zb.scoreSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
+zb.emailFinderSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
+zb.domainSearchSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
+
+// Note the field: this one takes export_path, not export_bucket.
+// nil uses the export path from your settings.
+zb.exportSFTPFile(fileId: "<FILE_ID>", exportPath: "/exports") { _ in }
+```
+
+## Inbox Placement Tester
+
+Runs on its own host, takes the API key on the query string, and sends camelCase
+JSON bodies. It spends the account's inbox-test credits.
+
+```swift
+let zb = ZeroBounceSDK.shared
+
+zb.getInboxPlacementProviders { _ in }
+zb.getInboxPlacementTestTypes { _ in }
+
+zb.createInboxPlacementTest(
+    name: "Launch",
+    options: ZBCreateInboxPlacementTestOptions(
+        testType: 1,
+        senderEmail: "news@example.com",
+        webhookUrl: "https://example.com/ipt-webhook"
+    )
+) { _ in }
+
+// Send your campaign to the seeds you got back, then read the results.
+zb.getInboxPlacementTest(testId: "<TEST_ID>") { _ in }
+
+zb.listInboxPlacementTests(options: ZBListInboxPlacementTestsOptions(status: "finished", page: 1)) { _ in }
+zb.setInboxPlacementWebhook(webhookUrl: "https://example.com/ipt-webhook") { _ in }
+zb.getInboxPlacementWebhook { _ in }
+zb.deleteInboxPlacementTest(testId: "<TEST_ID>") { _ in }
+```
+
+## Per-API base URLs
+
+The list evaluator and the Inbox Placement Tester are separate hosts, so
+`initialize` alone leaves them pointing at the live API.
+
+```swift
+ZeroBounceSDK.shared.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/listevaluator")
+ZeroBounceSDK.shared.setInboxPlacementBaseUrl("https://bulkapi.zerobounce.net/api/ipt")
+```
+
+## Sample App
 - You can also clone the repo and access the Sample App inside the project to check out some examples. Just initialize the SDK with your own API key and uncomment the endpoint that you want to test.
 
 **Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**

@@ -352,6 +352,104 @@ ZeroBounceSDK.shared.scoringDeleteFile(fileId: fileId) { result in
 }
 ```
 
+## Validate options
+
+`validate` takes a `ZBValidateOptions`. An option left `nil` is not sent, and
+booleans go on the wire as the strings `"true"`/`"false"`.
+
+```swift
+ZeroBounceSDK.shared.validate(
+    email: "<EMAIL>",
+    options: ZBValidateOptions(
+        timeout: 30,                 // 3-60 seconds
+        activityData: true,          // fills activeInDays / activeFirstSeen
+        verifyPlus: true,
+        domainInfo: true,            // fills domainWebsiteExists / domainRegistrantCompanyName
+        greylistProcessing: true,
+        callbackUrl: "https://example.com/greylist",
+        usePost: true                // form-encoded POST /v2/validate instead of GET
+    )
+) { result in print(result) }
+```
+
+`callbackUrl` is where the greylist retry posts its result, so it is rejected
+without `greylistProcessing: true` — before any request is sent. While that
+retry is still running the API answers with a `Message` and **no** `status` or
+`processed_at`, so `ZBValidateResponse.status` and `.processedAt` are optional
+and the text lands on `.message`.
+
+## S3 and SFTP/FTP bulk
+
+Queue a job on a file that already sits in your Amazon S3 bucket, or on your
+SFTP/FTP server. See the [S3](https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api)
+and [SFTP](https://www.zerobounce.net/docs/api-integrations/sftp_bulk_api) docs.
+These live on the bulkapi host *without* the `/v2` path.
+
+```swift
+let zb = ZeroBounceSDK.shared
+
+// Amazon S3. fileName is the full path, as returned by listS3files.
+zb.emailFinderS3File(options: ZBBulkFileJobOptions(fileName: "lists/leads.csv")) { _ in }
+zb.domainSearchS3File(
+    options: ZBBulkFileJobOptions(
+        fileName: "lists/leads.csv",
+        removeDuplicates: true,
+        returnUrl: "https://example.com/zerobounce-done"
+    )
+) { _ in }
+
+// SFTP/FTP. The server, path and protocol come from your ZeroBounce settings.
+// fileName may be left nil for validateSFTPFile alone, which then uses the
+// input bucket from those settings.
+zb.validateSFTPFile(options: ZBBulkFileJobOptions()) { _ in }
+zb.scoreSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
+zb.emailFinderSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
+zb.domainSearchSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
+
+// Note the field: this one takes export_path, not export_bucket.
+// nil uses the export path from your settings.
+zb.exportSFTPFile(fileId: "<FILE_ID>", exportPath: "/exports") { _ in }
+```
+
+## Inbox Placement Tester
+
+Runs on its own host, takes the API key on the query string, and sends camelCase
+JSON bodies. It spends the account's inbox-test credits.
+
+```swift
+let zb = ZeroBounceSDK.shared
+
+zb.getInboxPlacementProviders { _ in }
+zb.getInboxPlacementTestTypes { _ in }
+
+zb.createInboxPlacementTest(
+    name: "Launch",
+    options: ZBCreateInboxPlacementTestOptions(
+        testType: 1,
+        senderEmail: "news@example.com",
+        webhookUrl: "https://example.com/ipt-webhook"
+    )
+) { _ in }
+
+// Send your campaign to the seeds you got back, then read the results.
+zb.getInboxPlacementTest(testId: "<TEST_ID>") { _ in }
+
+zb.listInboxPlacementTests(options: ZBListInboxPlacementTestsOptions(status: "finished", page: 1)) { _ in }
+zb.setInboxPlacementWebhook(webhookUrl: "https://example.com/ipt-webhook") { _ in }
+zb.getInboxPlacementWebhook { _ in }
+zb.deleteInboxPlacementTest(testId: "<TEST_ID>") { _ in }
+```
+
+## Per-API base URLs
+
+The list evaluator and the Inbox Placement Tester are separate hosts, so
+`initialize` alone leaves them pointing at the live API.
+
+```swift
+ZeroBounceSDK.shared.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/listevaluator")
+ZeroBounceSDK.shared.setInboxPlacementBaseUrl("https://bulkapi.zerobounce.net/api/ipt")
+```
+
 ## Sample App
 - You can also clone the repo and access the Sample App inside the project to check out some examples. Just initialize the SDK with your own API key and uncomment the endpoint that you want to test.
 
@@ -386,15 +484,25 @@ xcodebuild test \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
-**With iOS Simulator** (requires a simulator runtime from Xcode → Settings → Components). Use a device name that exists on your Mac (`xcrun simctl list devices available`). `ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids embed/copy failures for the **Mocker** test dependency under some Xcode sandbox settings.
+**With iOS Simulator** (requires a simulator runtime from Xcode → Settings → Components). Use a device id that exists on your Mac (`xcrun simctl list devices available`).
+
+Put derived data **outside the repository**. With the default in-repo `build/` directory, copying the **Mocker** test framework into the simulator fails with a wall of `rsync: ... Operation not permitted` errors that look like a build break but are a sandbox problem:
 
 ```bash
-xcodebuild test \
+xcodebuild build-for-testing \
   -workspace "Zero Bounce iOS SDK.xcworkspace" \
   -scheme "Zero Bounce iOS SDK" \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4' \
-  ENABLE_USER_SCRIPT_SANDBOXING=NO
+  -sdk iphonesimulator \
+  -derivedDataPath /tmp/zb-ios-dd
+
+xcodebuild test-without-building \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -destination "id=<SIMULATOR_UDID>" \
+  -derivedDataPath /tmp/zb-ios-dd
 ```
+
+If `xcodebuild` reports `CoreSimulator is out of date`, run `xcrun simctl list devices available` once — it reinstalls the matching service — then retry.
 
 ### Expected Output
 

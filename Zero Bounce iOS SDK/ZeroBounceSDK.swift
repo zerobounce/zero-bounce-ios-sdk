@@ -17,6 +17,11 @@ public class ZeroBounceSDK {
     var bulkApiRootUrl = "https://bulkapi.zerobounce.net"
     var bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
     var bulkApiScoringBaseUrl = "https://bulkapi.zerobounce.net/v2/scoring"
+    /// The list evaluator and the Inbox Placement Tester have their own base
+    /// URLs, not paths built from the bulk one. `initialize` alone leaves them
+    /// pointing at the live API.
+    var listEvaluatorBaseUrl = "https://bulkapi.zerobounce.net/v2/listevaluator"
+    var inboxPlacementBaseUrl = "https://bulkapi.zerobounce.net/api/ipt"
     var apiKey: String?
     var apiBaseUrl = ZBApiURL.API_DEFAULT_URL.rawValue
     let dateFormatter = DateFormatter()
@@ -67,6 +72,22 @@ public class ZeroBounceSDK {
                 return
             }
         }
+        if let options = options, let callbackUrl = options.callbackUrl {
+            if callbackUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                completion(ZBResult.Failure(ZBError.decodeError(messages: [
+                    "Empty parameter: callback_url"
+                ])))
+                return
+            }
+            // The callback is where the greylist retry posts its result, so it
+            // is meaningless — and rejected by the API — without the retry.
+            if options.greylistProcessing != true {
+                completion(ZBResult.Failure(ZBError.decodeError(messages: [
+                    "Invalid parameter: callback_url requires greylist_processing to be true"
+                ])))
+                return
+            }
+        }
 
         let ipAddressPart = ipAddress != nil ? "\(ipAddress!)" : ""
         var items: [URLQueryItem] = [
@@ -90,6 +111,15 @@ public class ZeroBounceSDK {
                 if let verifyPlus = options.verifyPlus {
                     fields["verify_plus"] = verifyPlus ? "true" : "false"
                 }
+                if let domainInfo = options.domainInfo {
+                    fields["domain_info"] = domainInfo ? "true" : "false"
+                }
+                if let greylistProcessing = options.greylistProcessing {
+                    fields["greylist_processing"] = greylistProcessing ? "true" : "false"
+                }
+                if let callbackUrl = options.callbackUrl {
+                    fields["callback_url"] = callbackUrl
+                }
                 sendFormPostRequest(url: apiBaseUrl + "/validate", formFields: fields, completion: completion)
                 return
             }
@@ -101,6 +131,17 @@ public class ZeroBounceSDK {
             }
             if let verifyPlus = options.verifyPlus {
                 items.append(URLQueryItem(name: "verify_plus", value: verifyPlus ? "true" : "false"))
+            }
+            if let domainInfo = options.domainInfo {
+                items.append(URLQueryItem(name: "domain_info", value: domainInfo ? "true" : "false"))
+            }
+            if let greylistProcessing = options.greylistProcessing {
+                items.append(URLQueryItem(
+                    name: "greylist_processing", value: greylistProcessing ? "true" : "false"
+                ))
+            }
+            if let callbackUrl = options.callbackUrl {
+                items.append(URLQueryItem(name: "callback_url", value: callbackUrl))
             }
         }
         sendJsonRequest(url: makeURL("/validate", queryItems: items), completion: completion)
@@ -604,6 +645,131 @@ public class ZeroBounceSDK {
             return
         }
         priority3Api.exportS3File(fileId: fileId, exportBucket: exportBucket, completion: completion)
+    }
+
+    // MARK: S3 email finder / domain search, SFTP/FTP bulk
+    //
+    // https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api
+    // https://www.zerobounce.net/docs/api-integrations/sftp_bulk_api
+    //
+    // These live on the bulkapi host WITHOUT the /v2 path. The SFTP server,
+    // path and protocol are never sent by the SDK; they come from your
+    // ZeroBounce settings.
+
+    public func emailFinderS3File(options: ZBBulkFileJobOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.emailFinderS3File(options: options, completion: completion)
+    }
+
+    public func domainSearchS3File(options: ZBBulkFileJobOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.domainSearchS3File(options: options, completion: completion)
+    }
+
+    /// This is the one job whose file_name the docs list as optional: leave
+    /// `options.fileName` nil to use the input bucket from your settings.
+    public func validateSFTPFile(options: ZBBulkFileJobOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.validateSFTPFile(options: options, completion: completion)
+    }
+
+    public func scoreSFTPFile(options: ZBBulkFileJobOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.scoreSFTPFile(options: options, completion: completion)
+    }
+
+    public func emailFinderSFTPFile(options: ZBBulkFileJobOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.emailFinderSFTPFile(options: options, completion: completion)
+    }
+
+    public func domainSearchSFTPFile(options: ZBBulkFileJobOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.domainSearchSFTPFile(options: options, completion: completion)
+    }
+
+    /// Note the field name: this endpoint takes export_path, not the
+    /// export_bucket that `exportS3File` sends. Pass nil to use the export path
+    /// from your ZeroBounce settings.
+    public func exportSFTPFile(fileId: String, exportPath: String?, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        priority3Api.exportSFTPFile(fileId: fileId, exportPath: exportPath, completion: completion)
+    }
+
+    // MARK: Inbox Placement Tester
+    //
+    // Its own host, the API key on the query string, camelCase JSON bodies.
+    // Spends the account's inbox-test credits.
+
+    public func getInboxPlacementProviders(completion: @escaping (ZBDictionaryResult) -> ()) {
+        priority3Api.getInboxPlacementProviders(completion: completion)
+    }
+
+    public func getInboxPlacementTestTypes(completion: @escaping (ZBDictionaryResult) -> ()) {
+        priority3Api.getInboxPlacementTestTypes(completion: completion)
+    }
+
+    public func createInboxPlacementTest(
+        name: String,
+        options: ZBCreateInboxPlacementTestOptions? = nil,
+        completion: @escaping (ZBDictionaryResult) -> ()
+    ) {
+        priority3Api.createInboxPlacementTest(name: name, options: options, completion: completion)
+    }
+
+    public func getInboxPlacementTest(testId: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        priority3Api.getInboxPlacementTest(testId: testId, completion: completion)
+    }
+
+    public func listInboxPlacementTests(
+        options: ZBListInboxPlacementTestsOptions? = nil,
+        completion: @escaping (ZBDictionaryResult) -> ()
+    ) {
+        priority3Api.listInboxPlacementTests(options: options, completion: completion)
+    }
+
+    public func deleteInboxPlacementTest(testId: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        priority3Api.deleteInboxPlacementTest(testId: testId, completion: completion)
+    }
+
+    public func getInboxPlacementWebhook(completion: @escaping (ZBDictionaryResult) -> ()) {
+        priority3Api.getInboxPlacementWebhook(completion: completion)
+    }
+
+    public func setInboxPlacementWebhook(webhookUrl: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        priority3Api.setInboxPlacementWebhook(webhookUrl: webhookUrl, completion: completion)
+    }
+
+    /// Overrides the list evaluator base URL. It is a separate host rather than
+    /// a path built from the bulk base, so `initialize` alone does not change it.
+    public func setListEvaluatorBaseUrl(_ url: String) {
+        listEvaluatorBaseUrl = url
+    }
+
+    /// Overrides the Inbox Placement Tester base URL. See `setListEvaluatorBaseUrl`.
+    public func setInboxPlacementBaseUrl(_ url: String) {
+        inboxPlacementBaseUrl = url
     }
 
     public func listS3files(bucket: String? = nil, search: String? = nil, completion: @escaping (ZBResult<[ZBS3ListFileEntry]>) -> ()) {
@@ -1110,6 +1276,57 @@ public class ZeroBounceSDK {
             
             result(RequestResult.success(response, body))
         }).resume()
+    }
+
+    /// Escapes a value as a single path segment, so a slash in it stays encoded.
+    internal static func escapePathSegment(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
+    /// One request with an explicit method and an optional JSON body, for the
+    /// Inbox Placement Tester's PUT and DELETE.
+    internal func priority3JsonDictionaryRequest(
+        method: String,
+        url: String,
+        body: [String: Any]?,
+        completion: @escaping (ZBDictionaryResult) -> ()
+    ) {
+        guard let urlValue = URL(string: url) else {
+            completion(.Failure(ZBError.invalidEndpoint))
+            return
+        }
+        var request = URLRequest(url: urlValue)
+        request.httpMethod = method
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body = body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        }
+        sendRequest(request: request) { result in
+            switch result {
+            case .success(_, let data):
+                // DELETE answers with an empty body.
+                if data.isEmpty {
+                    completion(.Success([:]))
+                    return
+                }
+                do {
+                    let object = try JSONSerialization.jsonObject(with: data, options: [])
+                    if let dict = object as? [String: Any] {
+                        completion(.Success(dict))
+                    } else {
+                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                    }
+                } catch {
+                    completion(.Failure(error))
+                }
+            case .failure(let error):
+                completion(.Failure(error))
+            }
+        }
     }
 
     internal func priority3QueryURL(base: String, query: [String: String]) -> String {

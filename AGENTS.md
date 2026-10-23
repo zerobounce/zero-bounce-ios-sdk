@@ -59,3 +59,26 @@ Publishing and pushing tags need a maintainer's explicit approval. Do not bump t
 2. Set the same version in both `s.version` in `ZeroBounceSDK.podspec` and every `MARKETING_VERSION` in `Zero Bounce iOS SDK.xcodeproj/project.pbxproj`. The publish workflow fails if they differ.
 3. Run the `xcodebuild test` command above.
 4. Tag `vx.y.z` on that commit and run the Publish workflow. It publishes the CocoaPod from that tag.
+
+## Build and test
+
+Derived data must live **outside the repository**. With the default in-repo `build/` directory, copying the Mocker test framework into the simulator fails with a wall of `rsync: ... Operation not permitted` errors that look like a build break but are a sandbox problem:
+
+```sh
+xcodebuild build-for-testing -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" -sdk iphonesimulator -derivedDataPath /tmp/zb-ios-dd
+xcodebuild test-without-building -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" -destination "id=<SIMULATOR_UDID>" -derivedDataPath /tmp/zb-ios-dd
+```
+
+If `xcodebuild` reports `CoreSimulator is out of date`, run `xcrun simctl list devices available` once — it reinstalls the matching service — then retry. `swift build` does **not** work: the package imports UIKit, so it must be built for an iOS SDK, not macOS.
+
+## Rules
+
+- **Only endpoints documented at https://www.zerobounce.net/docs/.** Do not add a method for an endpoint the public docs do not describe. Check before concluding something is undocumented: the S3 and SFTP bulk endpoints live under https://www.zerobounce.net/docs/api-integrations, not the main API reference.
+- **Four base URLs.** `apiBaseUrl`, `bulkApiBaseUrl` (ends in `/v2`), `bulkApiRootUrl` (the S3/SFTP jobs, **no** `/v2`), and `listEvaluatorBaseUrl` / `inboxPlacementBaseUrl`. The last two are separate hosts rather than paths built from the bulk base, so `initialize` alone leaves them on the live API — use `setListEvaluatorBaseUrl` / `setInboxPlacementBaseUrl`.
+- **Two bulk shapes are easy to get wrong.** `validateSFTPFile`'s `fileName` is optional — leaving it nil uses the input bucket from the account's settings, and every other job requires it. `exportSFTPFile` sends `export_path`, not the `export_bucket` that `exportS3File` sends.
+- **A greylist-pending response has no `status` and no `processed_at`.** Both are optional on `ZBValidateResponse` for that reason; making either non-optional again makes the whole response fail to decode.
+- **Two test harnesses live in one file.** `Zero_Bounce_iOS_SDKTests` uses Mocker; `OfflineApiTests` uses `OfflineURLProtocol`, which records every request. Prefer `OfflineApiTests` for new work — Mocker's registry is global and a mock registered with `ignoreQuery: true` will swallow requests from the other class's tests.
+- **`URL.path` is percent-decoded and drops a trailing slash.** Assert on `OfflineRecord.rawPath` for anything about encoding.
+- **Offline tests only.** Never call the live API from a test.

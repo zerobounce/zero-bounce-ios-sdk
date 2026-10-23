@@ -303,7 +303,8 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             address: email, status: .valid, subStatus: nil, account: "",
             domain: "", didYouMean: "", domainAgeDays: "", mxRecord: "",
             smtpProvider: "", firstName: nil, lastName: nil, gender: nil,
-            city: nil, region: nil, zipCode: nil, country: nil, processedAt: "date"
+            city: nil, region: nil, zipCode: nil, country: nil, processedAt: "date",
+            domainWebsiteExists: nil, domainRegistrantCompanyName: nil, message: nil
         )
         
         let mockedData = try! JSONEncoder().encode(validateResponse)
@@ -405,7 +406,8 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             address: "example@gmail.com", status: .valid, subStatus: nil, account: "",
             domain: "", didYouMean: "", domainAgeDays: "", mxRecord: "",
             smtpProvider: "", firstName: nil, lastName: nil, gender: nil,
-            city: nil, region: nil, zipCode: nil, country: nil, processedAt: "date"
+            city: nil, region: nil, zipCode: nil, country: nil, processedAt: "date",
+            domainWebsiteExists: nil, domainRegistrantCompanyName: nil, message: nil
         )
         let validateBatchResponse = ZBValidateBatchResponse(emailBatch: [validateResponse], errors: [])
         
@@ -968,7 +970,10 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
 private struct OfflineRecord {
     let method: String
     let host: String
+    /// `URL.path` is percent-decoded, so a %2F in a segment reads as a slash.
     let path: String
+    /// The percent-encoded path, which is what goes on the wire.
+    let rawPath: String
     let apiKey: String
     let query: String
     let body: String
@@ -1011,6 +1016,7 @@ private final class OfflineURLProtocol: URLProtocol {
             method: method,
             host: url.host ?? "",
             path: url.path,
+            rawPath: URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? url.path,
             apiKey: apiKey,
             query: url.query ?? "",
             body: body
@@ -1066,6 +1072,11 @@ private final class OfflineURLProtocol: URLProtocol {
         if key.hasPrefix("cf-json-") {
             let json = #"{"type":"https://developers.cloudflare.com/support/error-1020/","title":"Error 1020: Access denied","status":403,"error_code":1020,"cloudflare_error":true}"#
             return (403, "application/json", Data(json.utf8))
+        }
+        if key.hasPrefix("ipt-detail") {
+            // The Inbox Placement Tester is a Django REST framework app and
+            // reports errors under "detail".
+            return (404, "application/json", Data(#"{"detail":"Inbox placement test not found."}"#.utf8))
         }
         if key.hasPrefix("double-error-") {
             return (400, "text/plain", Data("Error: Error: api_key is invalid".utf8))
@@ -1350,5 +1361,340 @@ final class OfflineApiTests: XCTestCase {
         for index in 0..<8 {
             XCTAssertEqual(echoes[index], "conc-\(index)")
         }
+    }
+
+
+    // MARK: Validate options, S3 / SFTP bulk, Inbox Placement Tester
+    //
+    // Ported from the Python SDK (407f0a8 and b0444f8). Every request is
+    // answered by OfflineURLProtocol; nothing here reaches the live API.
+
+    /// Runs one SDK call and returns the single request it sent.
+    private func send(_ block: (@escaping () -> ()) -> ()) -> OfflineRecord {
+        OfflineURLProtocol.records = []
+        let done = expectation(description: "request finished")
+        block { done.fulfill() }
+        wait(for: [done], timeout: 5)
+        return onlyRequest()
+    }
+
+    /// Runs one SDK call that must be rejected before any request is sent.
+    private func expectRejected(
+        _ fragment: String,
+        file: StaticString = #file,
+        line: UInt = #line,
+        _ block: (@escaping (String?) -> ()) -> ()
+    ) {
+        OfflineURLProtocol.records = []
+        var message: String?
+        let done = expectation(description: "rejected: \(fragment)")
+        block { text in
+            message = text
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertNotNil(message, "expected a failure mentioning \(fragment)", file: file, line: line)
+        XCTAssertTrue(message?.contains(fragment) == true, message ?? "", file: file, line: line)
+        XCTAssertEqual(OfflineURLProtocol.records.count, 0, "no request should have been sent", file: file, line: line)
+    }
+
+    private func failureText<T>(_ result: ZeroBounceSDK.ZBResult<T>) -> String? {
+        if case .Failure(let error) = result { return "\(error)" }
+        return nil
+    }
+
+    private func dictFailureText(_ result: ZeroBounceSDK.ZBDictionaryResult) -> String? {
+        if case .Failure(let error) = result { return "\(error)" }
+        return nil
+    }
+
+    func testOfflineValidateSendsTheNewOptionsOnlyWhenSet() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "validate-key")
+
+        let plain = send { finish in
+            sdk.validate(email: "a@example.com", ipAddress: "", options: ZBValidateOptions()) { _ in finish() }
+        }
+        for absent in ["domain_info", "greylist_processing", "callback_url"] {
+            XCTAssertFalse(plain.query.contains("\(absent)="), "\(absent) should not be sent: \(plain.query)")
+        }
+
+        let full = send { finish in
+            sdk.validate(
+                email: "a@example.com",
+                ipAddress: "",
+                options: ZBValidateOptions(
+                    domainInfo: true,
+                    greylistProcessing: true,
+                    callbackUrl: "https://example.com/greylist"
+                )
+            ) { _ in finish() }
+        }
+        // Booleans go on the wire as the strings "true"/"false".
+        XCTAssertTrue(full.query.contains("domain_info=true"), full.query)
+        XCTAssertTrue(full.query.contains("greylist_processing=true"), full.query)
+        XCTAssertTrue(full.query.contains("callback_url="), full.query)
+
+        let posted = send { finish in
+            sdk.validate(
+                email: "a@example.com",
+                ipAddress: "",
+                options: ZBValidateOptions(
+                    domainInfo: false,
+                    greylistProcessing: true,
+                    callbackUrl: "https://example.com/greylist",
+                    usePost: true
+                )
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(posted.method, "POST")
+        XCTAssertTrue(posted.body.contains("domain_info=false"), posted.body)
+        XCTAssertTrue(posted.body.contains("callback_url="), posted.body)
+    }
+
+    func testOfflineGreylistMessageDecodesWithoutProcessedAt() {
+        // While a greylist retry is still running the API answers with
+        // "Message" and no processed_at.
+        let json = Data(#"""
+        {"address":"a@example.com","Message":"Greylisted email, we will retry",
+         "domain_website_exists":"true","domain_registrant_company_name":"Example Inc"}
+        """#.utf8)
+
+        let response = try? JSONDecoder().decode(ZBValidateResponse.self, from: json)
+
+        XCTAssertEqual(response?.message, "Greylisted email, we will retry")
+        XCTAssertEqual(response?.domainWebsiteExists, "true")
+        XCTAssertEqual(response?.domainRegistrantCompanyName, "Example Inc")
+        XCTAssertNil(response?.processedAt)
+    }
+
+    func testOfflineCallbackUrlWithoutGreylistProcessingSendsNoRequest() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "validate-key")
+
+        expectRejected("greylist_processing") { report in
+            sdk.validate(
+                email: "a@example.com", ipAddress: "",
+                options: ZBValidateOptions(callbackUrl: "https://example.com/cb")
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("greylist_processing") { report in
+            sdk.validate(
+                email: "a@example.com", ipAddress: "",
+                options: ZBValidateOptions(greylistProcessing: false, callbackUrl: "https://example.com/cb")
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("callback_url") { report in
+            sdk.validate(
+                email: "a@example.com", ipAddress: "",
+                options: ZBValidateOptions(greylistProcessing: true, callbackUrl: "   ")
+            ) { report(self.failureText($0)) }
+        }
+    }
+
+    func testOfflineS3AndSftpFileJobsSendTheDocumentedFieldsOnly() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "bulk-key")
+
+        let finder = send { finish in
+            sdk.emailFinderS3File(options: ZBBulkFileJobOptions(fileName: "lists/leads.csv")) { _ in finish() }
+        }
+        XCTAssertEqual(finder.method, "POST")
+        XCTAssertEqual(finder.host, "bulkapi.zerobounce.net")
+        // The S3 and SFTP jobs live on the bulkapi root, WITHOUT /v2.
+        XCTAssertEqual(finder.path, "/emailFinderS3file")
+        XCTAssertTrue(finder.body.contains("file_name=lists/leads.csv")
+            || finder.body.contains("file_name=lists%2Fleads.csv"), finder.body)
+        XCTAssertTrue(finder.body.contains("has_header_row=true"), finder.body)
+        // Unset options stay off the request entirely.
+        XCTAssertFalse(finder.body.contains("remove_duplicates"), finder.body)
+        XCTAssertFalse(finder.body.contains("return_url"), finder.body)
+
+        let domains = send { finish in
+            sdk.domainSearchS3File(
+                options: ZBBulkFileJobOptions(
+                    fileName: "lists/leads.csv",
+                    hasHeaderRow: false,
+                    removeDuplicates: true,
+                    returnUrl: "https://example.com/done"
+                )
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(domains.path, "/domainSearchS3file")
+        XCTAssertTrue(domains.body.contains("has_header_row=false"), domains.body)
+        XCTAssertTrue(domains.body.contains("remove_duplicates=true"), domains.body)
+        XCTAssertTrue(domains.body.contains("return_url="), domains.body)
+
+        // file_name is optional for validateSFTPfile alone: without it the
+        // input bucket from the account's settings is used.
+        let sftp = send { finish in
+            sdk.validateSFTPFile(options: ZBBulkFileJobOptions()) { _ in finish() }
+        }
+        XCTAssertEqual(sftp.path, "/validateSFTPfile")
+        XCTAssertFalse(sftp.body.contains("file_name"), sftp.body)
+        XCTAssertTrue(sftp.body.contains("has_header_row=true"), sftp.body)
+
+        let named = ZBBulkFileJobOptions(fileName: "my_file.txt")
+        XCTAssertEqual(send { finish in sdk.scoreSFTPFile(options: named) { _ in finish() } }.path, "/scoreSFTPfile")
+        XCTAssertEqual(send { finish in sdk.emailFinderSFTPFile(options: named) { _ in finish() } }.path, "/emailFinderSFTPfile")
+        XCTAssertEqual(send { finish in sdk.domainSearchSFTPFile(options: named) { _ in finish() } }.path, "/domainSearchSFTPfile")
+
+        // exportSFTPfile takes export_path, not the export_bucket exportS3file uses.
+        let exported = send { finish in
+            sdk.exportSFTPFile(fileId: "fid", exportPath: "/exports") { _ in finish() }
+        }
+        XCTAssertEqual(exported.path, "/exportSFTPfile")
+        XCTAssertTrue(exported.body.contains("file_id=fid"), exported.body)
+        XCTAssertTrue(exported.body.contains("export_path="), exported.body)
+        XCTAssertFalse(exported.body.contains("export_bucket"), exported.body)
+
+        let exportedDefault = send { finish in
+            sdk.exportSFTPFile(fileId: "fid", exportPath: nil) { _ in finish() }
+        }
+        XCTAssertFalse(exportedDefault.body.contains("export_path"), exportedDefault.body)
+    }
+
+    func testOfflineBulkJobsRejectInvalidArgumentsBeforeARequest() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "bulk-key")
+        let blank = ZBBulkFileJobOptions(fileName: "   ")
+
+        expectRejected("file_name") { report in
+            sdk.emailFinderS3File(options: ZBBulkFileJobOptions()) { report(self.failureText($0)) }
+        }
+        expectRejected("file_name") { report in
+            sdk.domainSearchS3File(options: blank) { report(self.failureText($0)) }
+        }
+        expectRejected("file_name") { report in
+            sdk.scoreSFTPFile(options: blank) { report(self.failureText($0)) }
+        }
+        expectRejected("file_name") { report in
+            sdk.emailFinderSFTPFile(options: blank) { report(self.failureText($0)) }
+        }
+        expectRejected("file_name") { report in
+            sdk.domainSearchSFTPFile(options: blank) { report(self.failureText($0)) }
+        }
+        // An unset name is allowed here, but a blank one is not.
+        expectRejected("file_name") { report in
+            sdk.validateSFTPFile(options: blank) { report(self.failureText($0)) }
+        }
+        expectRejected("file_id") { report in
+            sdk.exportSFTPFile(fileId: "  ", exportPath: nil) { report(self.failureText($0)) }
+        }
+        expectRejected("export_path") { report in
+            sdk.exportSFTPFile(fileId: "fid", exportPath: " ") { report(self.failureText($0)) }
+        }
+    }
+
+    func testOfflineListEvaluatorUsesItsOwnBaseUrlAndEncodesTheFileId() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "eval-key")
+
+        let sent = send { finish in
+            sdk.getListEvaluatorResult(fileId: "a b/c") { _ in finish() }
+        }
+        XCTAssertEqual(sent.host, "bulkapi.zerobounce.net")
+        // The file id is one path segment, so a slash in it must stay encoded
+        // and a space must not become a plus.
+        // URL.path drops the trailing slash and decodes %2F, so assert on the
+        // encoded path, which is what goes on the wire.
+        XCTAssertTrue(sent.rawPath.contains("/v2/listevaluator/a%20b%2Fc/"), sent.rawPath)
+
+        expectRejected("file_id") { report in
+            sdk.getListEvaluatorResult(fileId: "   ") { report(self.dictFailureText($0)) }
+        }
+
+        // It is a separate host, not a path built from the bulk base.
+        sdk.setListEvaluatorBaseUrl("https://bulk.example.test/v2/listevaluator")
+        let overridden = send { finish in
+            sdk.getListEvaluatorResult(fileId: "fid") { _ in finish() }
+        }
+        XCTAssertEqual(overridden.host, "bulk.example.test")
+    }
+
+    func testOfflineInboxPlacementUsesItsOwnHostAndCamelCaseJson() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "ipt-key")
+
+        let providers = send { finish in sdk.getInboxPlacementProviders { _ in finish() } }
+        XCTAssertEqual(providers.path, "/api/ipt/providers")
+        // The API key goes on the query string here, not in the body.
+        XCTAssertEqual(providers.apiKey, "ipt-key")
+
+        XCTAssertEqual(send { finish in sdk.getInboxPlacementTestTypes { _ in finish() } }.path, "/api/ipt/test-types")
+
+        let created = send { finish in
+            sdk.createInboxPlacementTest(
+                name: "Launch",
+                options: ZBCreateInboxPlacementTestOptions(
+                    testType: 1,
+                    senderEmail: "news@example.com",
+                    webhookUrl: "https://example.com/ipt"
+                )
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(created.method, "POST")
+        XCTAssertEqual(created.path, "/api/ipt/test")
+        // Bodies are camelCase JSON, and unset fields are left out.
+        XCTAssertEqual(
+            created.body,
+            #"{"name":"Launch","senderEmail":"news@example.com","testType":1,"webhookUrl":"https:\/\/example.com\/ipt"}"#
+        )
+        XCTAssertFalse(created.body.contains("providerIds"), created.body)
+        XCTAssertFalse(created.body.contains("seedIds"), created.body)
+
+        let listed = send { finish in
+            sdk.listInboxPlacementTests(
+                options: ZBListInboxPlacementTestsOptions(status: "finished", page: 1, pageSize: 25)
+            ) { _ in finish() }
+        }
+        XCTAssertTrue(listed.query.contains("status=finished"), listed.query)
+        XCTAssertTrue(listed.query.contains("page=1"), listed.query)
+        XCTAssertTrue(listed.query.contains("pageSize=25"), listed.query)
+
+        let bare = send { finish in sdk.listInboxPlacementTests { _ in finish() } }
+        XCTAssertFalse(bare.query.contains("status="), bare.query)
+        XCTAssertFalse(bare.query.contains("page="), bare.query)
+
+        let deleted = send { finish in
+            sdk.deleteInboxPlacementTest(testId: "a b/c") { _ in finish() }
+        }
+        XCTAssertEqual(deleted.method, "DELETE")
+        XCTAssertTrue(deleted.rawPath.contains("/api/ipt/test/a%20b%2Fc"), deleted.rawPath)
+
+        let webhook = send { finish in
+            sdk.setInboxPlacementWebhook(webhookUrl: "https://example.com/ipt") { _ in finish() }
+        }
+        XCTAssertEqual(webhook.method, "PUT")
+        XCTAssertEqual(webhook.path, "/api/ipt/webhook")
+        XCTAssertTrue(webhook.body.contains("webhookUrl"), webhook.body)
+
+        XCTAssertEqual(send { finish in sdk.getInboxPlacementWebhook { _ in finish() } }.path, "/api/ipt/webhook")
+
+        expectRejected("test_id") { report in
+            sdk.getInboxPlacementTest(testId: "   ") { report(self.dictFailureText($0)) }
+        }
+        expectRejected("name") { report in
+            sdk.createInboxPlacementTest(name: " ") { report(self.dictFailureText($0)) }
+        }
+        expectRejected("webhook_url") { report in
+            sdk.setInboxPlacementWebhook(webhookUrl: "") { report(self.dictFailureText($0)) }
+        }
+    }
+
+    func testOfflineInboxPlacementDetailErrorBecomesTheMessage() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "ipt-detail")
+
+        OfflineURLProtocol.records = []
+        var message = ""
+        let done = expectation(description: "detail error")
+        sdk.getInboxPlacementTest(testId: "123") { result in
+            if case .Failure(let error) = result { message = self.shortMessage(error) }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+
+        XCTAssertTrue(message.contains("Inbox placement test not found."), message)
     }
 }
