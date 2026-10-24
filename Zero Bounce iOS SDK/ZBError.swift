@@ -17,6 +17,36 @@ public enum ZBError: LocalizedError {
     case noData
     case decodeError(messages: [String])
     case saveFileError(message: String)
+    /// An error the API itself reported, with the HTTP status it came back
+    /// with, so a caller can tell 429 from 500 without parsing the message.
+    /// The status is 200 when the API answered a failure on a success code,
+    /// which `getfile` and `deletefile` do for an unknown file id.
+    case httpError(message: String, statusCode: Int)
+
+    /// The HTTP status behind this error, when there was one.
+    public var statusCode: Int? {
+        switch self {
+        case .httpError(_, let statusCode):
+            return statusCode
+        case .invalidResponse(let statusCode):
+            return statusCode
+        default:
+            return nil
+        }
+    }
+
+    /// Whether a JSON body says the call failed although the HTTP status was a
+    /// success. The API sends `success` as a JSON false, "false" or "False".
+    static func successMeansFailure(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let value = object["success"] else {
+            return false
+        }
+        if let flag = value as? Bool { return !flag }
+        if let text = value as? String { return text.lowercased() == "false" }
+        if let number = value as? NSNumber { return number.intValue == 0 }
+        return false
+    }
     
     static func decodeError(jsonData: Data) -> ZBError {
         guard let response = try? JSONSerialization.jsonObject(with: jsonData, options: .mutableLeaves) as? [String: Any] else {
@@ -124,6 +154,8 @@ public enum ZBError: LocalizedError {
             return message
         case .decodeError(let messages):
             return "Messages: \n \(messages.joined(separator: "\n"))"
+        case .httpError(let message, _):
+            return message
         default:
             return "No error description provided"
         }

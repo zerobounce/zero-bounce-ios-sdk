@@ -224,14 +224,26 @@ internal final class Priority3Api {
         )
     }
 
+    /// Submits a list the list evaluator has finished for bulk validation.
+    ///
+    /// LIVE: this takes the id of a finished evaluation as a form field, not an
+    /// upload, and the trailing slash is part of the endpoint.
     func sendEvaluatedFile(
-        filePath: String,
+        fileId: String,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        sendBulkRootMultipart(
+        guard let apiKey = sdk.apiKey else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        let trimmed = fileId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_id"])))
+            return
+        }
+        sdk.priority3FormPostSendFile(
             url: "\(sdk.bulkApiBaseUrl)/send-evaluated-file/",
-            filePath: filePath,
-            fields: [:],
+            formFields: ["api_key": apiKey, "file_id": trimmed],
             completion: completion
         )
     }
@@ -367,14 +379,14 @@ internal final class Priority3Api {
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        bulkRootFileJob(path: "/emailFinderS3file", options: options, fileNameRequired: true, completion: completion)
+        bulkRootFileJob(path: "/emailFinderS3file", options: options, completion: completion)
     }
 
     func domainSearchS3File(
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        bulkRootFileJob(path: "/domainSearchS3file", options: options, fileNameRequired: true, completion: completion)
+        bulkRootFileJob(path: "/domainSearchS3file", options: options, completion: completion)
     }
 
     /// The server, path and protocol are never sent by the SDK; they come from
@@ -386,28 +398,28 @@ internal final class Priority3Api {
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        bulkRootFileJob(path: "/validateSFTPfile", options: options, fileNameRequired: false, completion: completion)
+        bulkRootFileJob(path: "/validateSFTPfile", options: options, completion: completion)
     }
 
     func scoreSFTPFile(
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        bulkRootFileJob(path: "/scoreSFTPfile", options: options, fileNameRequired: true, completion: completion)
+        bulkRootFileJob(path: "/scoreSFTPfile", options: options, completion: completion)
     }
 
     func emailFinderSFTPFile(
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        bulkRootFileJob(path: "/emailFinderSFTPfile", options: options, fileNameRequired: true, completion: completion)
+        bulkRootFileJob(path: "/emailFinderSFTPfile", options: options, completion: completion)
     }
 
     func domainSearchSFTPFile(
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        bulkRootFileJob(path: "/domainSearchSFTPfile", options: options, fileNameRequired: true, completion: completion)
+        bulkRootFileJob(path: "/domainSearchSFTPfile", options: options, completion: completion)
     }
 
     /// Note the field name: this endpoint takes export_path, not the
@@ -431,25 +443,35 @@ internal final class Priority3Api {
     ///
     /// Booleans go on the wire as the strings "true"/"false", and an option the
     /// caller left unset is not sent at all.
+    ///
+    /// LIVE: file_name and return_url are required on every one of these jobs,
+    /// validateSFTPfile included, although the docs call its file_name
+    /// optional. Without either the API answers "Empty parameter: file_name" /
+    /// "Empty parameter: return_url", so both are checked before sending.
     private func bulkRootFileJob(
         path: String,
         options: ZBBulkFileJobOptions,
-        fileNameRequired: Bool,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        let blank = options.fileName != nil
-            && options.fileName!.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        if (options.fileName == nil && fileNameRequired) || blank {
+        let fileName = options.fileName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if fileName.isEmpty {
             completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_name"])))
             return
         }
+        let returnUrl = options.returnUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if returnUrl.isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: return_url"])))
+            return
+        }
 
-        var fields: [String: String] = ["has_header_row": options.hasHeaderRow ? "true" : "false"]
-        if let fileName = options.fileName { fields["file_name"] = fileName }
+        var fields: [String: String] = [
+            "has_header_row": options.hasHeaderRow ? "true" : "false",
+            "file_name": options.fileName!,
+            "return_url": options.returnUrl!
+        ]
         if let removeDuplicates = options.removeDuplicates {
             fields["remove_duplicates"] = removeDuplicates ? "true" : "false"
         }
-        if let returnUrl = options.returnUrl { fields["return_url"] = returnUrl }
 
         postBulkRootForm(path: path, fields: fields, completion: completion)
     }
@@ -478,9 +500,12 @@ internal final class Priority3Api {
 
     // MARK: Inbox Placement Tester (/api/ipt)
     //
-    // Its own host, the API key on the query string, camelCase JSON bodies, and
-    // PUT and DELETE as well as GET and POST. Spends the account's inbox-test
-    // credits.
+    // Its own host, camelCase JSON bodies, and PUT and DELETE as well as GET
+    // and POST. Spends the account's inbox-test credits.
+    //
+    // LIVE: it authenticates with an Authorization: Bearer header. Sent as an
+    // api_key query parameter the request is rejected as unauthorized, and the
+    // key would end up in whatever logs the query string.
 
     func getInboxPlacementProviders(completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()) {
         inboxPlacementRequest(method: "GET", path: "/providers", query: [:], body: nil, completion: completion)
@@ -528,7 +553,9 @@ internal final class Priority3Api {
             if let page = options.page { query["page"] = String(page) }
             if let pageSize = options.pageSize { query["pageSize"] = String(pageSize) }
         }
-        inboxPlacementRequest(method: "GET", path: "/test", query: query, body: nil, completion: completion)
+        // LIVE: the listing is GET /tests (plural). /test is the single-test
+        // path and answers 'Method "GET" not allowed'.
+        inboxPlacementRequest(method: "GET", path: "/tests", query: query, body: nil, completion: completion)
     }
 
     func deleteInboxPlacementTest(
@@ -580,13 +607,11 @@ internal final class Priority3Api {
             completion(.Failure(ZBError.notInitialized))
             return
         }
-        var params = query
-        // The API key goes on the query string here, not in the body.
-        params["api_key"] = apiKey
         sdk.priority3JsonDictionaryRequest(
             method: method,
-            url: sdk.priority3QueryURL(base: sdk.inboxPlacementBaseUrl + path, query: params),
+            url: sdk.priority3QueryURL(base: sdk.inboxPlacementBaseUrl + path, query: query),
             body: body,
+            extraHeaders: ["Authorization": "Bearer \(apiKey)"],
             completion: completion
         )
     }

@@ -12,13 +12,20 @@ import Mocker
 
 class Zero_Bounce_iOS_SDKTests: XCTestCase {
     private let apiKey = "test-api-key"
+    private var liveSession: URLSession!
 
     override func setUp() {
         ZeroBounceSDK.shared.initialize(apiKey: apiKey)
+        // The SDK no longer uses URLSession.shared, because a shared session
+        // cannot refuse a redirect, and URLProtocol.registerClass reaches only
+        // that one. Mocker's protocol goes on the SDK's session instead.
+        liveSession = ZeroBounceSDK.urlSession
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession(protocolClasses: [MockingURLProtocol.self])
     }
 
     override func tearDown() {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+        ZeroBounceSDK.urlSession = liveSession
+        Mocker.removeAll()
     }
 
     // MARK: Get Credits
@@ -479,10 +486,11 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
+                // An empty 200 body is an error, and the status is kept.
                 switch error as? ZBError {
-                case .decodeError:
-                    XCTAssertTrue(true)
-                    
+                case .httpError(_, let statusCode):
+                    XCTAssertEqual(statusCode, 200)
+
                 default:
                     XCTAssertTrue(false)
                 }
@@ -927,11 +935,14 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                     XCTFail("wrong error type")
                     return
                 }
-                guard case .decodeError(let msgs) = zbe else {
-                    XCTFail("expected decodeError")
+                // LIVE: a "success": false field on an HTTP 200 is a
+                // failure, and the status it came back with is kept.
+                guard case .httpError(let message, let statusCode) = zbe else {
+                    XCTFail("expected httpError")
                     return
                 }
-                XCTAssertTrue(msgs.joined().contains("Phase 2"))
+                XCTAssertTrue(message.contains("Phase 2"), message)
+                XCTAssertEqual(statusCode, 200)
             }
         }
         wait(for: [requestExpectation], timeout: 60)
@@ -1007,6 +1018,8 @@ private struct OfflineRecord {
     let apiKey: String
     let query: String
     let body: String
+    /// The Authorization or API-Key header the request carried, or "".
+    let authHeader: String
 }
 
 private final class OfflineURLProtocol: URLProtocol {
@@ -1042,6 +1055,18 @@ private final class OfflineURLProtocol: URLProtocol {
                 apiKey = String(rest[blank.upperBound...].prefix { $0 != "\r" })
             }
         }
+        // The Inbox Placement Tester and the Warmup API carry the key in a
+        // header instead of a parameter.
+        var authHeader = ""
+        if let bearer = request.value(forHTTPHeaderField: "Authorization") {
+            authHeader = bearer
+            if apiKey.isEmpty, bearer.hasPrefix("Bearer ") {
+                apiKey = String(bearer.dropFirst(7))
+            }
+        } else if let warmup = request.value(forHTTPHeaderField: "API-Key") {
+            authHeader = "API-Key: " + warmup
+            if apiKey.isEmpty { apiKey = warmup }
+        }
         let record = OfflineRecord(
             method: method,
             host: url.host ?? "",
@@ -1049,7 +1074,8 @@ private final class OfflineURLProtocol: URLProtocol {
             rawPath: URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? url.path,
             apiKey: apiKey,
             query: url.query ?? "",
-            body: body
+            body: body,
+            authHeader: authHeader
         )
         OfflineURLProtocol.lock.lock()
         OfflineURLProtocol.records.append(record)
@@ -1143,16 +1169,23 @@ private final class OfflineURLProtocol: URLProtocol {
 }
 
 final class OfflineApiTests: XCTestCase {
+    private var liveSession: URLSession!
+
     override func setUp() {
         super.setUp()
         OfflineURLProtocol.enabled = true
         OfflineURLProtocol.records = []
         URLProtocol.registerClass(OfflineURLProtocol.self)
+        // The SDK no longer uses URLSession.shared, because a shared session
+        // cannot refuse a redirect; the stub goes on its session instead.
+        liveSession = ZeroBounceSDK.urlSession
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession(protocolClasses: [OfflineURLProtocol.self])
     }
 
     override func tearDown() {
         OfflineURLProtocol.enabled = false
         URLProtocol.unregisterClass(OfflineURLProtocol.self)
+        ZeroBounceSDK.urlSession = liveSession
         super.tearDown()
     }
 
@@ -1527,7 +1560,12 @@ final class OfflineApiTests: XCTestCase {
         sdk.initialize(apiKey: "bulk-key")
 
         let finder = send { finish in
-            sdk.emailFinderS3File(options: ZBBulkFileJobOptions(fileName: "lists/leads.csv")) { _ in finish() }
+            sdk.emailFinderS3File(
+                options: ZBBulkFileJobOptions(
+                    fileName: "lists/leads.csv",
+                    returnUrl: "https://example.com/done"
+                )
+            ) { _ in finish() }
         }
         XCTAssertEqual(finder.method, "POST")
         XCTAssertEqual(finder.host, "bulkapi.zerobounce.net")
@@ -1535,10 +1573,10 @@ final class OfflineApiTests: XCTestCase {
         XCTAssertEqual(finder.path, "/emailFinderS3file")
         XCTAssertTrue(finder.body.contains("file_name=lists/leads.csv")
             || finder.body.contains("file_name=lists%2Fleads.csv"), finder.body)
+        XCTAssertTrue(finder.body.contains("return_url="), finder.body)
         XCTAssertTrue(finder.body.contains("has_header_row=true"), finder.body)
-        // Unset options stay off the request entirely.
+        // Options that were never set stay off the request entirely.
         XCTAssertFalse(finder.body.contains("remove_duplicates"), finder.body)
-        XCTAssertFalse(finder.body.contains("return_url"), finder.body)
 
         let domains = send { finish in
             sdk.domainSearchS3File(
@@ -1555,16 +1593,20 @@ final class OfflineApiTests: XCTestCase {
         XCTAssertTrue(domains.body.contains("remove_duplicates=true"), domains.body)
         XCTAssertTrue(domains.body.contains("return_url="), domains.body)
 
-        // file_name is optional for validateSFTPfile alone: without it the
-        // input bucket from the account's settings is used.
+        // LIVE: the docs call file_name optional for validateSFTPfile, but the
+        // API answers "Empty parameter: file_name" without it, and every job
+        // needs a return_url as well.
+        let named = ZBBulkFileJobOptions(
+            fileName: "my_file.txt",
+            returnUrl: "https://example.com/done"
+        )
         let sftp = send { finish in
-            sdk.validateSFTPFile(options: ZBBulkFileJobOptions()) { _ in finish() }
+            sdk.validateSFTPFile(options: named) { _ in finish() }
         }
         XCTAssertEqual(sftp.path, "/validateSFTPfile")
-        XCTAssertFalse(sftp.body.contains("file_name"), sftp.body)
-        XCTAssertTrue(sftp.body.contains("has_header_row=true"), sftp.body)
+        XCTAssertTrue(sftp.body.contains("file_name=my_file.txt"), sftp.body)
+        XCTAssertTrue(sftp.body.contains("return_url="), sftp.body)
 
-        let named = ZBBulkFileJobOptions(fileName: "my_file.txt")
         XCTAssertEqual(send { finish in sdk.scoreSFTPFile(options: named) { _ in finish() } }.path, "/scoreSFTPfile")
         XCTAssertEqual(send { finish in sdk.emailFinderSFTPFile(options: named) { _ in finish() } }.path, "/emailFinderSFTPfile")
         XCTAssertEqual(send { finish in sdk.domainSearchSFTPFile(options: named) { _ in finish() } }.path, "/domainSearchSFTPfile")
@@ -1604,9 +1646,26 @@ final class OfflineApiTests: XCTestCase {
         expectRejected("file_name") { report in
             sdk.domainSearchSFTPFile(options: blank) { report(self.failureText($0)) }
         }
-        // An unset name is allowed here, but a blank one is not.
+        // A blank name is rejected just like a missing one, here too.
         expectRejected("file_name") { report in
             sdk.validateSFTPFile(options: blank) { report(self.failureText($0)) }
+        }
+        expectRejected("file_name") { report in
+            sdk.validateSFTPFile(options: ZBBulkFileJobOptions()) { report(self.failureText($0)) }
+        }
+        // LIVE: return_url is required on every one of these jobs as well.
+        expectRejected("return_url") { report in
+            sdk.validateSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) {
+                report(self.failureText($0))
+            }
+        }
+        expectRejected("return_url") { report in
+            sdk.emailFinderS3File(options: ZBBulkFileJobOptions(fileName: "f.csv")) {
+                report(self.failureText($0))
+            }
+        }
+        expectRejected("file_id") { report in
+            sdk.sendEvaluatedFile(fileId: "  ") { report(self.failureText($0)) }
         }
         expectRejected("file_id") { report in
             sdk.exportSFTPFile(fileId: "  ", exportPath: nil) { report(self.failureText($0)) }
@@ -1648,8 +1707,11 @@ final class OfflineApiTests: XCTestCase {
 
         let providers = send { finish in sdk.getInboxPlacementProviders { _ in finish() } }
         XCTAssertEqual(providers.path, "/api/ipt/providers")
-        // The API key goes on the query string here, not in the body.
-        XCTAssertEqual(providers.apiKey, "ipt-key")
+        // LIVE: the key travels in an Authorization: Bearer header. Sent as an
+        // api_key query parameter the request is rejected as unauthorized, and
+        // the key would end up in whatever logs the query string.
+        XCTAssertEqual(providers.authHeader, "Bearer ipt-key")
+        XCTAssertFalse(providers.query.contains("api_key="), providers.query)
 
         XCTAssertEqual(send { finish in sdk.getInboxPlacementTestTypes { _ in finish() } }.path, "/api/ipt/test-types")
 
@@ -1678,6 +1740,9 @@ final class OfflineApiTests: XCTestCase {
                 options: ZBListInboxPlacementTestsOptions(status: "finished", page: 1, pageSize: 25)
             ) { _ in finish() }
         }
+        // LIVE: the listing is GET /tests (plural). /test is the single-test
+        // path and answers 'Method "GET" not allowed'.
+        XCTAssertEqual(listed.path, "/api/ipt/tests")
         XCTAssertTrue(listed.query.contains("status=finished"), listed.query)
         XCTAssertTrue(listed.query.contains("page=1"), listed.query)
         XCTAssertTrue(listed.query.contains("pageSize=25"), listed.query)

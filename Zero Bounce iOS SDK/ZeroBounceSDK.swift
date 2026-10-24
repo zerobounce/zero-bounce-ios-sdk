@@ -37,12 +37,38 @@ public class ZeroBounceSDK {
         dateFormatter.dateFormat = "yyyy-MM-dd"
     }
     
+    /// Sets the API key. A key with surrounding whitespace or control
+    /// characters is refused rather than stored: it would otherwise be quoted,
+    /// unredacted, in a transport error.
     public func initialize(
         apiKey: String,
         apiBaseUrl: ZBApiURL = .API_DEFAULT_URL
     ) {
+        guard ZeroBounceSDK.isCleanApiKey(apiKey) else {
+            print("ZeroBounce: api_key has surrounding whitespace or control characters; it was not accepted.")
+            return
+        }
         self.apiKey = apiKey
         self.apiBaseUrl = apiBaseUrl.rawValue
+    }
+
+    /// Whether a key is free of surrounding whitespace and control characters.
+    /// An empty key stays allowed: it is reported as `notInitialized` by the
+    /// first call that needs it.
+    internal static func isCleanApiKey(_ apiKey: String) -> Bool {
+        if apiKey.isEmpty { return true }
+        if apiKey != apiKey.trimmingCharacters(in: .whitespacesAndNewlines) { return false }
+        return apiKey.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
+    }
+
+    /// Refuses a URL that is not https, so the api_key is never put on the
+    /// wire in the clear. Loopback is allowed so an offline test can point the
+    /// SDK at a local stub.
+    internal static func isAllowedURL(_ url: URL) -> Bool {
+        let scheme = url.scheme?.lowercased() ?? ""
+        if scheme == "https" { return true }
+        guard scheme == "http", let host = url.host?.lowercased() else { return false }
+        return host == "127.0.0.1" || host == "localhost" || host == "::1"
     }
     
     // MARK: Validate
@@ -190,7 +216,10 @@ public class ZeroBounceSDK {
         ]
         if let options = options {
             if let timeout = options.timeout {
-                params["timeout"] = timeout
+                // LIVE: validatebatch takes timeout as a JSON *string*. Sent as a
+                // number the API rejects the whole batch with the account-level
+                // "Invalid API Key or your account ran out of credits".
+                params["timeout"] = String(timeout)
             }
             if let activityData = options.activityData {
                 params["activity_data"] = activityData
@@ -591,12 +620,16 @@ public class ZeroBounceSDK {
         priority3Api.getListEvaluatorResult(fileId: fileId, completion: completion)
     }
 
-    public func sendEvaluatedFile(filePath: String, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+    /// Submits a list the list evaluator has finished for bulk validation.
+    ///
+    /// Takes the id of a finished evaluation, not a path to upload: that is
+    /// what the live endpoint wants.
+    public func sendEvaluatedFile(fileId: String, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
         guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
-        priority3Api.sendEvaluatedFile(filePath: filePath, completion: completion)
+        priority3Api.sendEvaluatedFile(fileId: fileId, completion: completion)
     }
 
     public func addFilter(rule: String, target: String, value: String, completion: @escaping (ZBDictionaryResult) -> ()) {
@@ -1244,7 +1277,11 @@ public class ZeroBounceSDK {
     }
     
     private func sendRequest(request:URLRequest,  result: @escaping (RequestResult) -> ()) {
-        URLSession.shared.dataTask(with: request, completionHandler: { data, response, error -> Void in
+        guard let url = request.url, ZeroBounceSDK.isAllowedURL(url) else {
+            result(RequestResult.failure(ZBError.decodeError(messages: ["url must be an https:// URL"])))
+            return
+        }
+        ZeroBounceSDK.urlSession.dataTask(with: request, completionHandler: { data, response, error -> Void in
             if let error = error {
                 result(RequestResult.failure(error))
                 return
@@ -1261,21 +1298,58 @@ public class ZeroBounceSDK {
             }
             
             let body = data ?? Data()
-            guard 200..<299 ~= statusCode else {
-                result(RequestResult.failure(ZBError.decodeError(messages: [
-                    ZBError.message(from: body, statusCode: statusCode)
-                ])))
+            if 300..<400 ~= statusCode {
+                // Redirects are not followed: one could send the api_key to
+                // another host.
+                result(RequestResult.failure(ZBError.httpError(
+                    message: "ZeroBounce returned a redirect, which this client does not follow.",
+                    statusCode: statusCode
+                )))
+                return
+            }
+            guard 200...299 ~= statusCode else {
+                result(RequestResult.failure(ZBError.httpError(
+                    message: ZBError.message(from: body, statusCode: statusCode),
+                    statusCode: statusCode
+                )))
                 return
             }
             if body.isEmpty || ZBError.message(from: body, statusCode: statusCode).contains("HTML error page") {
-                result(RequestResult.failure(ZBError.decodeError(messages: [
-                    ZBError.message(from: body, statusCode: statusCode)
-                ])))
+                result(RequestResult.failure(ZBError.httpError(
+                    message: ZBError.message(from: body, statusCode: statusCode),
+                    statusCode: statusCode
+                )))
                 return
             }
-            
+            // LIVE: a "success": false field on an HTTP 200 is a failure, not
+            // a result. getfile and deletefile report an unknown or deleted
+            // file id that way, and the caller should not have to inspect a
+            // flag to notice.
+            if ZBError.successMeansFailure(body) {
+                result(RequestResult.failure(ZBError.httpError(
+                    message: ZBError.message(from: body, statusCode: statusCode),
+                    statusCode: statusCode
+                )))
+                return
+            }
+
             result(RequestResult.success(response, body))
         }).resume()
+    }
+
+    /// The session every request goes through. Redirects are not followed: one
+    /// could send the api_key to another host. The offline suite replaces this
+    /// with a session whose configuration registers its stub protocol.
+    internal static var urlSession: URLSession = ZeroBounceSDK.makeSession()
+
+    private static let redirectBlocker = ZBRedirectBlocker()
+
+    internal static func makeSession(protocolClasses: [AnyClass]? = nil) -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        if let protocolClasses = protocolClasses {
+            configuration.protocolClasses = protocolClasses
+        }
+        return URLSession(configuration: configuration, delegate: redirectBlocker, delegateQueue: nil)
     }
 
     /// Escapes a value as a single path segment, so a slash in it stays encoded.
@@ -1291,6 +1365,7 @@ public class ZeroBounceSDK {
         method: String,
         url: String,
         body: [String: Any]?,
+        extraHeaders: [String: String] = [:],
         completion: @escaping (ZBDictionaryResult) -> ()
     ) {
         guard let urlValue = URL(string: url) else {
@@ -1301,6 +1376,9 @@ public class ZeroBounceSDK {
         request.httpMethod = method
         request.timeoutInterval = 120
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        for (name, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
         if let body = body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
@@ -1439,5 +1517,18 @@ public class ZeroBounceSDK {
                 completion(.Failure(error))
             }
         }
+    }
+}
+
+/// Hands the 3xx back to the caller instead of following it.
+private final class ZBRedirectBlocker: NSObject, URLSessionTaskDelegate {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
     }
 }
