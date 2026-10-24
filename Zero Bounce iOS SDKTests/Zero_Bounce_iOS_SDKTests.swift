@@ -1125,6 +1125,9 @@ final class OfflineURLProtocol: URLProtocol {
         if key.hasPrefix("malformed-") {
             return (200, "application/json", Data(("<<<not-json>>>" + String(repeating: "x", count: 5000)).utf8))
         }
+        if key.hasPrefix("success-false") {
+            return (200, "application/json", Data(#"{"success":false,"message":"File cannot be found."}"#.utf8))
+        }
         if key.hasPrefix("cf-json-") {
             let json = #"{"type":"https://developers.cloudflare.com/support/error-1020/","title":"Error 1020: Access denied","status":403,"error_code":1020,"cloudflare_error":true}"#
             return (403, "application/json", Data(json.utf8))
@@ -1815,6 +1818,50 @@ final class OfflineApiTests: XCTestCase {
         wait(for: [done], timeout: 5)
 
         XCTAssertTrue(message.contains("Inbox placement test not found."), message)
+    }
+
+    func testOfflineStreamingDownloadWritesStraightToDisk() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "stream-key")
+        let path = NSTemporaryDirectory() + "zb-offline-stream.csv"
+        try? FileManager.default.removeItem(atPath: path)
+
+        var saved: String?
+        var done = expectation(description: "streamed")
+        sdk.getFileStreaming(fileId: "fid", downloadPath: path) { result in
+            if case .Success(let response) = result { saved = response.localFilePath }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(saved, path)
+        XCTAssertTrue((try? String(contentsOfFile: path, encoding: .utf8))?.hasPrefix("email") == true)
+        try? FileManager.default.removeItem(atPath: path)
+
+        // getfile answers an unknown or deleted id with a JSON error rather
+        // than a file, so the probe must catch it and leave nothing behind.
+        let failing = ZeroBounceSDK()
+        failing.initialize(apiKey: "success-false")
+        var message = ""
+        done = expectation(description: "streamed error")
+        failing.getFileStreaming(fileId: "fid", downloadPath: path) { result in
+            if case .Failure(let error) = result {
+                message = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertTrue(message.contains("File cannot be found"), message)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: path))
+
+        done = expectation(description: "blank path")
+        sdk.getFileStreaming(fileId: "fid", downloadPath: " ") { result in
+            if case .Failure(let error) = result {
+                message = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertTrue(message.contains("downloadPath"), message)
     }
 }
 

@@ -1087,6 +1087,116 @@ public class ZeroBounceSDK {
         _getFile(scoring: false, fileId: fileId, options: options, completion: completion)
     }
     
+    /// As `getFile`, but written straight to `downloadPath` as it arrives
+    /// instead of being held in memory first — use it for a result file too
+    /// large to buffer.
+    ///
+    /// It is opt-in because a streamed body cannot be inspected as a whole,
+    /// and `getfile` answers an unknown or deleted file id with a JSON error
+    /// rather than a file. The first bytes are checked before the download is
+    /// moved into place, so an error still reaches the failure result and no
+    /// partial file is left behind.
+    public func getFileStreaming(
+        fileId: String,
+        downloadPath: String,
+        options: ZBGetFileOptions? = nil,
+        completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()
+    ) {
+        _getFileStreaming(scoring: false, fileId: fileId, downloadPath: downloadPath,
+                          options: options, completion: completion)
+    }
+
+    /// The AI scoring counterpart of `getFileStreaming`.
+    public func scoringGetFileStreaming(
+        fileId: String,
+        downloadPath: String,
+        options: ZBGetFileOptions? = nil,
+        completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()
+    ) {
+        _getFileStreaming(scoring: true, fileId: fileId, downloadPath: downloadPath,
+                          options: options, completion: completion)
+    }
+
+    private func _getFileStreaming(
+        scoring: Bool,
+        fileId: String,
+        downloadPath: String,
+        options: ZBGetFileOptions?,
+        completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()
+    ) {
+        guard let apiKey = normalizedApiKey else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
+        guard !downloadPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: downloadPath"])))
+            return
+        }
+        guard let requestURL = buildGetFileURL(
+            scoring: scoring, apiKey: apiKey, fileId: fileId, options: options
+        ), ZeroBounceSDK.isAllowedURL(requestURL) else {
+            completion(.Failure(ZBError.invalidEndpoint))
+            return
+        }
+
+        var request = URLRequest(url: requestURL)
+        request.timeoutInterval = 120
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        ZeroBounceSDK.urlSession.downloadTask(with: request) { location, response, error in
+            if let error = error {
+                completion(.Failure(error))
+                return
+            }
+            guard let location = location,
+                  let statusCode = (response as? HTTPURLResponse)?.statusCode else {
+                completion(.Failure(ZBError.noResponse))
+                return
+            }
+            defer { try? FileManager.default.removeItem(at: location) }
+
+            // Enough to tell a file from an error page, without reading the
+            // whole download back into memory.
+            let probe = (try? FileHandle(forReadingFrom: location))
+                .map { handle -> Data in
+                    defer { try? handle.close() }
+                    return (try? handle.read(upToCount: 4096)) ?? Data()
+                } ?? Data()
+
+            if 300..<400 ~= statusCode {
+                completion(.Failure(ZBError.httpError(
+                    message: "ZeroBounce returned a redirect, which this client does not follow.",
+                    statusCode: statusCode
+                )))
+                return
+            }
+            guard 200...299 ~= statusCode, !probe.isEmpty else {
+                completion(.Failure(ZBError.httpError(
+                    message: ZBError.message(from: probe, statusCode: statusCode),
+                    statusCode: statusCode
+                )))
+                return
+            }
+            let message = ZBError.message(from: probe, statusCode: statusCode)
+            if message.contains("HTML error page") || ZBError.successMeansFailure(probe) {
+                completion(.Failure(ZBError.httpError(message: message, statusCode: statusCode)))
+                return
+            }
+
+            do {
+                let outURL = URL(fileURLWithPath: downloadPath)
+                try FileManager.default.createDirectory(
+                    at: outURL.deletingLastPathComponent(), withIntermediateDirectories: true
+                )
+                try? FileManager.default.removeItem(at: outURL)
+                try FileManager.default.moveItem(at: location, to: outURL)
+                completion(.Success(ZBGetFileResponse(localFilePath: downloadPath)))
+            } catch {
+                completion(.Failure(ZBError.saveFileError(message: "\(error)")))
+            }
+        }.resume()
+    }
+
     ///
     /// The scoringGetFile API allows users to get the validation results file for the file been submitted using scoringSendfile API
     ///

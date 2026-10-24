@@ -16,11 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SFTP/FTP bulk: `validateSFTPFile`, `scoreSFTPFile`, `emailFinderSFTPFile`, `domainSearchSFTPFile`, and `exportSFTPFile`, sharing the new `ZBBulkFileJobOptions`. The server, path and protocol come from your ZeroBounce settings. `validateSFTPFile`'s `fileName` is optional; `exportSFTPFile` takes `export_path` rather than the `export_bucket` `exportS3File` sends.
 - `ZBValidateOptions` accepts `domainInfo`, `greylistProcessing` and `callbackUrl`. `callbackUrl` needs `greylistProcessing: true` and is rejected without it, and when blank, before a request is sent.
 - `ZBValidateResponse` reads `domain_website_exists`, `domain_registrant_company_name` and `Message`.
-- Inbox Placement Tester on `https://bulkapi.zerobounce.net/api/ipt`: `getInboxPlacementProviders`, `getInboxPlacementTestTypes`, `createInboxPlacementTest`, `getInboxPlacementTest`, `listInboxPlacementTests`, `deleteInboxPlacementTest`, `getInboxPlacementWebhook`, `setInboxPlacementWebhook`. The API key goes on the query string, bodies are camelCase JSON, and unset fields are left out.
+- Inbox Placement Tester on `https://bulkapi.zerobounce.net/api/ipt`: `getInboxPlacementProviders`, `getInboxPlacementTestTypes`, `createInboxPlacementTest`, `getInboxPlacementTest`, `listInboxPlacementTests`, `deleteInboxPlacementTest`, `getInboxPlacementWebhook`, `setInboxPlacementWebhook`. It authenticates with an `Authorization: Bearer` header, bodies are camelCase JSON, and unset fields are left out.
 - `setListEvaluatorBaseUrl` and `setInboxPlacementBaseUrl`.
+- `ZeroBounceWarmup`, a client for the [Warmup API](https://www.zerobounce.net/docs/warmup-api): a separate product with its own host, its own team-scoped key (`initialize(apiKey:)`, sent in an `API-Key` header) and all 26 documented endpoints. The body comes back parsed — a dictionary, an array or a number depending on the endpoint, and `nil` for the documented empty successes (HTTP 204 and an empty 200). `downloadSeeds` and `downloadStatistics` hand over CSV text.
+- `ZBError.httpError(message:statusCode:)` for an error the API itself reported, and `ZBError.statusCode` to read the status back, so a caller can tell 429 from 500 without parsing the message.
+- Safety rails: `initialize` refuses a key with surrounding whitespace or control characters rather than storing it, only `https://` URLs are called (loopback aside, so an offline test can use a local stub), and redirects are not followed.
+- `Zero Bounce iOS SDKTests/LiveApiTests.swift`, an opt-in live suite. The documented test command and CI pass `-skip-testing:"Zero Bounce iOS SDKTests/LiveApiTests"`, and it does nothing without keys. Keys come from `ZEROBOUNCE_API_KEY` and `ZEROBOUNCE_WARMUP_API_KEY`; `ZEROBOUNCE_LIVE_SPEND=1` and `ZEROBOUNCE_LIVE_CHANGES=1` opt in to calls that spend credits or make reversible account changes.
 
 ### Changed
 
+- Verified against the live API. Where it disagrees with the docs, the API wins and the call site says so:
+  - `validateBatch` sends `timeout` as a JSON **string**. Sent as a number the API rejects the whole batch with the account-level "Invalid API Key or your account ran out of credits".
+  - The Inbox Placement Tester authenticates with `Authorization: Bearer`, not the `api_key` query parameter the rest of the API takes, and its listing is `GET /tests` (plural) — `/test` answers `Method "GET" not allowed`.
+  - Every S3/SFTP job requires both `fileName` and `returnUrl`, `validateSFTPFile` included, although the docs call its `fileName` optional. Both are checked before the request is sent.
+  - **Breaking:** `sendEvaluatedFile` takes `fileId:` rather than `filePath:`. The live endpoint takes the id of a finished evaluation as a form field, not an upload.
+- A `"success": false` field on an HTTP 200 is now a failure instead of a success value. `getFile` and `deleteFile` report an unknown or deleted file id that way.
+- **Breaking:** errors the API reported are `ZBError.httpError` rather than `ZBError.decodeError`, which now covers only bodies that could not be read.
+- Requests go through `ZeroBounceSDK.urlSession` instead of `URLSession.shared`, because a shared session cannot refuse a redirect. A test that stubs HTTP should put its `URLProtocol` on that session.
 - **Breaking:** `ZBValidateResponse.status` and `.processedAt` are now optional. While a greylist retry is still running the API answers with a `Message` and neither field, and the previous non-optional declarations made that response fail to decode entirely.
 - The list evaluator uses its own base URL instead of building the path from the bulk base, and the file id is encoded as a single path segment. `getListEvaluatorResult` rejects a blank file id before a request is sent.
 - `ZeroBounceSDK()` can be constructed directly. `shared` remains available.

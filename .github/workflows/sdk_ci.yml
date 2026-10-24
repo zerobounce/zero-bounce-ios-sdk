@@ -28,6 +28,7 @@ jobs:
             -workspace "Zero Bounce iOS SDK.xcworkspace" \
             -scheme "Zero Bounce iOS SDK" \
             -destination 'platform=macOS,variant=Mac Catalyst' \
+            -skip-testing:"Zero Bounce iOS SDKTests/LiveApiTests" \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \

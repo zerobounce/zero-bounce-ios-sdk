@@ -389,22 +389,27 @@ These live on the bulkapi host *without* the `/v2` path.
 let zb = ZeroBounceSDK.shared
 
 // Amazon S3. fileName is the full path, as returned by listS3files.
-zb.emailFinderS3File(options: ZBBulkFileJobOptions(fileName: "lists/leads.csv")) { _ in }
+// Every one of these jobs needs both fileName and returnUrl: the docs call
+// validateSFTPFile's fileName optional, but the live API answers
+// "Empty parameter: file_name" without it.
+let done = "https://example.com/zerobounce-done"
+zb.emailFinderS3File(
+    options: ZBBulkFileJobOptions(fileName: "lists/leads.csv", returnUrl: done)
+) { _ in }
 zb.domainSearchS3File(
     options: ZBBulkFileJobOptions(
         fileName: "lists/leads.csv",
         removeDuplicates: true,
-        returnUrl: "https://example.com/zerobounce-done"
+        returnUrl: done
     )
 ) { _ in }
 
 // SFTP/FTP. The server, path and protocol come from your ZeroBounce settings.
-// fileName may be left nil for validateSFTPFile alone, which then uses the
-// input bucket from those settings.
-zb.validateSFTPFile(options: ZBBulkFileJobOptions()) { _ in }
-zb.scoreSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
-zb.emailFinderSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
-zb.domainSearchSFTPFile(options: ZBBulkFileJobOptions(fileName: "my_file.txt")) { _ in }
+let sftp = ZBBulkFileJobOptions(fileName: "my_file.txt", returnUrl: done)
+zb.validateSFTPFile(options: sftp) { _ in }
+zb.scoreSFTPFile(options: sftp) { _ in }
+zb.emailFinderSFTPFile(options: sftp) { _ in }
+zb.domainSearchSFTPFile(options: sftp) { _ in }
 
 // Note the field: this one takes export_path, not export_bucket.
 // nil uses the export path from your settings.
@@ -413,8 +418,9 @@ zb.exportSFTPFile(fileId: "<FILE_ID>", exportPath: "/exports") { _ in }
 
 ## Inbox Placement Tester
 
-Runs on its own host, takes the API key on the query string, and sends camelCase
-JSON bodies. It spends the account's inbox-test credits.
+Runs on its own host and sends camelCase JSON bodies. It authenticates with an
+`Authorization: Bearer` header rather than the `api_key` parameter the rest of
+the API takes, and it spends the account's inbox-test credits.
 
 ```swift
 let zb = ZeroBounceSDK.shared
@@ -439,6 +445,66 @@ zb.setInboxPlacementWebhook(webhookUrl: "https://example.com/ipt-webhook") { _ i
 zb.getInboxPlacementWebhook { _ in }
 zb.deleteInboxPlacementTest(testId: "<TEST_ID>") { _ in }
 ```
+
+## List evaluator
+
+Upload a list for evaluation, read the result, and hand a finished evaluation
+back for bulk validation. The evaluator has its own base URL, and the file id
+is one path segment, so a slash in it stays encoded.
+
+```swift
+zb.sendListEvaluatorFile(filePath: "emails.csv", emailAddressColumn: 1) { _ in }
+zb.getListEvaluatorResult(fileId: "<FILE_ID>") { _ in }
+
+// The id of a finished evaluation, not a path: the live endpoint takes it as
+// a form field.
+zb.sendEvaluatedFile(fileId: "<FILE_ID>") { _ in }
+```
+
+## Warmup API
+
+The [Warmup API](https://www.zerobounce.net/docs/warmup-api) is a separate
+product: its own host, its own team-scoped key, and an `API-Key` header instead
+of an `api_key` parameter. Use `ZeroBounceWarmup` with a Warmup API key;
+`ZeroBounceSDK` stays for the validation key.
+
+The body comes back parsed — a dictionary, an array or a number depending on
+the endpoint, and `nil` for the documented empty successes (HTTP 204 and an
+empty 200). The two download endpoints hand over CSV text.
+
+```swift
+let warmup = ZeroBounceWarmup.shared
+warmup.initialize(apiKey: "<YOUR_WARMUP_API_KEY>")
+
+warmup.listSendingAccounts { _ in }
+warmup.getEngagementRules { _ in }
+warmup.getProgressToday { _ in }
+
+// Add a from-address you run yourself. A standard rule is 0 to 4.
+warmup.addSendingAccount(
+    fromAddress: "sender@example.com",
+    onboardingModel: ZeroBounceWarmup.selfManaged,
+    options: ZBWarmupAddSendingAccountOptions(engagementRuleId: 0, ignoreConflict: true)
+) { _ in }
+
+// A custom rule: replyPct 5-45, importantPct 5-40, clickPct 0-70 and at most
+// importantPct x 1.75. All of it is checked before anything is sent.
+warmup.createCustomEngagement(
+    cFrom: "sender@example.com", replyPct: 10, importantPct: 20, clickPct: 30
+) { _ in }
+
+warmup.downloadSeeds { result in
+    if case .Success(let csv) = result { print(csv) }
+}
+
+// Pass an email address, not a bare domain: that is what the live API wants.
+warmup.checkDomainDmarc(fromAddress: "sender@example.com") { _ in }
+```
+
+`testSmtpConfiguration` stores nothing and sends its test message to a
+ZeroBounce test recipient, not to `fromAddress`. The live API answers a failed
+SMTP login with HTTP 500, which arrives as `ZBError.httpError` with
+`statusCode` 500; the password never appears in that message.
 
 ## Per-API base URLs
 
@@ -478,11 +544,31 @@ xcodebuild test \
   -workspace "Zero Bounce iOS SDK.xcworkspace" \
   -scheme "Zero Bounce iOS SDK" \
   -destination 'platform=macOS,variant=Mac Catalyst' \
+  -skip-testing:"Zero Bounce iOS SDKTests/LiveApiTests" \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
+
+The one test the command above skips is the opt-in live suite, which calls the
+real API. To run it, with keys from the environment only:
+
+```bash
+export ZEROBOUNCE_API_KEY=... ZEROBOUNCE_WARMUP_API_KEY=...
+export ZEROBOUNCE_LIVE_SPEND=1 ZEROBOUNCE_LIVE_CHANGES=1
+xcodebuild test \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -destination 'platform=macOS,variant=Mac Catalyst' \
+  -only-testing:"Zero Bounce iOS SDKTests/LiveApiTests" \
+  CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO ENABLE_USER_SCRIPT_SANDBOXING=NO
+```
+
+Without `ZEROBOUNCE_LIVE_SPEND` it makes only free calls, and without any key
+it does nothing. `ZEROBOUNCE_LIVE_CHANGES=1` makes reversible account changes,
+each undone in the same run.
 
 **With iOS Simulator** (requires a simulator runtime from Xcode → Settings → Components). Use a device id that exists on your Mac (`xcrun simctl list devices available`).
 
