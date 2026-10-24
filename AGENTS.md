@@ -44,7 +44,15 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
-The scheme's test action forwards those four variables into the test process as `$(NAME)`, because xcodebuild does not otherwise hand its own environment to `xctest`. The scheme holds only that literal text, never a key. Keys come from the environment only: never write one into a file, a commit, a log, a fixture or a message.
+xcodebuild does not hand its own environment to the test process, so each variable has to be exported a second time with a `TEST_RUNNER_` prefix, which xcodebuild forwards and the prefix is stripped from:
+
+```bash
+export TEST_RUNNER_ZEROBOUNCE_API_KEY="$ZEROBOUNCE_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_WARMUP_API_KEY="$ZEROBOUNCE_WARMUP_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_LIVE_SPEND=1 TEST_RUNNER_ZEROBOUNCE_LIVE_CHANGES=1
+```
+
+Pass them as environment variables, not as `xcodebuild` build settings: a build setting is an argument, and arguments are visible to anyone who can run `ps`. Keys come from the environment only: never write one into a file, a commit, a log, a fixture or a message.
 
 That `xcodebuild` compile is the typecheck. There is no separate lint step. CI (`.github/workflows/sdk_ci.yml`) runs the same command. Do not commit `Pods/` changes that you did not intend, or user-specific Xcode state.
 

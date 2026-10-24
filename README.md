@@ -570,6 +570,21 @@ Without `ZEROBOUNCE_LIVE_SPEND` it makes only free calls, and without any key
 it does nothing. `ZEROBOUNCE_LIVE_CHANGES=1` makes reversible account changes,
 each undone in the same run.
 
+`xcodebuild` does not pass its own environment to the test process, so export
+each variable a second time with a `TEST_RUNNER_` prefix; the prefix is
+stripped on the way in:
+
+```bash
+export TEST_RUNNER_ZEROBOUNCE_API_KEY="$ZEROBOUNCE_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_WARMUP_API_KEY="$ZEROBOUNCE_WARMUP_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_LIVE_SPEND=1 TEST_RUNNER_ZEROBOUNCE_LIVE_CHANGES=1
+```
+
+Pass them as environment variables rather than `xcodebuild` build settings: a
+build setting is a command-line argument, and arguments are visible to anyone
+who can run `ps`.
+
+
 **With iOS Simulator** (requires a simulator runtime from Xcode → Settings → Components). Use a device id that exists on your Mac (`xcrun simctl list devices available`).
 
 Put derived data **outside the repository**. With the default in-repo `build/` directory, copying the **Mocker** test framework into the simulator fails with a wall of `rsync: ... Operation not permitted` errors that look like a build break but are a sandbox problem:

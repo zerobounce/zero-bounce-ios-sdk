@@ -384,6 +384,21 @@ Without `ZEROBOUNCE_LIVE_SPEND` it makes only free calls, and without any key
 it does nothing. `ZEROBOUNCE_LIVE_CHANGES=1` makes reversible account changes,
 each undone in the same run.
 
+`xcodebuild` does not pass its own environment to the test process, so export
+each variable a second time with a `TEST_RUNNER_` prefix; the prefix is
+stripped on the way in:
+
+```bash
+export TEST_RUNNER_ZEROBOUNCE_API_KEY="$ZEROBOUNCE_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_WARMUP_API_KEY="$ZEROBOUNCE_WARMUP_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_LIVE_SPEND=1 TEST_RUNNER_ZEROBOUNCE_LIVE_CHANGES=1
+```
+
+Pass them as environment variables rather than `xcodebuild` build settings: a
+build setting is a command-line argument, and arguments are visible to anyone
+who can run `ps`.
+
+
 
 `ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids build failures when embedding **Mocker.framework** into the test bundle under strict Xcode sandboxing. There are **25** unit tests; you should see **TEST SUCCEEDED** and **Executed 25 tests, with 0 failures**.
 

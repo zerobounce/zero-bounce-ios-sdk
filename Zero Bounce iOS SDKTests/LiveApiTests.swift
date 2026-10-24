@@ -8,10 +8,14 @@
 //  It is listed under <SkippedTests> in the shared scheme, so the default
 //  `xcodebuild test` and CI never run it. To run it:
 //
-//    export ZEROBOUNCE_API_KEY=...          # validation API (skipped without it)
-//    export ZEROBOUNCE_WARMUP_API_KEY=...   # Warmup API (skipped without it)
-//    export ZEROBOUNCE_LIVE_SPEND=1         # optional: spends credits
-//    export ZEROBOUNCE_LIVE_CHANGES=1       # optional: reversible changes
+//    # xcodebuild does not pass its own environment to the test process, so
+//    # each variable is exported again with a TEST_RUNNER_ prefix, which is
+//    # stripped on the way in. Environment variables, not build settings: a
+//    # build setting is an argument, and arguments are visible to ps.
+//    export TEST_RUNNER_ZEROBOUNCE_API_KEY=...        # validation API
+//    export TEST_RUNNER_ZEROBOUNCE_WARMUP_API_KEY=... # Warmup API
+//    export TEST_RUNNER_ZEROBOUNCE_LIVE_SPEND=1       # optional: spends credits
+//    export TEST_RUNNER_ZEROBOUNCE_LIVE_CHANGES=1     # optional: reversible changes
 //    xcodebuild test \
 //      -workspace "Zero Bounce iOS SDK.xcworkspace" \
 //      -scheme "Zero Bounce iOS SDK" \
