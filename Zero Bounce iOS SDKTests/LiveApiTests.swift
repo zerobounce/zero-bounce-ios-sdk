@@ -282,6 +282,7 @@ final class LiveApiTests: XCTestCase {
         }
 
         check("filters list") { report in
+            // LIVE: the body is a JSON array, [] when no filters are set.
             sdk.listFilters { result in
                 if case .Failure(let error) = result { report(self.text(error)) } else { report("") }
             }
@@ -402,7 +403,7 @@ final class LiveApiTests: XCTestCase {
         }
 
         check("domain search") { report in
-            sdk.guessFormat(domain: "example.com") { result in
+            sdk.findDomain(domain: "example.com") { result in
                 if case .Failure(let error) = result { report(self.text(error)) } else { report("") }
             }
         }

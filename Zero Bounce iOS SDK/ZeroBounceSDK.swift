@@ -640,7 +640,11 @@ public class ZeroBounceSDK {
         priority3Api.addFilter(rule: rule, target: target, value: value, completion: completion)
     }
 
-    public func listFilters(usePost: Bool = false, completion: @escaping (ZBDictionaryResult) -> ()) {
+    /// Lists the account's filters.
+    ///
+    /// The body is a JSON array, so this hands back `ZBJsonResult`: cast the
+    /// success value to `[[String: Any]]`.
+    public func listFilters(usePost: Bool = false, completion: @escaping (ZBJsonResult) -> ()) {
         guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
@@ -1303,6 +1307,15 @@ public class ZeroBounceSDK {
         case Success([String: Any])
         case Failure(Error)
     }
+
+    /// A parsed JSON body that may be an object or an array.
+    ///
+    /// LIVE: `/filters/list` answers with a JSON array — `[]` when no filters
+    /// are set — so a dictionary-only result could never carry it.
+    public enum ZBJsonResult {
+        case Success(Any)
+        case Failure(Error)
+    }
     
     private func makeURL(_ path: String, queryItems: [URLQueryItem]) -> String {
         var components = URLComponents(string: apiBaseUrl + path)!
@@ -1537,6 +1550,38 @@ public class ZeroBounceSDK {
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         sendFormPostRequest(url: url, formFields: formFields, completion: completion)
+    }
+
+    /// As priority3SendDictionary, but keeps an array body instead of
+    /// rejecting it.
+    internal func priority3SendJson(url: String, completion: @escaping (ZBJsonResult) -> ()) {
+        sendRequest(url: url) { result in
+            switch result {
+            case .success(_, let data):
+                do {
+                    completion(.Success(try JSONSerialization.jsonObject(with: data, options: [])))
+                } catch {
+                    completion(.Failure(error))
+                }
+            case .failure(let error):
+                completion(.Failure(error))
+            }
+        }
+    }
+
+    internal func priority3FormPostJson(
+        url: String,
+        formFields: [String: String],
+        completion: @escaping (ZBJsonResult) -> ()
+    ) {
+        priority3FormPostDictionary(url: url, formFields: formFields) { result in
+            switch result {
+            case .Success(let dict):
+                completion(.Success(dict))
+            case .Failure(let error):
+                completion(.Failure(error))
+            }
+        }
     }
 
     internal func priority3SendDictionary(url: String, completion: @escaping (ZBDictionaryResult) -> ()) {

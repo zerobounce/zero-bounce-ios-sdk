@@ -265,22 +265,24 @@ internal final class Priority3Api {
         )
     }
 
+    /// LIVE: the listing answers with a JSON array, `[]` when no filters are
+    /// set, so it cannot be carried as a dictionary.
     func listFilters(
         usePost: Bool,
-        completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
+        completion: @escaping (ZeroBounceSDK.ZBJsonResult) -> ()
     ) {
         guard let apiKey = sdk.apiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
         if usePost {
-            sdk.priority3FormPostDictionary(
+            sdk.priority3FormPostJson(
                 url: sdk.apiBaseUrl + "/filters/list",
                 formFields: ["api_key": apiKey],
                 completion: completion
             )
         } else {
-            sdk.priority3SendDictionary(
+            sdk.priority3SendJson(
                 url: sdk.priority3QueryURL(base: sdk.apiBaseUrl + "/filters/list", query: ["api_key": apiKey]),
                 completion: completion
             )

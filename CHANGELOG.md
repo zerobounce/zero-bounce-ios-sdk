@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `getApiUsage` no longer fails outright. The live API returns only the counters that apply to the account and date range, and `sub_status_gold` and `sub_status_role_based_accept_all` are absent from an ordinary response; decoding them as required keys threw, so the whole call failed with "ZeroBounce returned a response that is not valid JSON." A missing counter now reads as 0, and a counter the API adds later is ignored rather than fatal. `sub_status_leading_period_removed` and `sub_status_alias_address`, which the API does return, are now read.
+- `listFilters` no longer fails outright. `/filters/list` answers with a JSON array — `[]` when no filters are set — which could not be carried by a dictionary-only result. **Breaking:** it now completes with `ZeroBounceSDK.ZBJsonResult`; cast the success value to `[[String: Any]]`.
+
 - A 403 HTML "Access denied" page is returned as a short error. An HTML page with status 200 is an error as well, including `getFile`, instead of a saved file.
 - Empty and non-JSON bodies are a short error. A repeated `Error:` / `[Error]:` prefix is removed.
 - `validateBatch` reports an account-level failure (HTTP 200, error for address `all`, such as an invalid API key or no credits) through the failure result. An error for one address stays on the successful result.
