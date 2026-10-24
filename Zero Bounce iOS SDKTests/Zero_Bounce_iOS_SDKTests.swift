@@ -1008,7 +1008,7 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
     }
 }
 
-private struct OfflineRecord {
+struct OfflineRecord {
     let method: String
     let host: String
     /// `URL.path` is percent-decoded, so a %2F in a segment reads as a slash.
@@ -1022,7 +1022,7 @@ private struct OfflineRecord {
     let authHeader: String
 }
 
-private final class OfflineURLProtocol: URLProtocol {
+final class OfflineURLProtocol: URLProtocol {
     static var enabled = false
     static var records: [OfflineRecord] = []
     static let lock = NSLock()
@@ -1128,6 +1128,30 @@ private final class OfflineURLProtocol: URLProtocol {
         if key.hasPrefix("cf-json-") {
             let json = #"{"type":"https://developers.cloudflare.com/support/error-1020/","title":"Error 1020: Access denied","status":403,"error_code":1020,"cloudflare_error":true}"#
             return (403, "application/json", Data(json.utf8))
+        }
+        if request.path.contains("/api/v1/warmup/") {
+            // The Warmup endpoints answer with different shapes: an object, a
+            // bare number, and CSV for the two downloads.
+            if key.hasPrefix("warm-empty") { return (204, "application/json", Data()) }
+            if key.hasPrefix("warm-json-download") {
+                return (200, "application/json", Data(#"{"detail":"nothing here"}"#.utf8))
+            }
+            if key.hasPrefix("warm-500") {
+                return (500, "application/json", Data(#"{"detail":"login failed for sekrit"}"#.utf8))
+            }
+            if key.hasPrefix("warm-404") {
+                return (404, "application/json", Data(#"{"detail":"Not found."}"#.utf8))
+            }
+            if request.path.hasSuffix("/seeds/download") {
+                return (200, "text/csv", Data("seed,provider\na@example.com,gmail\n".utf8))
+            }
+            if request.path.hasSuffix("/statistics/download") {
+                return (200, "text/csv", Data("date,sent\n2026-10-01,10\n".utf8))
+            }
+            if request.path.hasSuffix("/seed-count") {
+                return (200, "application/json", Data("42".utf8))
+            }
+            return (200, "application/json", Data(#"{"ok":true}"#.utf8))
         }
         if key.hasPrefix("ipt-detail") {
             // The Inbox Placement Tester is a Django REST framework app and
@@ -1791,5 +1815,544 @@ final class OfflineApiTests: XCTestCase {
         wait(for: [done], timeout: 5)
 
         XCTAssertTrue(message.contains("Inbox placement test not found."), message)
+    }
+}
+
+/// Offline tests for the Warmup API client.
+///
+/// Every request is answered by `OfflineURLProtocol`; nothing here reaches the
+/// live API. The assertions are on the url, the method, the body and the one
+/// header that actually went out.
+final class OfflineWarmupTests: XCTestCase {
+    private var liveSession: URLSession!
+    private let root = "/api/v1/warmup"
+
+    override func setUp() {
+        super.setUp()
+        OfflineURLProtocol.enabled = true
+        OfflineURLProtocol.records = []
+        liveSession = ZeroBounceSDK.urlSession
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession(protocolClasses: [OfflineURLProtocol.self])
+    }
+
+    override func tearDown() {
+        OfflineURLProtocol.enabled = false
+        ZeroBounceSDK.urlSession = liveSession
+        super.tearDown()
+    }
+
+    private func client(_ key: String = "warm-key") -> ZeroBounceWarmup {
+        let warmup = ZeroBounceWarmup()
+        warmup.initialize(apiKey: key)
+        return warmup
+    }
+
+    /// Runs one call and hands back the single request it sent.
+    private func send(_ block: (@escaping () -> ()) -> ()) -> OfflineRecord {
+        OfflineURLProtocol.records = []
+        let done = expectation(description: "request finished")
+        block { done.fulfill() }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(OfflineURLProtocol.records.count, 1)
+        return OfflineURLProtocol.records[0]
+    }
+
+    /// Runs one call that must be rejected before any request is sent.
+    private func expectRejected(
+        _ fragment: String,
+        file: StaticString = #file,
+        line: UInt = #line,
+        _ block: (@escaping (String?) -> ()) -> ()
+    ) {
+        OfflineURLProtocol.records = []
+        var message: String?
+        let done = expectation(description: "rejected: \(fragment)")
+        block { text in
+            message = text
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertNotNil(message, "expected a failure mentioning \(fragment)", file: file, line: line)
+        XCTAssertTrue(message?.contains(fragment) == true, message ?? "", file: file, line: line)
+        XCTAssertEqual(OfflineURLProtocol.records.count, 0, "no request should have been sent", file: file, line: line)
+    }
+
+    private func failureText(_ result: ZeroBounceWarmup.ZBWarmupResult) -> String? {
+        if case .Failure(let error) = result {
+            return (error as? LocalizedError)?.errorDescription ?? "\(error)"
+        }
+        return nil
+    }
+
+    func testEveryCallCarriesTheApiKeyHeaderAndItsOwnHost() {
+        let warmup = client()
+        let sent = send { finish in warmup.listSendingAccounts { _ in finish() } }
+
+        XCTAssertEqual(sent.method, "GET")
+        // Its own host and base path, not the validation API's.
+        XCTAssertEqual(sent.host, "warmup-api.zerobounce.net")
+        XCTAssertEqual(sent.path, "\(root)/sending-accounts")
+        // The Warmup API authenticates with an API-Key header; the validation
+        // api_key never appears.
+        XCTAssertEqual(sent.authHeader, "API-Key: warm-key")
+        XCTAssertFalse(sent.query.contains("api_key="), sent.query)
+    }
+
+    func testAnUninitializedClientSendsNothing() {
+        let warmup = ZeroBounceWarmup()
+        expectRejected("ZeroBounceWarmup.shared.initialize") { report in
+            warmup.getSeeds { report(self.failureText($0)) }
+        }
+
+        // A key with surrounding whitespace or control characters would be
+        // quoted, unredacted, in a transport error.
+        warmup.initialize(apiKey: " warm-key")
+        XCTAssertNil(warmup.apiKey)
+        warmup.initialize(apiKey: "warm-key")
+        XCTAssertEqual(warmup.apiKey, "warm-key")
+    }
+
+    func testReadsUseTheDocumentedPaths() {
+        let warmup = client()
+
+        XCTAssertEqual(
+            send { finish in warmup.getSendingAccount(fromAddress: "sender@example.com") { _ in finish() } }.path,
+            "\(root)/sending-account"
+        )
+        XCTAssertEqual(send { finish in warmup.getEngagementRules { _ in finish() } }.path, "\(root)/engagement-rules")
+        XCTAssertEqual(send { finish in warmup.getSeeds { _ in finish() } }.path, "\(root)/seeds")
+        XCTAssertEqual(send { finish in warmup.getProgressToday { _ in finish() } }.path, "\(root)/progress-today")
+        XCTAssertEqual(send { finish in warmup.getSentToday { _ in finish() } }.path, "\(root)/sent-today")
+        XCTAssertEqual(send { finish in warmup.getEmailsPerDay { _ in finish() } }.path, "\(root)/emails-per-day")
+        XCTAssertEqual(
+            send { finish in warmup.getStatistics(fromAddress: "sender@example.com") { _ in finish() } }.path,
+            "\(root)/statistics"
+        )
+        XCTAssertEqual(
+            send { finish in warmup.getStatisticsDetailed(cFrom: "sender@example.com") { _ in finish() } }.path,
+            "\(root)/statistics-detailed"
+        )
+        XCTAssertEqual(
+            send { finish in warmup.getFromAddressStatistics(fromAddress: "sender@example.com") { _ in finish() } }.path,
+            "\(root)/from-address-statistics"
+        )
+
+        let account = send { finish in
+            warmup.getSendingAccount(fromAddress: "sender@example.com") { _ in finish() }
+        }
+        XCTAssertTrue(account.query.contains("from_address=sender@example.com")
+            || account.query.contains("from_address=sender%40example.com"), account.query)
+
+        // c_from is one path segment here, so a slash must stay encoded.
+        let custom = send { finish in warmup.getCustomEngagement(cFrom: "a b/c") { _ in finish() } }
+        XCTAssertTrue(custom.rawPath.contains("\(root)/custom-engagement/a%20b%2Fc"), custom.rawPath)
+    }
+
+    func testSeedCountAnswersABareNumber() {
+        let warmup = client()
+        var value: Any??
+        let done = expectation(description: "seed count")
+        warmup.getSeedCount { result in
+            if case .Success(let object) = result { value = object }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual((value ?? nil) as? Int, 42)
+    }
+
+    func testEmptySuccessesComeBackAsNil() {
+        // 204 and an empty 200 are the documented empty successes.
+        let warmup = client("warm-empty")
+        var wasSuccess = false
+        var value: Any??
+        let done = expectation(description: "empty success")
+        warmup.getSentToday { result in
+            if case .Success(let object) = result {
+                wasSuccess = true
+                value = object
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertTrue(wasSuccess)
+        XCTAssertNil(value ?? nil)
+    }
+
+    func testAddSendingAccount() {
+        let warmup = client()
+
+        let selfManaged = send { finish in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.selfManaged,
+                options: ZBWarmupAddSendingAccountOptions(engagementRuleId: 2, ignoreConflict: true)
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(selfManaged.method, "POST")
+        XCTAssertEqual(selfManaged.path, "\(root)/sending-accounts")
+        XCTAssertTrue(selfManaged.body.contains("\"onboarding_model\":\"self_managed\""), selfManaged.body)
+        XCTAssertTrue(selfManaged.body.contains("\"engagement_rule_id\":2"), selfManaged.body)
+        XCTAssertTrue(selfManaged.body.contains("\"ignore_conflict\":true"), selfManaged.body)
+
+        // A self-managed account needs an engagement rule, and the ZB managed
+        // extras belong to the other model.
+        expectRejected("engagement_rule_id") { report in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.selfManaged
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("zb_managed") { report in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.selfManaged,
+                options: ZBWarmupAddSendingAccountOptions(
+                    engagementRuleId: 0,
+                    emailContent: ZBWarmupEmailContent(companyName: "Example")
+                )
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("onboarding_model") { report in
+            warmup.addSendingAccount(fromAddress: "sender@example.com", onboardingModel: "whatever") {
+                report(self.failureText($0))
+            }
+        }
+
+        let managed = send { finish in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.zbManaged,
+                options: ZBWarmupAddSendingAccountOptions(
+                    emailContent: ZBWarmupEmailContent(
+                        companyName: "Example",
+                        typesOfEmails: ["newsletter", "marketing"]
+                    ),
+                    managedSending: ZBWarmupManagedSending(
+                        weekdaysOnly: true,
+                        timezoneOffset: 3,
+                        warmupStartDate: "2026-11-02"
+                    )
+                )
+            ) { _ in finish() }
+        }
+        XCTAssertTrue(managed.body.contains("\"company_name\":\"Example\""), managed.body)
+        XCTAssertTrue(managed.body.contains("\"types_of_emails\":[\"newsletter\",\"marketing\"]"), managed.body)
+        XCTAssertTrue(managed.body.contains("\"timezone_offset\":3"), managed.body)
+        XCTAssertTrue(managed.body.contains("\"warmup_start_date\":\"2026-11-02\""), managed.body)
+        XCTAssertFalse(managed.body.contains("engagement_rule_id"), managed.body)
+
+        expectRejected("types_of_emails") { report in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.zbManaged,
+                options: ZBWarmupAddSendingAccountOptions(
+                    emailContent: ZBWarmupEmailContent(typesOfEmails: ["postcards"])
+                )
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("timezone_offset") { report in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.zbManaged,
+                options: ZBWarmupAddSendingAccountOptions(
+                    managedSending: ZBWarmupManagedSending(timezoneOffset: 15)
+                )
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("warmup_start_date") { report in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.zbManaged,
+                options: ZBWarmupAddSendingAccountOptions(
+                    managedSending: ZBWarmupManagedSending(warmupStartDate: "02/11/2026")
+                )
+            ) { report(self.failureText($0)) }
+        }
+    }
+
+    func testUpdateAndDeleteSendingAccount() {
+        let warmup = client()
+
+        let updated = send { finish in
+            warmup.updateSendingAccount(
+                fromAddress: "sender@example.com", engagementRuleId: 1, statusId: 4, autoEnable: true
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(updated.method, "PUT")
+        XCTAssertEqual(updated.path, "\(root)/sending-accounts")
+        XCTAssertTrue(updated.body.contains("\"team_id\":1"), updated.body)
+        XCTAssertTrue(updated.body.contains("\"status_id\":4"), updated.body)
+        XCTAssertTrue(updated.body.contains("\"auto_enable\":true"), updated.body)
+
+        let deleted = send { finish in
+            warmup.deleteSendingAccount(fromAddress: "sender@example.com") { _ in finish() }
+        }
+        XCTAssertEqual(deleted.method, "DELETE")
+        XCTAssertEqual(deleted.path, "\(root)/sending-accounts")
+
+        // Despite the path, nothing about SMTP credentials is stored.
+        let moved = send { finish in
+            warmup.changeFromAddress(oldFromAddress: "old@example.com", newFromAddress: "new@example.com") { _ in finish() }
+        }
+        XCTAssertEqual(moved.method, "PUT")
+        XCTAssertEqual(moved.path, "\(root)/smtp-credentials")
+        XCTAssertTrue(moved.body.contains("\"old_from_address\":\"old@example.com\""), moved.body)
+
+        expectRejected("engagement_rule_id") { report in
+            warmup.updateSendingAccount(
+                fromAddress: "sender@example.com", engagementRuleId: 9, statusId: 4, autoEnable: false
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("status_id") { report in
+            warmup.updateSendingAccount(
+                fromAddress: "sender@example.com", engagementRuleId: 1, statusId: 9, autoEnable: false
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("new_from_address") { report in
+            warmup.changeFromAddress(oldFromAddress: "old@example.com", newFromAddress: " ") {
+                report(self.failureText($0))
+            }
+        }
+    }
+
+    func testListFromAddresses() {
+        let warmup = client()
+
+        let bare = send { finish in warmup.listFromAddresses { _ in finish() } }
+        XCTAssertEqual(bare.path, "\(root)/from-addresses")
+        XCTAssertEqual(bare.query, "")
+
+        let filtered = send { finish in
+            warmup.listFromAddresses(
+                options: ZBWarmupListFromAddressesOptions(searchFrom: "sender@example.com", offset: 20, limit: 50)
+            ) { _ in finish() }
+        }
+        XCTAssertTrue(filtered.query.contains("offset=20"), filtered.query)
+        XCTAssertTrue(filtered.query.contains("limit=50"), filtered.query)
+
+        expectRejected("search_from") { report in
+            warmup.listFromAddresses(options: ZBWarmupListFromAddressesOptions(searchFrom: "a b")) {
+                report(self.failureText($0))
+            }
+        }
+    }
+
+    func testEngagementRules() {
+        let warmup = client()
+
+        let standard = send { finish in
+            warmup.setEngagementRule(cFrom: "sender@example.com", ruleId: 3) { _ in finish() }
+        }
+        XCTAssertEqual(standard.method, "PUT")
+        XCTAssertEqual(standard.path, "\(root)/engagement-rule")
+        XCTAssertTrue(standard.body.contains("\"rule_id\":3"), standard.body)
+
+        let created = send { finish in
+            warmup.createCustomEngagement(
+                cFrom: "sender@example.com", replyPct: 10, importantPct: 20, clickPct: 30
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(created.method, "POST")
+        XCTAssertEqual(created.path, "\(root)/custom-engagement")
+        XCTAssertTrue(created.body.contains("\"reply_pct\":10"), created.body)
+
+        let updated = send { finish in
+            warmup.updateCustomEngagement(
+                cFrom: "sender@example.com", replyPct: 10, importantPct: 20, clickPct: 30
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(updated.method, "PUT")
+
+        let removed = send { finish in
+            warmup.deleteCustomEngagement(cFrom: "sender@example.com", engagementRuleId: 2) { _ in finish() }
+        }
+        XCTAssertEqual(removed.method, "DELETE")
+        XCTAssertTrue(removed.body.contains("\"engagement_rule_id\":2"), removed.body)
+
+        // The ranges are checked before anything is sent.
+        expectRejected("reply_pct") { report in
+            warmup.createCustomEngagement(cFrom: "sender@example.com", replyPct: 4, importantPct: 20, clickPct: 10) {
+                report(self.failureText($0))
+            }
+        }
+        expectRejected("important_pct") { report in
+            warmup.createCustomEngagement(cFrom: "sender@example.com", replyPct: 10, importantPct: 41, clickPct: 10) {
+                report(self.failureText($0))
+            }
+        }
+        // click_pct is capped at important_pct x 1.75 as well as at 70.
+        expectRejected("click_pct") { report in
+            warmup.createCustomEngagement(cFrom: "sender@example.com", replyPct: 10, importantPct: 20, clickPct: 36) {
+                report(self.failureText($0))
+            }
+        }
+        // and exactly 1.75 x is still allowed.
+        XCTAssertEqual(
+            send { finish in
+                warmup.createCustomEngagement(cFrom: "sender@example.com", replyPct: 10, importantPct: 20, clickPct: 35) { _ in finish() }
+            }.path,
+            "\(root)/custom-engagement"
+        )
+        // Falling back to the custom rule itself is not a standard rule.
+        expectRejected("engagement_rule_id") { report in
+            warmup.deleteCustomEngagement(cFrom: "sender@example.com", engagementRuleId: 0) {
+                report(self.failureText($0))
+            }
+        }
+    }
+
+    func testStatisticsPerDayChecksItsDates() {
+        let warmup = client()
+
+        let ranged = send { finish in
+            warmup.getStatisticsPerDay(
+                fromAddress: "sender@example.com", startDate: "2026-10-01", endDate: "2026-10-07"
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(ranged.path, "\(root)/statistics-per-day")
+        XCTAssertTrue(ranged.query.contains("start_date=2026-10-01"), ranged.query)
+        XCTAssertTrue(ranged.query.contains("end_date=2026-10-07"), ranged.query)
+
+        expectRejected("start_date") { report in
+            warmup.getStatisticsPerDay(
+                fromAddress: "sender@example.com", startDate: "10/01/2026", endDate: "2026-10-07"
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("later than") { report in
+            warmup.getStatisticsPerDay(
+                fromAddress: "sender@example.com", startDate: "2026-10-08", endDate: "2026-10-07"
+            ) { report(self.failureText($0)) }
+        }
+    }
+
+    func testCheckDomainDmarcNeedsAnEmailAddress() {
+        let warmup = client()
+
+        let checked = send { finish in
+            warmup.checkDomainDmarc(fromAddress: "sender@example.com", dkimSelector: "selector1") { _ in finish() }
+        }
+        XCTAssertEqual(checked.path, "\(root)/check-domain-dmarc")
+        XCTAssertTrue(checked.query.contains("dkim_selector=selector1"), checked.query)
+
+        let bare = send { finish in
+            warmup.checkDomainDmarc(fromAddress: "sender@example.com") { _ in finish() }
+        }
+        XCTAssertFalse(bare.query.contains("dkim_selector"), bare.query)
+
+        // LIVE: the docs describe a domain, but a bare domain is answered with
+        // "Please provide a valid email address".
+        expectRejected("email address") { report in
+            warmup.checkDomainDmarc(fromAddress: "example.com") { report(self.failureText($0)) }
+        }
+    }
+
+    func testTestSmtpConfigurationKeepsCredentialsOutOfTheError() {
+        let warmup = client()
+
+        let sent = send { finish in
+            warmup.testSmtpConfiguration(
+                fromAddress: "sender@example.com", username: "sender@example.com",
+                password: "sekrit", server: "smtp.example.com", port: 587
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(sent.path, "\(root)/test-smtp-configuration")
+        XCTAssertTrue(sent.body.contains("\"port\":587"), sent.body)
+
+        expectRejected("port") { report in
+            warmup.testSmtpConfiguration(
+                fromAddress: "sender@example.com", username: "sender@example.com",
+                password: "sekrit", server: "smtp.example.com", port: 0
+            ) { report(self.failureText($0)) }
+        }
+
+        // LIVE: a failed SMTP login is answered with HTTP 500, and the
+        // password must not travel out in the error.
+        let failing = client("warm-500")
+        var message = ""
+        var status: Int?
+        let done = expectation(description: "smtp failure")
+        failing.testSmtpConfiguration(
+            fromAddress: "sender@example.com", username: "sender@example.com",
+            password: "sekrit", server: "smtp.example.com", port: 587
+        ) { result in
+            if case .Failure(let error) = result {
+                message = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+                status = (error as? ZBError)?.statusCode
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(status, 500)
+        XCTAssertFalse(message.contains("sekrit"), message)
+        XCTAssertTrue(message.contains("***"), message)
+    }
+
+    func testCsvDownloads() {
+        let warmup = client()
+
+        var seeds = ""
+        var done = expectation(description: "seeds csv")
+        warmup.downloadSeeds { result in
+            if case .Success(let text) = result { seeds = text }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertTrue(seeds.hasPrefix("seed,provider"), seeds)
+
+        var stats = ""
+        done = expectation(description: "statistics csv")
+        warmup.downloadStatistics(cFrom: "sender@example.com") { result in
+            if case .Success(let text) = result { stats = text }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertTrue(stats.hasPrefix("date,sent"), stats)
+
+        // An error comes back as JSON, so it is not a file.
+        let failing = client("warm-json-download")
+        var message = ""
+        done = expectation(description: "json instead of csv")
+        failing.downloadSeeds { result in
+            if case .Failure(let error) = result {
+                message = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertTrue(message.contains("nothing here"), message)
+    }
+
+    func testAnUnknownResourceKeepsItsStatusAndHidesTheKey() {
+        let warmup = client("warm-404")
+        var status: Int?
+        var message = ""
+        let done = expectation(description: "unknown resource")
+        warmup.getCustomEngagement(cFrom: "no-such-address@example.com") { result in
+            if case .Failure(let error) = result {
+                status = (error as? ZBError)?.statusCode
+                message = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(status, 404)
+        XCTAssertFalse(message.contains("warm-404"), message)
+    }
+
+    func testBlankArgumentsAreRejectedBeforeSending() {
+        let warmup = client()
+
+        expectRejected("from_address") { report in
+            warmup.getSendingAccount(fromAddress: "  ") { report(self.failureText($0)) }
+        }
+        expectRejected("c_from") { report in
+            warmup.getStatisticsDetailed(cFrom: "  ") { report(self.failureText($0)) }
+        }
+        // A path segment of "." or ".." would walk the request out of the
+        // endpoint it was meant for.
+        expectRejected("c_from") { report in
+            warmup.getCustomEngagement(cFrom: "..") { report(self.failureText($0)) }
+        }
     }
 }
