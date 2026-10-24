@@ -40,4 +40,23 @@ public enum ZBValidateSubStatus: String, Codable {
     case allowed
     case roleBasedAcceptAll = "role_based_accept_all"
     case gold
+    case aiAgentMailbox = "ai_agent_mailbox"
+
+    /// Any sub_status this SDK does not recognise.
+    ///
+    /// The raw value is a sentinel that the API cannot return, so it can never
+    /// collide with a real sub_status.
+    case unknown = "__zb_unknown_sub_status__"
+
+    /// Decodes leniently so a sub_status introduced after this SDK shipped does
+    /// not fail the whole response.
+    ///
+    /// Synthesised `Codable` throws `DecodingError.dataCorrupted` for an
+    /// unrecognised raw value, and because `subStatus` is only `Optional` --
+    /// which covers a missing or null key, not an unknown one -- that error
+    /// propagated out of `JSONDecoder` and failed the entire validate call.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ZBValidateSubStatus(rawValue: raw) ?? .unknown
+    }
 }

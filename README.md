@@ -352,6 +352,170 @@ ZeroBounceSDK.shared.scoringDeleteFile(fileId: fileId) { result in
 }
 ```
 
+## Validate options
+
+`validate` takes a `ZBValidateOptions`. An option left `nil` is not sent, and
+booleans go on the wire as the strings `"true"`/`"false"`.
+
+```swift
+ZeroBounceSDK.shared.validate(
+    email: "<EMAIL>",
+    options: ZBValidateOptions(
+        timeout: 30,                 // 3-60 seconds
+        activityData: true,          // fills activeInDays / activeFirstSeen
+        verifyPlus: true,
+        domainInfo: true,            // fills domainWebsiteExists / domainRegistrantCompanyName
+        greylistProcessing: true,
+        callbackUrl: "https://example.com/greylist",
+        usePost: true                // form-encoded POST /v2/validate instead of GET
+    )
+) { result in print(result) }
+```
+
+`callbackUrl` is where the greylist retry posts its result, so it is rejected
+without `greylistProcessing: true` — before any request is sent. While that
+retry is still running the API answers with a `Message` and **no** `status` or
+`processed_at`, so `ZBValidateResponse.status` and `.processedAt` are optional
+and the text lands on `.message`.
+
+## S3 and SFTP/FTP bulk
+
+Queue a job on a file that already sits in your Amazon S3 bucket, or on your
+SFTP/FTP server. See the [S3](https://www.zerobounce.net/docs/api-integrations/amazon-s3-bulk-api)
+and [SFTP](https://www.zerobounce.net/docs/api-integrations/sftp_bulk_api) docs.
+These live on the bulkapi host *without* the `/v2` path.
+
+```swift
+let zb = ZeroBounceSDK.shared
+
+// Amazon S3. fileName is the full path, as returned by listS3files.
+// Every one of these jobs needs both fileName and returnUrl: the docs call
+// validateSFTPFile's fileName optional, but the live API answers
+// "Empty parameter: file_name" without it.
+let done = "https://example.com/zerobounce-done"
+zb.emailFinderS3File(
+    options: ZBBulkFileJobOptions(fileName: "lists/leads.csv", returnUrl: done)
+) { _ in }
+zb.domainSearchS3File(
+    options: ZBBulkFileJobOptions(
+        fileName: "lists/leads.csv",
+        removeDuplicates: true,
+        returnUrl: done
+    )
+) { _ in }
+
+// SFTP/FTP. The server, path and protocol come from your ZeroBounce settings.
+let sftp = ZBBulkFileJobOptions(fileName: "my_file.txt", returnUrl: done)
+zb.validateSFTPFile(options: sftp) { _ in }
+zb.scoreSFTPFile(options: sftp) { _ in }
+zb.emailFinderSFTPFile(options: sftp) { _ in }
+zb.domainSearchSFTPFile(options: sftp) { _ in }
+
+// Note the field: this one takes export_path, not export_bucket.
+// nil uses the export path from your settings.
+zb.exportSFTPFile(fileId: "<FILE_ID>", exportPath: "/exports") { _ in }
+```
+
+## Inbox Placement Tester
+
+Runs on its own host and sends camelCase JSON bodies. It authenticates with an
+`Authorization: Bearer` header rather than the `api_key` parameter the rest of
+the API takes, and it spends the account's inbox-test credits.
+
+```swift
+let zb = ZeroBounceSDK.shared
+
+zb.getInboxPlacementProviders { _ in }
+zb.getInboxPlacementTestTypes { _ in }
+
+zb.createInboxPlacementTest(
+    name: "Launch",
+    options: ZBCreateInboxPlacementTestOptions(
+        testType: 1,
+        senderEmail: "news@example.com",
+        webhookUrl: "https://example.com/ipt-webhook"
+    )
+) { _ in }
+
+// Send your campaign to the seeds you got back, then read the results.
+zb.getInboxPlacementTest(testId: "<TEST_ID>") { _ in }
+
+zb.listInboxPlacementTests(options: ZBListInboxPlacementTestsOptions(status: "finished", page: 1)) { _ in }
+zb.setInboxPlacementWebhook(webhookUrl: "https://example.com/ipt-webhook") { _ in }
+zb.getInboxPlacementWebhook { _ in }
+zb.deleteInboxPlacementTest(testId: "<TEST_ID>") { _ in }
+```
+
+## List evaluator
+
+Upload a list for evaluation, read the result, and hand a finished evaluation
+back for bulk validation. The evaluator has its own base URL, and the file id
+is one path segment, so a slash in it stays encoded.
+
+```swift
+zb.sendListEvaluatorFile(filePath: "emails.csv", emailAddressColumn: 1) { _ in }
+zb.getListEvaluatorResult(fileId: "<FILE_ID>") { _ in }
+
+// The id of a finished evaluation, not a path: the live endpoint takes it as
+// a form field.
+zb.sendEvaluatedFile(fileId: "<FILE_ID>") { _ in }
+```
+
+## Warmup API
+
+The [Warmup API](https://www.zerobounce.net/docs/warmup-api) is a separate
+product: its own host, its own team-scoped key, and an `API-Key` header instead
+of an `api_key` parameter. Use `ZeroBounceWarmup` with a Warmup API key;
+`ZeroBounceSDK` stays for the validation key.
+
+The body comes back parsed — a dictionary, an array or a number depending on
+the endpoint, and `nil` for the documented empty successes (HTTP 204 and an
+empty 200). The two download endpoints hand over CSV text.
+
+```swift
+let warmup = ZeroBounceWarmup.shared
+warmup.initialize(apiKey: "<YOUR_WARMUP_API_KEY>")
+
+warmup.listSendingAccounts { _ in }
+warmup.getEngagementRules { _ in }
+warmup.getProgressToday { _ in }
+
+// Add a from-address you run yourself. A standard rule is 0 to 4.
+warmup.addSendingAccount(
+    fromAddress: "sender@example.com",
+    onboardingModel: ZeroBounceWarmup.selfManaged,
+    options: ZBWarmupAddSendingAccountOptions(engagementRuleId: 0, ignoreConflict: true)
+) { _ in }
+
+// A custom rule: replyPct 5-45, importantPct 5-40, clickPct 0-70 and at most
+// importantPct x 1.75. All of it is checked before anything is sent.
+warmup.createCustomEngagement(
+    cFrom: "sender@example.com", replyPct: 10, importantPct: 20, clickPct: 30
+) { _ in }
+
+warmup.downloadSeeds { result in
+    if case .Success(let csv) = result { print(csv) }
+}
+
+// Pass an email address, not a bare domain: that is what the live API wants.
+warmup.checkDomainDmarc(fromAddress: "sender@example.com") { _ in }
+```
+
+`testSmtpConfiguration` stores nothing and sends its test message to a
+ZeroBounce test recipient, not to `fromAddress`. The live API answers a failed
+SMTP login with HTTP 500, which arrives as `ZBError.httpError` with
+`statusCode` 500; the password never appears in that message.
+
+## Per-API base URLs
+
+The list evaluator and the Inbox Placement Tester are separate hosts, so
+`initialize` alone leaves them pointing at the live API.
+
+```swift
+ZeroBounceSDK.shared.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/listevaluator")
+ZeroBounceSDK.shared.setInboxPlacementBaseUrl("https://bulkapi.zerobounce.net/api/ipt")
+```
+
 ## Sample App
 - You can also clone the repo and access the Sample App inside the project to check out some examples. Just initialize the SDK with your own API key and uncomment the endpoint that you want to test.
 
@@ -380,21 +544,66 @@ xcodebuild test \
   -workspace "Zero Bounce iOS SDK.xcworkspace" \
   -scheme "Zero Bounce iOS SDK" \
   -destination 'platform=macOS,variant=Mac Catalyst' \
+  -skip-testing:"Zero Bounce iOS SDKTests/LiveApiTests" \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
-**With iOS Simulator** (requires a simulator runtime from Xcode → Settings → Components). Use a device name that exists on your Mac (`xcrun simctl list devices available`). `ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids embed/copy failures for the **Mocker** test dependency under some Xcode sandbox settings.
+The one test the command above skips is the opt-in live suite, which calls the
+real API. To run it, with keys from the environment only:
 
 ```bash
+export ZEROBOUNCE_API_KEY=... ZEROBOUNCE_WARMUP_API_KEY=...
+export ZEROBOUNCE_LIVE_SPEND=1 ZEROBOUNCE_LIVE_CHANGES=1
 xcodebuild test \
   -workspace "Zero Bounce iOS SDK.xcworkspace" \
   -scheme "Zero Bounce iOS SDK" \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4' \
-  ENABLE_USER_SCRIPT_SANDBOXING=NO
+  -destination 'platform=macOS,variant=Mac Catalyst' \
+  -only-testing:"Zero Bounce iOS SDKTests/LiveApiTests" \
+  CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
+
+Without `ZEROBOUNCE_LIVE_SPEND` it makes only free calls, and without any key
+it does nothing. `ZEROBOUNCE_LIVE_CHANGES=1` makes reversible account changes,
+each undone in the same run.
+
+`xcodebuild` does not pass its own environment to the test process, so export
+each variable a second time with a `TEST_RUNNER_` prefix; the prefix is
+stripped on the way in:
+
+```bash
+export TEST_RUNNER_ZEROBOUNCE_API_KEY="$ZEROBOUNCE_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_WARMUP_API_KEY="$ZEROBOUNCE_WARMUP_API_KEY"
+export TEST_RUNNER_ZEROBOUNCE_LIVE_SPEND=1 TEST_RUNNER_ZEROBOUNCE_LIVE_CHANGES=1
+```
+
+Pass them as environment variables rather than `xcodebuild` build settings: a
+build setting is a command-line argument, and arguments are visible to anyone
+who can run `ps`.
+
+
+**With iOS Simulator** (requires a simulator runtime from Xcode → Settings → Components). Use a device id that exists on your Mac (`xcrun simctl list devices available`).
+
+Put derived data **outside the repository**. With the default in-repo `build/` directory, copying the **Mocker** test framework into the simulator fails with a wall of `rsync: ... Operation not permitted` errors that look like a build break but are a sandbox problem:
+
+```bash
+xcodebuild build-for-testing \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -sdk iphonesimulator \
+  -derivedDataPath /tmp/zb-ios-dd
+
+xcodebuild test-without-building \
+  -workspace "Zero Bounce iOS SDK.xcworkspace" \
+  -scheme "Zero Bounce iOS SDK" \
+  -destination "id=<SIMULATOR_UDID>" \
+  -derivedDataPath /tmp/zb-ios-dd
+```
+
+If `xcodebuild` reports `CoreSimulator is out of date`, run `xcrun simctl list devices available` once — it reinstalls the matching service — then retry.
 
 ### Expected Output
 

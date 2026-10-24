@@ -113,6 +113,13 @@ public struct ZBGetApiUsageResponse : Codable, Equatable {
     
     /// Total number of times the API has a sub status of "role_based_accept_all"
     public let subStatusRoleBasedAcceptAll: Int
+
+    /// Total emails with a leading period that was removed
+    public let subStatusLeadingPeriodRemoved: Int
+    
+    /// Total alias address emails returned by the API
+    public let subStatusAliasAddress: Int
+    
     
     /// Start date of query
     public let startDate: String?
@@ -156,7 +163,143 @@ public struct ZBGetApiUsageResponse : Codable, Equatable {
         case subStatusBlocked = "sub_status_blocked"
         case subStatusGold = "sub_status_gold"
         case subStatusRoleBasedAcceptAll = "sub_status_role_based_accept_all"
+        case subStatusLeadingPeriodRemoved = "sub_status_leading_period_removed"
+        case subStatusAliasAddress = "sub_status_alias_address"
         case startDate = "start_date"
         case endDate = "end_date"
     }
+
+    /// Declaring `init(from:)` suppresses the synthesized memberwise
+    /// initializer, which callers and tests construct this with.
+    public init(
+        total: Int,
+        statusValid: Int,
+        statusInvalid: Int,
+        statusCatchAll: Int,
+        statusDoNotMail: Int,
+        statusSpamtrap: Int,
+        statusUnknown: Int,
+        subStatusToxic: Int,
+        subStatusDisposable: Int,
+        subStatusRoleBased: Int,
+        subStatusPossibleTrap: Int,
+        subStatusGlobalSuppression: Int,
+        subStatusTimeoutExceeded: Int,
+        subStatusMailServerTemporaryError: Int,
+        subStatusMailServerDidNotResponse: Int,
+        subStatusGreyListed: Int,
+        subStatusAntiSpamSystem: Int,
+        subStatusDoesNotAcceptMail: Int,
+        subStatusExceptionOccurred: Int,
+        subStatusFailedSyntaxCheck: Int,
+        subStatusMailboxNotFound: Int,
+        subStatusUnRoutableIpAddress: Int,
+        subStatusPossibleTypo: Int,
+        subStatusNoDnsEntries: Int,
+        subStatusRoleBasedCatchAll: Int,
+        subStatusMailboxQuotaExceeded: Int,
+        subStatusForcibleDisconnect: Int,
+        subStatusFailedSmtpConnection: Int,
+        subStatusAcceptAll: Int,
+        subStatusMxForward: Int,
+        subStatusAlternate: Int,
+        subStatusAllowed: Int,
+        subStatusBlocked: Int,
+        subStatusGold: Int = 0,
+        subStatusRoleBasedAcceptAll: Int = 0,
+        subStatusLeadingPeriodRemoved: Int = 0,
+        subStatusAliasAddress: Int = 0,
+        startDate: String? = nil,
+        endDate: String? = nil
+    ) {
+        self.total = total
+        self.statusValid = statusValid
+        self.statusInvalid = statusInvalid
+        self.statusCatchAll = statusCatchAll
+        self.statusDoNotMail = statusDoNotMail
+        self.statusSpamtrap = statusSpamtrap
+        self.statusUnknown = statusUnknown
+        self.subStatusToxic = subStatusToxic
+        self.subStatusDisposable = subStatusDisposable
+        self.subStatusRoleBased = subStatusRoleBased
+        self.subStatusPossibleTrap = subStatusPossibleTrap
+        self.subStatusGlobalSuppression = subStatusGlobalSuppression
+        self.subStatusTimeoutExceeded = subStatusTimeoutExceeded
+        self.subStatusMailServerTemporaryError = subStatusMailServerTemporaryError
+        self.subStatusMailServerDidNotResponse = subStatusMailServerDidNotResponse
+        self.subStatusGreyListed = subStatusGreyListed
+        self.subStatusAntiSpamSystem = subStatusAntiSpamSystem
+        self.subStatusDoesNotAcceptMail = subStatusDoesNotAcceptMail
+        self.subStatusExceptionOccurred = subStatusExceptionOccurred
+        self.subStatusFailedSyntaxCheck = subStatusFailedSyntaxCheck
+        self.subStatusMailboxNotFound = subStatusMailboxNotFound
+        self.subStatusUnRoutableIpAddress = subStatusUnRoutableIpAddress
+        self.subStatusPossibleTypo = subStatusPossibleTypo
+        self.subStatusNoDnsEntries = subStatusNoDnsEntries
+        self.subStatusRoleBasedCatchAll = subStatusRoleBasedCatchAll
+        self.subStatusMailboxQuotaExceeded = subStatusMailboxQuotaExceeded
+        self.subStatusForcibleDisconnect = subStatusForcibleDisconnect
+        self.subStatusFailedSmtpConnection = subStatusFailedSmtpConnection
+        self.subStatusAcceptAll = subStatusAcceptAll
+        self.subStatusMxForward = subStatusMxForward
+        self.subStatusAlternate = subStatusAlternate
+        self.subStatusAllowed = subStatusAllowed
+        self.subStatusBlocked = subStatusBlocked
+        self.subStatusGold = subStatusGold
+        self.subStatusRoleBasedAcceptAll = subStatusRoleBasedAcceptAll
+        self.subStatusLeadingPeriodRemoved = subStatusLeadingPeriodRemoved
+        self.subStatusAliasAddress = subStatusAliasAddress
+        self.startDate = startDate
+        self.endDate = endDate
+    }
+
+    /// LIVE: the API returns only the counters that apply to the account and
+    /// the date range asked for — `sub_status_gold` and
+    /// `sub_status_role_based_accept_all` are absent from an ordinary
+    /// response. Decoding them as required keys failed the whole call, so a
+    /// missing counter reads as 0 and a counter added later is ignored rather
+    /// than fatal.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        total = try container.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        statusValid = try container.decodeIfPresent(Int.self, forKey: .statusValid) ?? 0
+        statusInvalid = try container.decodeIfPresent(Int.self, forKey: .statusInvalid) ?? 0
+        statusCatchAll = try container.decodeIfPresent(Int.self, forKey: .statusCatchAll) ?? 0
+        statusDoNotMail = try container.decodeIfPresent(Int.self, forKey: .statusDoNotMail) ?? 0
+        statusSpamtrap = try container.decodeIfPresent(Int.self, forKey: .statusSpamtrap) ?? 0
+        statusUnknown = try container.decodeIfPresent(Int.self, forKey: .statusUnknown) ?? 0
+        subStatusToxic = try container.decodeIfPresent(Int.self, forKey: .subStatusToxic) ?? 0
+        subStatusDisposable = try container.decodeIfPresent(Int.self, forKey: .subStatusDisposable) ?? 0
+        subStatusRoleBased = try container.decodeIfPresent(Int.self, forKey: .subStatusRoleBased) ?? 0
+        subStatusPossibleTrap = try container.decodeIfPresent(Int.self, forKey: .subStatusPossibleTrap) ?? 0
+        subStatusGlobalSuppression = try container.decodeIfPresent(Int.self, forKey: .subStatusGlobalSuppression) ?? 0
+        subStatusTimeoutExceeded = try container.decodeIfPresent(Int.self, forKey: .subStatusTimeoutExceeded) ?? 0
+        subStatusMailServerTemporaryError = try container.decodeIfPresent(Int.self, forKey: .subStatusMailServerTemporaryError) ?? 0
+        subStatusMailServerDidNotResponse = try container.decodeIfPresent(Int.self, forKey: .subStatusMailServerDidNotResponse) ?? 0
+        subStatusGreyListed = try container.decodeIfPresent(Int.self, forKey: .subStatusGreyListed) ?? 0
+        subStatusAntiSpamSystem = try container.decodeIfPresent(Int.self, forKey: .subStatusAntiSpamSystem) ?? 0
+        subStatusDoesNotAcceptMail = try container.decodeIfPresent(Int.self, forKey: .subStatusDoesNotAcceptMail) ?? 0
+        subStatusExceptionOccurred = try container.decodeIfPresent(Int.self, forKey: .subStatusExceptionOccurred) ?? 0
+        subStatusFailedSyntaxCheck = try container.decodeIfPresent(Int.self, forKey: .subStatusFailedSyntaxCheck) ?? 0
+        subStatusMailboxNotFound = try container.decodeIfPresent(Int.self, forKey: .subStatusMailboxNotFound) ?? 0
+        subStatusUnRoutableIpAddress = try container.decodeIfPresent(Int.self, forKey: .subStatusUnRoutableIpAddress) ?? 0
+        subStatusPossibleTypo = try container.decodeIfPresent(Int.self, forKey: .subStatusPossibleTypo) ?? 0
+        subStatusNoDnsEntries = try container.decodeIfPresent(Int.self, forKey: .subStatusNoDnsEntries) ?? 0
+        subStatusRoleBasedCatchAll = try container.decodeIfPresent(Int.self, forKey: .subStatusRoleBasedCatchAll) ?? 0
+        subStatusMailboxQuotaExceeded = try container.decodeIfPresent(Int.self, forKey: .subStatusMailboxQuotaExceeded) ?? 0
+        subStatusForcibleDisconnect = try container.decodeIfPresent(Int.self, forKey: .subStatusForcibleDisconnect) ?? 0
+        subStatusFailedSmtpConnection = try container.decodeIfPresent(Int.self, forKey: .subStatusFailedSmtpConnection) ?? 0
+        subStatusAcceptAll = try container.decodeIfPresent(Int.self, forKey: .subStatusAcceptAll) ?? 0
+        subStatusMxForward = try container.decodeIfPresent(Int.self, forKey: .subStatusMxForward) ?? 0
+        subStatusAlternate = try container.decodeIfPresent(Int.self, forKey: .subStatusAlternate) ?? 0
+        subStatusAllowed = try container.decodeIfPresent(Int.self, forKey: .subStatusAllowed) ?? 0
+        subStatusBlocked = try container.decodeIfPresent(Int.self, forKey: .subStatusBlocked) ?? 0
+        subStatusGold = try container.decodeIfPresent(Int.self, forKey: .subStatusGold) ?? 0
+        subStatusRoleBasedAcceptAll = try container.decodeIfPresent(Int.self, forKey: .subStatusRoleBasedAcceptAll) ?? 0
+        subStatusLeadingPeriodRemoved = try container.decodeIfPresent(Int.self, forKey: .subStatusLeadingPeriodRemoved) ?? 0
+        subStatusAliasAddress = try container.decodeIfPresent(Int.self, forKey: .subStatusAliasAddress) ?? 0
+        startDate = try container.decodeIfPresent(String.self, forKey: .startDate)
+        endDate = try container.decodeIfPresent(String.self, forKey: .endDate)
+    }
+
 }
