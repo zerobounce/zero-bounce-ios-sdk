@@ -21,33 +21,39 @@ public struct ZBDomainSearchSendFileOptions {
     public init() {}
 }
 
+/// LIVE: `returnUrl` is required, although the docs call it optional. Without
+/// it `POST /validateS3file` answers HTTP 400 "Provided return URL is not
+/// permitted: None", so it is an initializer argument rather than an optional
+/// field, the way every other S3/SFTP job needs one.
 public struct ZBValidateS3FileOptions {
     public var fileName: String
+    public var returnUrl: String
     public var hasHeaderRow: Bool?
     public var removeDuplicates: Bool?
-    public var removeDuplicate: Bool?
     public var emailAddressColumn: Int?
-    public var returnUrl: String?
     public var firstNameColumn: Int = 0
     public var lastNameColumn: Int = 0
     public var genderColumn: Int = 0
     public var ipAddressColumn: Int = 0
     public var allowPhase2: Bool?
 
-    public init(fileName: String) {
+    public init(fileName: String, returnUrl: String) {
         self.fileName = fileName
+        self.returnUrl = returnUrl
     }
 }
 
+/// LIVE: `returnUrl` is required here too. See `ZBValidateS3FileOptions`.
 public struct ZBScoreS3FileOptions {
     public var fileName: String
+    public var returnUrl: String
     public var hasHeaderRow: Bool?
     public var removeDuplicates: Bool?
-    public var removeDuplicate: Bool?
     public var emailAddressColumn: Int?
 
-    public init(fileName: String) {
+    public init(fileName: String, returnUrl: String) {
         self.fileName = fileName
+        self.returnUrl = returnUrl
     }
 }
 

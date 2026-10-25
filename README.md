@@ -75,9 +75,14 @@ ZeroBounceSDK.shared.validateBatch(emails: emails) { result in
 ```swift
 let domain = "<DOMAIN_NAME>" // The domain name for which to find the email format
 let companyName = "<COMPANY_NAME>" // The company name for which to find the email format
-let firstName = "<FIRST_NAME>" // The first name whose email format is being searched
+let firstName = "<FIRST_NAME>" // The first name whose email format is being searched (Optional)
 let middleName = "<MIDDLE_NAME>" // The middle name whose email format is being searched (Optional)
 let lastName = "<LAST_NAME>" // The last name whose email format is being searched (Optional)
+
+// All three names are optional individually, but at least one is needed: a
+// search by last name alone is fine. With none of them, /guessformat is the
+// domain search, so use findDomain instead and findEmail says so.
+ZeroBounceSDK.shared.findEmail(domain: domain, lastName: lastName) { _ in }
 
 ZeroBounceSDK.shared.findEmail(
     domain: domain,
@@ -113,7 +118,7 @@ ZeroBounceSDK.shared.findEmail(
 let domain = "<DOMAIN_NAME>" // The domain name for which to find the email format
 let companyName = "<COMPANY_NAME>" // The company name for which to find the email format
 
-ZeroBounceSDK.shared.findEmail(
+ZeroBounceSDK.shared.findDomain(
     domain: domain
 ) { result in
     switch result {
@@ -124,7 +129,7 @@ ZeroBounceSDK.shared.findEmail(
     }
 }
 
-ZeroBounceSDK.shared.findEmail(
+ZeroBounceSDK.shared.findDomain(
     companyName: companyName
 ) { result in
     switch result {
@@ -414,6 +419,38 @@ zb.domainSearchSFTPFile(options: sftp) { _ in }
 // Note the field: this one takes export_path, not export_bucket.
 // nil uses the export path from your settings.
 zb.exportSFTPFile(fileId: "<FILE_ID>", exportPath: "/exports") { _ in }
+
+// Validation and AI scoring of an S3 file. Both need a returnUrl: the docs
+// call it optional, but POST /validateS3file without one answers HTTP 400
+// "Provided return URL is not permitted: None".
+zb.listS3files(bucket: "<BUCKET>", search: "leads") { _ in }
+
+var validate = ZBValidateS3FileOptions(fileName: "lists/leads.csv", returnUrl: done)
+validate.emailAddressColumn = 1
+validate.hasHeaderRow = true
+zb.validateS3File(options: validate) { _ in }
+
+var score = ZBScoreS3FileOptions(fileName: "lists/leads.csv", returnUrl: done)
+score.emailAddressColumn = 1
+zb.scoreS3File(options: score) { _ in }
+
+// export_bucket is optional: nil uses the export bucket from your settings.
+zb.exportS3File(fileId: "<FILE_ID>", exportBucket: "my-bucket") { _ in }
+zb.exportS3File(fileId: "<FILE_ID>", exportBucket: nil) { _ in }
+```
+
+The bulk email finder needs a name column as well as the domain column:
+`first_name_column` or `full_name_column`, one of the two.
+
+```swift
+var finder = ZBEmailFinderSendFileOptions()
+finder.firstNameColumn = 2   // or finder.fullNameColumn = 2
+finder.lastNameColumn = 3
+ZeroBounceSDK.shared.sendEmailFinderFile(
+    filePath: "<FILE_PATH>",
+    domainColumn: 1,
+    options: finder
+) { _ in }
 ```
 
 ## Inbox Placement Tester
@@ -428,11 +465,16 @@ let zb = ZeroBounceSDK.shared
 zb.getInboxPlacementProviders { _ in }
 zb.getInboxPlacementTestTypes { _ in }
 
+// name is at most 64 characters, testType is 1, 2 or 3, and test type 1 —
+// the one you send the email for yourself — needs a senderEmail.
+// providers caps how many seeds of a given provider the test uses;
+// providerIds asks for a provider without capping it.
 zb.createInboxPlacementTest(
     name: "Launch",
     options: ZBCreateInboxPlacementTestOptions(
         testType: 1,
         senderEmail: "news@example.com",
+        providers: [ZBInboxPlacementTestProvider(id: 1, maxSeeds: 5)],
         webhookUrl: "https://example.com/ipt-webhook"
     )
 ) { _ in }
@@ -440,7 +482,17 @@ zb.createInboxPlacementTest(
 // Send your campaign to the seeds you got back, then read the results.
 zb.getInboxPlacementTest(testId: "<TEST_ID>") { _ in }
 
-zb.listInboxPlacementTests(options: ZBListInboxPlacementTestsOptions(status: "finished", page: 1)) { _ in }
+// status is running or finished, pageSize is 1-100 and goes on the wire as
+// page_size, which is the spelling the endpoint actually paginates by.
+zb.listInboxPlacementTests(
+    options: ZBListInboxPlacementTestsOptions(
+        status: "finished",
+        createdAfter: "2026-01-01",
+        createdBefore: "2026-02-01",
+        page: 1,
+        pageSize: 25
+    )
+) { _ in }
 zb.setInboxPlacementWebhook(webhookUrl: "https://example.com/ipt-webhook") { _ in }
 zb.getInboxPlacementWebhook { _ in }
 zb.deleteInboxPlacementTest(testId: "<TEST_ID>") { _ in }

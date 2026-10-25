@@ -175,8 +175,12 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let csvPath = NSTemporaryDirectory() + "finder-p3.csv"
         try! "domain,name\nacme.com,Jane\n".write(toFile: csvPath, atomically: true, encoding: .utf8)
 
+        // The bulk email finder needs first_name_column or full_name_column.
+        var options = ZBEmailFinderSendFileOptions()
+        options.firstNameColumn = 2
+
         let requestExpectation = expectation(description: "Request should finish")
-        ZeroBounceSDK.shared.sendEmailFinderFile(filePath: csvPath, domainColumn: 1) { result in
+        ZeroBounceSDK.shared.sendEmailFinderFile(filePath: csvPath, domainColumn: 1, options: options) { result in
             defer { requestExpectation.fulfill() }
             switch result {
             case .Success(let response):
@@ -196,7 +200,11 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         mock.register()
 
         let requestExpectation = expectation(description: "Request should finish")
-        ZeroBounceSDK.shared.validateS3File(options: ZBValidateS3FileOptions(fileName: "bucket/key.csv")) { result in
+        let options = ZBValidateS3FileOptions(
+            fileName: "bucket/key.csv",
+            returnUrl: "https://example.com/done"
+        )
+        ZeroBounceSDK.shared.validateS3File(options: options) { result in
             defer { requestExpectation.fulfill() }
             switch result {
             case .Success(let response):
@@ -567,6 +575,35 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         wait(for: [domainRequestExpectation], timeout: 60)
     }
     
+    /// first_name is optional on /guessformat, so a last name alone is a
+    /// valid email finder search and parses the same response.
+    func testFindEmailWithoutAFirstName() {
+        let domain = "example.com"
+
+        let apiEndpointDomain = URL(
+            string: "\(ZeroBounceSDK.shared.apiBaseUrl)/guessformat?api_key=\(apiKey)&domain=\(domain)&last_name=Doe"
+        )!
+        let expected = ZBEmailFinderResponse(
+            email: "jdoe@example.com", emailConfidence: .high, domain: domain,
+            companyName: "", didYouMean: "", failureReason: ""
+        )
+        let mockedData = try! JSONEncoder().encode(expected)
+        Mock(url: apiEndpointDomain, dataType: .json, statusCode: 200, data: [.get: mockedData]).register()
+
+        let requestExpectation = expectation(description: "Request should finish")
+        ZeroBounceSDK.shared.findEmail(domain: domain, lastName: "Doe") { result in
+            defer { requestExpectation.fulfill() }
+            switch result {
+            case .Success(let response):
+                XCTAssertEqual(response, expected)
+            case .Failure(let error):
+                XCTFail("findEmail without a first name should succeed: \(error)")
+            }
+        }
+
+        wait(for: [requestExpectation], timeout: 60)
+    }
+
     // MARK: Domain search
     func testFindDomain() {
         let domain = "example.com"
@@ -1051,8 +1088,12 @@ final class OfflineURLProtocol: URLProtocol {
         }
         if apiKey.isEmpty, let range = body.range(of: "name=\"api_key\"") {
             let rest = body[range.upperBound...]
-            if let blank = rest.range(of: "\r\n\r\n") {
-                apiKey = String(rest[blank.upperBound...].prefix { $0 != "\r" })
+            // A multipart value ends at the CRLF before the next boundary.
+            // Swift reads "\r\n" as one Character, so the terminator has to be
+            // searched for rather than scanned past one scalar at a time.
+            if let blank = rest.range(of: "\r\n\r\n"),
+               let end = rest[blank.upperBound...].range(of: "\r\n") {
+                apiKey = String(rest[blank.upperBound..<end.lowerBound])
             }
         }
         // The Inbox Placement Tester and the Warmup API carry the key in a
@@ -1414,6 +1455,7 @@ final class OfflineApiTests: XCTestCase {
         sdk.initialize(apiKey: "file-key")
         var finder = ZBEmailFinderSendFileOptions()
         finder.hasHeaderRow = false
+        finder.firstNameColumn = 2
         let finderExp = expectation(description: "finder file")
         let csv = FileManager.default.temporaryDirectory.appendingPathComponent("offline.csv")
         try? Data("domain\nexample.com\n".utf8).write(to: csv)
@@ -1496,6 +1538,31 @@ final class OfflineApiTests: XCTestCase {
     private func dictFailureText(_ result: ZeroBounceSDK.ZBDictionaryResult) -> String? {
         if case .Failure(let error) = result { return "\(error)" }
         return nil
+    }
+
+    /// Splits a form-encoded request body into its decoded fields.
+    private func formFields(_ record: OfflineRecord) -> [String: String] {
+        var fields: [String: String] = [:]
+        for pair in record.body.split(separator: "&") {
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else { continue }
+            let name = String(parts[0]).removingPercentEncoding ?? String(parts[0])
+            fields[name] = String(parts[1]).removingPercentEncoding ?? String(parts[1])
+        }
+        return fields
+    }
+
+    /// Runs one SDK call and returns the error message it failed with.
+    private func failureMessage(_ block: (@escaping (String?) -> ()) -> ()) -> String {
+        var message: String?
+        let done = expectation(description: "failed")
+        block { text in
+            message = text
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertNotNil(message, "expected a failure")
+        return message ?? ""
     }
 
     func testOfflineValidateSendsTheNewOptionsOnlyWhenSet() {
@@ -1702,6 +1769,396 @@ final class OfflineApiTests: XCTestCase {
         }
     }
 
+    func testOfflineS3ValidateAndScoreCarryAReturnUrlAndNothingUndocumented() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "s3-key")
+
+        var validate = ZBValidateS3FileOptions(
+            fileName: "bucket/key.csv",
+            returnUrl: "https://example.com/done"
+        )
+        validate.hasHeaderRow = true
+        validate.removeDuplicates = true
+        validate.emailAddressColumn = 1
+        validate.firstNameColumn = 2
+        validate.lastNameColumn = 3
+        validate.genderColumn = 4
+        validate.ipAddressColumn = 5
+        validate.allowPhase2 = false
+
+        let sent = send { finish in sdk.validateS3File(options: validate) { _ in finish() } }
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(sent.host, "bulkapi.zerobounce.net")
+        // The S3 jobs live on the bulkapi root, WITHOUT /v2.
+        XCTAssertEqual(sent.path, "/validateS3file")
+        // The key travels in the form body here, not on the query string.
+        XCTAssertEqual(sent.apiKey, "s3-key")
+        XCTAssertFalse(sent.query.contains("api_key="), sent.query)
+
+        let fields = formFields(sent)
+        XCTAssertEqual(fields["api_key"], "s3-key")
+        XCTAssertEqual(fields["file_name"], "bucket/key.csv")
+        // LIVE: without this the API answers HTTP 400 "Provided return URL is
+        // not permitted: None", so it is always sent.
+        XCTAssertEqual(fields["return_url"], "https://example.com/done")
+        XCTAssertEqual(fields["has_header_row"], "true")
+        XCTAssertEqual(fields["remove_duplicates"], "true")
+        XCTAssertEqual(fields["email_address_column"], "1")
+        XCTAssertEqual(fields["first_name_column"], "2")
+        XCTAssertEqual(fields["last_name_column"], "3")
+        XCTAssertEqual(fields["gender_column"], "4")
+        XCTAssertEqual(fields["ip_address_column"], "5")
+        XCTAssertEqual(fields["allow_phase_2"], "false")
+        // The undocumented singular spelling is no longer sent beside it.
+        XCTAssertNil(fields["remove_duplicate"])
+
+        var score = ZBScoreS3FileOptions(
+            fileName: "bucket/key.csv",
+            returnUrl: "https://example.com/done"
+        )
+        score.hasHeaderRow = false
+        score.emailAddressColumn = 2
+
+        let scored = send { finish in sdk.scoreS3File(options: score) { _ in finish() } }
+        XCTAssertEqual(scored.method, "POST")
+        XCTAssertEqual(scored.path, "/scoreS3file")
+        let scoreFields = formFields(scored)
+        XCTAssertEqual(scoreFields["file_name"], "bucket/key.csv")
+        XCTAssertEqual(scoreFields["return_url"], "https://example.com/done")
+        XCTAssertEqual(scoreFields["has_header_row"], "false")
+        XCTAssertEqual(scoreFields["email_address_column"], "2")
+        XCTAssertNil(scoreFields["remove_duplicate"])
+        // Unset options stay off the request entirely.
+        XCTAssertNil(scoreFields["remove_duplicates"])
+
+        // A blank value is rejected the same way a missing one would be, and
+        // the type system takes care of a missing one.
+        expectRejected("file_name") { report in
+            sdk.validateS3File(options: ZBValidateS3FileOptions(fileName: " ", returnUrl: "https://e.test/d")) {
+                report(self.failureText($0))
+            }
+        }
+        expectRejected("return_url") { report in
+            sdk.validateS3File(options: ZBValidateS3FileOptions(fileName: "f.csv", returnUrl: "  ")) {
+                report(self.failureText($0))
+            }
+        }
+        expectRejected("file_name") { report in
+            sdk.scoreS3File(options: ZBScoreS3FileOptions(fileName: "", returnUrl: "https://e.test/d")) {
+                report(self.failureText($0))
+            }
+        }
+        expectRejected("return_url") { report in
+            sdk.scoreS3File(options: ZBScoreS3FileOptions(fileName: "f.csv", returnUrl: "")) {
+                report(self.failureText($0))
+            }
+        }
+    }
+
+    func testOfflineS3JobsParseTheirResponses() {
+        let ok = ZeroBounceSDK()
+        ok.initialize(apiKey: "s3-ok")
+        var response: ZBSendFileResponse?
+        let done = expectation(description: "parsed")
+        ok.scoreS3File(options: ZBScoreS3FileOptions(fileName: "f.csv", returnUrl: "https://e.test/d")) { result in
+            if case .Success(let value) = result { response = value }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(response?.fileId, "s3-ok")
+        XCTAssertEqual(response?.success, true)
+
+        // An HTTP 200 carrying "success": false is a failure, here too.
+        let failing = ZeroBounceSDK()
+        failing.initialize(apiKey: "success-false-s3")
+        let message = failureMessage { report in
+            failing.validateS3File(options: ZBValidateS3FileOptions(fileName: "f.csv", returnUrl: "https://e.test/d")) {
+                report(self.failureText($0))
+            }
+        }
+        XCTAssertTrue(message.contains("File cannot be found."), message)
+
+        // And an access-denied HTML page stays a short message.
+        let blocked = ZeroBounceSDK()
+        blocked.initialize(apiKey: "html-403-s3")
+        var short = ""
+        let denied = expectation(description: "denied")
+        blocked.exportS3File(fileId: "fid", exportBucket: nil) { result in
+            if case .Failure(let error) = result { short = self.shortMessage(error) }
+            denied.fulfill()
+        }
+        wait(for: [denied], timeout: 5)
+        XCTAssertFalse(short.isEmpty, short)
+    }
+
+    func testOfflineExportS3FileCanLeaveTheBucketToTheAccountSettings() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "export-key")
+
+        let named = send { finish in
+            sdk.exportS3File(fileId: "fid", exportBucket: "my-bucket") { _ in finish() }
+        }
+        XCTAssertEqual(named.method, "POST")
+        XCTAssertEqual(named.path, "/exportS3file")
+        XCTAssertEqual(formFields(named)["file_id"], "fid")
+        // exportS3file takes export_bucket, not the export_path exportSFTPfile uses.
+        XCTAssertEqual(formFields(named)["export_bucket"], "my-bucket")
+        XCTAssertNil(formFields(named)["export_path"])
+
+        // export_bucket is optional: without one the account's settings decide.
+        let defaulted = send { finish in
+            sdk.exportS3File(fileId: "fid", exportBucket: nil) { _ in finish() }
+        }
+        XCTAssertNil(formFields(defaulted)["export_bucket"])
+        XCTAssertEqual(formFields(defaulted)["file_id"], "fid")
+
+        expectRejected("file_id") { report in
+            sdk.exportS3File(fileId: "  ", exportBucket: nil) { report(self.failureText($0)) }
+        }
+        // A blank bucket is a mistake rather than "use the default".
+        expectRejected("export_bucket") { report in
+            sdk.exportS3File(fileId: "fid", exportBucket: " ") { report(self.failureText($0)) }
+        }
+    }
+
+    func testOfflineEmailFinderFileNeedsAFirstNameOrFullNameColumn() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "finder-key")
+        let csv = FileManager.default.temporaryDirectory.appendingPathComponent("finder-columns.csv")
+        try? Data("domain,first,full\nexample.com,Jane,Jane Doe\n".utf8).write(to: csv)
+
+        var full = ZBEmailFinderSendFileOptions()
+        full.fullNameColumn = 3
+        let sent = send { finish in
+            sdk.sendEmailFinderFile(filePath: csv.path, domainColumn: 1, options: full) { _ in finish() }
+        }
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(sent.host, "bulkapi.zerobounce.net")
+        XCTAssertEqual(sent.path, "/email-finder/sendfile")
+        XCTAssertEqual(sent.apiKey, "finder-key")
+        XCTAssertTrue(sent.body.contains("full_name_column"), sent.body)
+
+        var first = ZBEmailFinderSendFileOptions()
+        first.firstNameColumn = 2
+        let data = send { finish in
+            sdk.sendEmailFinderFileData(
+                fileData: Data("domain,first\nexample.com,Jane\n".utf8),
+                fileName: "finder.csv",
+                domainColumn: 1,
+                options: first
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(data.path, "/email-finder/sendfile")
+        XCTAssertTrue(data.body.contains("first_name_column"), data.body)
+
+        // Neither name column: the file has nothing to search with.
+        expectRejected("first_name_column or full_name_column") { report in
+            sdk.sendEmailFinderFile(filePath: csv.path, domainColumn: 1, options: nil) {
+                report(self.failureText($0))
+            }
+        }
+        expectRejected("first_name_column or full_name_column") { report in
+            sdk.sendEmailFinderFile(
+                filePath: csv.path,
+                domainColumn: 1,
+                options: ZBEmailFinderSendFileOptions()
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("first_name_column or full_name_column") { report in
+            sdk.sendEmailFinderFileData(
+                fileData: Data("domain\nexample.com\n".utf8),
+                fileName: "finder.csv",
+                domainColumn: 1,
+                options: ZBEmailFinderSendFileOptions()
+            ) { report(self.failureText($0)) }
+        }
+        expectRejected("domain_column") { report in
+            sdk.sendEmailFinderFile(filePath: csv.path, domainColumn: 0, options: full) {
+                report(self.failureText($0))
+            }
+        }
+    }
+
+    func testOfflineFindEmailWorksWithoutAFirstName() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "guess-key")
+
+        // first_name is optional: a last name alone is a valid search.
+        let byLastName = send { finish in
+            sdk.findEmail(domain: "example.com", lastName: "Doe") { _ in finish() }
+        }
+        XCTAssertEqual(byLastName.method, "GET")
+        XCTAssertEqual(byLastName.path, "/v2/guessformat")
+        XCTAssertTrue(byLastName.query.contains("domain=example.com"), byLastName.query)
+        XCTAssertTrue(byLastName.query.contains("last_name=Doe"), byLastName.query)
+        XCTAssertFalse(byLastName.query.contains("first_name="), byLastName.query)
+        XCTAssertTrue(byLastName.query.contains("api_key=guess-key"), byLastName.query)
+
+        let byMiddleName = send { finish in
+            sdk.findEmail(companyName: "Acme", middleName: "Q") { _ in finish() }
+        }
+        XCTAssertTrue(byMiddleName.query.contains("company_name=Acme"), byMiddleName.query)
+        XCTAssertTrue(byMiddleName.query.contains("middle_name=Q"), byMiddleName.query)
+        XCTAssertFalse(byMiddleName.query.contains("first_name="), byMiddleName.query)
+
+        // A first name still goes out, and a blank one is left off.
+        let full = send { finish in
+            sdk.findEmail(domain: "example.com", firstName: "Jane", middleName: nil, lastName: "Doe") { _ in finish() }
+        }
+        XCTAssertTrue(full.query.contains("first_name=Jane"), full.query)
+        XCTAssertFalse(full.query.contains("middle_name="), full.query)
+
+        let blankFirst = send { finish in
+            sdk.findEmail(domain: "example.com", firstName: "  ", lastName: "Doe") { _ in finish() }
+        }
+        XCTAssertFalse(blankFirst.query.contains("first_name="), blankFirst.query)
+
+        // With no name at all /guessformat is the domain search, which
+        // findDomain covers, so findEmail says so instead of sending it.
+        expectRejected("first_name, middle_name or last_name") { report in
+            sdk.findEmail(domain: "example.com") { report(self.failureText($0)) }
+        }
+        expectRejected("first_name, middle_name or last_name") { report in
+            sdk.findEmail(companyName: "Acme") { report(self.failureText($0)) }
+        }
+
+        // Domain search is untouched: same endpoint, no name parameters.
+        let domainOnly = send { finish in
+            sdk.findDomain(domain: "example.com") { _ in finish() }
+        }
+        XCTAssertEqual(domainOnly.path, "/v2/guessformat")
+        XCTAssertTrue(domainOnly.query.contains("domain=example.com"), domainOnly.query)
+        XCTAssertFalse(domainOnly.query.contains("last_name="), domainOnly.query)
+    }
+
+    func testOfflineInboxPlacementTestTakesPerProviderSeatsAndChecksItsFields() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "ipt-key")
+
+        let created = send { finish in
+            sdk.createInboxPlacementTest(
+                name: "Launch",
+                options: ZBCreateInboxPlacementTestOptions(
+                    testType: 2,
+                    providerIds: [3],
+                    seedIds: [7],
+                    providers: [
+                        ZBInboxPlacementTestProvider(id: 1, maxSeeds: 5),
+                        ZBInboxPlacementTestProvider(id: 2, maxSeeds: 10)
+                    ]
+                )
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(created.method, "POST")
+        XCTAssertEqual(created.path, "/api/ipt/test")
+        XCTAssertEqual(created.authHeader, "Bearer ipt-key")
+        XCTAssertEqual(
+            created.body,
+            #"{"name":"Launch","providerIds":[3],"providers":[{"id":1,"maxSeeds":5},{"id":2,"maxSeeds":10}],"seedIds":[7],"testType":2}"#
+        )
+
+        // Not set, not sent.
+        let bare = send { finish in
+            sdk.createInboxPlacementTest(name: "Bare", options: nil) { _ in finish() }
+        }
+        XCTAssertEqual(bare.body, #"{"name":"Bare"}"#)
+
+        expectRejected("name") { report in
+            sdk.createInboxPlacementTest(name: String(repeating: "x", count: 65)) {
+                report(self.dictFailureText($0))
+            }
+        }
+        // 64 is the limit, not one less.
+        let atTheLimit = send { finish in
+            sdk.createInboxPlacementTest(name: String(repeating: "x", count: 64)) { _ in finish() }
+        }
+        XCTAssertEqual(atTheLimit.path, "/api/ipt/test")
+
+        expectRejected("testType") { report in
+            sdk.createInboxPlacementTest(
+                name: "Launch",
+                options: ZBCreateInboxPlacementTestOptions(testType: 4)
+            ) { report(self.dictFailureText($0)) }
+        }
+        expectRejected("testType") { report in
+            sdk.createInboxPlacementTest(
+                name: "Launch",
+                options: ZBCreateInboxPlacementTestOptions(testType: 0)
+            ) { report(self.dictFailureText($0)) }
+        }
+        // Test type 1 is the one you send the email for, so the address it
+        // will come from has to be known up front.
+        expectRejected("senderEmail") { report in
+            sdk.createInboxPlacementTest(
+                name: "Launch",
+                options: ZBCreateInboxPlacementTestOptions(testType: 1)
+            ) { report(self.dictFailureText($0)) }
+        }
+        expectRejected("senderEmail") { report in
+            sdk.createInboxPlacementTest(
+                name: "Launch",
+                options: ZBCreateInboxPlacementTestOptions(testType: 1, senderEmail: " ")
+            ) { report(self.dictFailureText($0)) }
+        }
+        // Test types 2 and 3 do not need one.
+        let noSender = send { finish in
+            sdk.createInboxPlacementTest(
+                name: "Launch",
+                options: ZBCreateInboxPlacementTestOptions(testType: 3)
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(noSender.body, #"{"name":"Launch","testType":3}"#)
+    }
+
+    func testOfflineInboxPlacementListSendsPageSizeAndTheDateFilters() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "ipt-key")
+
+        let listed = send { finish in
+            sdk.listInboxPlacementTests(
+                options: ZBListInboxPlacementTestsOptions(
+                    status: "running",
+                    createdAfter: "2026-01-01",
+                    createdBefore: "2026-02-01",
+                    page: 2,
+                    pageSize: 100
+                )
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(listed.path, "/api/ipt/tests")
+        XCTAssertEqual(listed.authHeader, "Bearer ipt-key")
+        XCTAssertTrue(listed.query.contains("status=running"), listed.query)
+        XCTAssertTrue(listed.query.contains("createdAfter=2026-01-01"), listed.query)
+        XCTAssertTrue(listed.query.contains("createdBefore=2026-02-01"), listed.query)
+        XCTAssertTrue(listed.query.contains("page=2"), listed.query)
+        // LIVE: page_size paginates; pageSize is accepted and ignored.
+        XCTAssertTrue(listed.query.contains("page_size=100"), listed.query)
+        XCTAssertFalse(listed.query.contains("pageSize="), listed.query)
+
+        expectRejected("status") { report in
+            sdk.listInboxPlacementTests(
+                options: ZBListInboxPlacementTestsOptions(status: "done")
+            ) { report(self.dictFailureText($0)) }
+        }
+        expectRejected("page_size") { report in
+            sdk.listInboxPlacementTests(
+                options: ZBListInboxPlacementTestsOptions(pageSize: 0)
+            ) { report(self.dictFailureText($0)) }
+        }
+        expectRejected("page_size") { report in
+            sdk.listInboxPlacementTests(
+                options: ZBListInboxPlacementTestsOptions(pageSize: 101)
+            ) { report(self.dictFailureText($0)) }
+        }
+        // 1 and 100 are both inside the bound.
+        let smallest = send { finish in
+            sdk.listInboxPlacementTests(
+                options: ZBListInboxPlacementTestsOptions(pageSize: 1)
+            ) { _ in finish() }
+        }
+        XCTAssertTrue(smallest.query.contains("page_size=1"), smallest.query)
+    }
+
     func testOfflineListEvaluatorUsesItsOwnBaseUrlAndEncodesTheFileId() {
         let sdk = ZeroBounceSDK()
         sdk.initialize(apiKey: "eval-key")
@@ -1772,7 +2229,10 @@ final class OfflineApiTests: XCTestCase {
         XCTAssertEqual(listed.path, "/api/ipt/tests")
         XCTAssertTrue(listed.query.contains("status=finished"), listed.query)
         XCTAssertTrue(listed.query.contains("page=1"), listed.query)
-        XCTAssertTrue(listed.query.contains("pageSize=25"), listed.query)
+        // LIVE: the page size is page_size. Sent as pageSize it is accepted
+        // and then ignored, and the whole list comes back unpaginated.
+        XCTAssertTrue(listed.query.contains("page_size=25"), listed.query)
+        XCTAssertFalse(listed.query.contains("pageSize="), listed.query)
 
         let bare = send { finish in sdk.listInboxPlacementTests { _ in finish() } }
         XCTAssertFalse(bare.query.contains("status="), bare.query)
