@@ -16,7 +16,10 @@ public class ZeroBounceSDK {
     
     var bulkApiRootUrl = "https://bulkapi.zerobounce.net"
     var bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
-    var bulkApiScoringBaseUrl = "https://bulkapi.zerobounce.net/v2/scoring"
+    /// The bulk AI scoring endpoints are the bulk ones under `/scoring`, so
+    /// this follows `bulkApiBaseUrl` rather than standing beside it as a
+    /// second base that an override would silently miss.
+    var bulkApiScoringBaseUrl: String { bulkApiBaseUrl + "/scoring" }
     /// The list evaluator and the Inbox Placement Tester have their own base
     /// URLs, not paths built from the bulk one. `initialize` alone leaves them
     /// pointing at the live API.
@@ -246,13 +249,13 @@ public class ZeroBounceSDK {
     // MARK: Email Finder
     ///
     /// - parameter domain: The email domain for which to find the email format
-    /// - parameter firstName: The first name of the person whose email format is being searched
+    /// - parameter firstName: The first name of the person whose email format is being searched. Optional: a search by middle or last name alone is allowed, but at least one of the three names is needed.
     /// - parameter middleName: The middle name of the person whose email format is being searched
     /// - parameter lastName: The last name of the person whose email format is being searched
     ///
     public func findEmail(
         domain: String,
-        firstName: String,
+        firstName: String? = nil,
         middleName: String? = nil,
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
@@ -269,13 +272,13 @@ public class ZeroBounceSDK {
     
     ///
     /// - parameter companyName: The company name for which to find the email format
-    /// - parameter firstName: The first name of the person whose email format is being searched
+    /// - parameter firstName: The first name of the person whose email format is being searched. Optional, as on the domain overload.
     /// - parameter middleName: The middle name of the person whose email format is being searched
     /// - parameter lastName: The last name of the person whose email format is being searched
     ///
     public func findEmail(
         companyName: String,
-        firstName: String,
+        firstName: String? = nil,
         middleName: String? = nil,
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
@@ -293,7 +296,7 @@ public class ZeroBounceSDK {
     private func _findEmail(
         domain: String?,
         companyName: String?,
-        firstName: String,
+        firstName: String?,
         middleName: String? = nil,
         lastName: String? = nil,
         completion: @escaping (ZBResult<ZBEmailFinderResponse>) -> ()
@@ -302,7 +305,24 @@ public class ZeroBounceSDK {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
         }
-        
+
+        func present(_ value: String?) -> String? {
+            guard let value = value,
+                  !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return value
+        }
+        // first_name is optional, so a person can be looked up by middle or
+        // last name alone. With no name at all /guessformat is the domain
+        // search instead, which `findDomain` already covers, so that is
+        // rejected here rather than quietly answering something else.
+        let names = [present(firstName), present(middleName), present(lastName)]
+        if names.allSatisfy({ $0 == nil }) {
+            completion(ZBResult.Failure(ZBError.decodeError(messages: [
+                "Empty parameter: first_name, middle_name or last_name is required (use findDomain for a domain search)"
+            ])))
+            return
+        }
+
         var items: [URLQueryItem] = [URLQueryItem(name: "api_key", value: apiKey)]
         if let domain {
             items.append(URLQueryItem(name: "domain", value: domain))
@@ -310,11 +330,13 @@ public class ZeroBounceSDK {
         if let companyName {
             items.append(URLQueryItem(name: "company_name", value: companyName))
         }
-        items.append(URLQueryItem(name: "first_name", value: firstName))
-        if let middleName {
+        if let firstName = names[0] {
+            items.append(URLQueryItem(name: "first_name", value: firstName))
+        }
+        if let middleName = names[1] {
             items.append(URLQueryItem(name: "middle_name", value: middleName))
         }
-        if let lastName {
+        if let lastName = names[2] {
             items.append(URLQueryItem(name: "last_name", value: lastName))
         }
         sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
@@ -676,7 +698,9 @@ public class ZeroBounceSDK {
         priority3Api.scoreS3File(options: options, completion: completion)
     }
 
-    public func exportS3File(fileId: String, exportBucket: String, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
+    /// `export_bucket` is optional: pass nil to use the export bucket from
+    /// your ZeroBounce settings.
+    public func exportS3File(fileId: String, exportBucket: String?, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
         guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
             return
@@ -756,7 +780,8 @@ public class ZeroBounceSDK {
 
     // MARK: Inbox Placement Tester
     //
-    // Its own host, the API key on the query string, camelCase JSON bodies.
+    // Its own host, camelCase JSON bodies, and the key in an
+    // Authorization: Bearer header rather than on the query string.
     // Spends the account's inbox-test credits.
 
     public func getInboxPlacementProviders(completion: @escaping (ZBDictionaryResult) -> ()) {
@@ -1007,7 +1032,7 @@ public class ZeroBounceSDK {
         
         do {
             let r = try ZBMultiPartRequest.createFileRequest(
-                url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/sendfile",
+                url: scoring ? bulkApiScoringBaseUrl + "/sendfile" : bulkApiBaseUrl + "/sendfile",
                 parameters: parameters,
                 filePathKey: "file", paths: [filePath]
             )
@@ -1063,7 +1088,7 @@ public class ZeroBounceSDK {
         
         do {
             let r = try ZBMultiPartRequest.createFileRequestWithData(
-                url: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/sendfile",
+                url: scoring ? bulkApiScoringBaseUrl + "/sendfile" : bulkApiBaseUrl + "/sendfile",
                 parameters: parameters,
                 filePathKey: "file",
                 fileData: fileData,
@@ -1214,7 +1239,7 @@ public class ZeroBounceSDK {
     }
     
     private func buildGetFileURL(scoring: Bool, apiKey: String, fileId: String, options: ZBGetFileOptions?) -> URL? {
-        var comp = URLComponents(string: "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")/getfile")
+        var comp = URLComponents(string: (scoring ? bulkApiScoringBaseUrl : bulkApiBaseUrl) + "/getfile")
         var items: [URLQueryItem] = [
             URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "file_id", value: fileId)
@@ -1324,7 +1349,7 @@ public class ZeroBounceSDK {
     }
 
     private func makeBulkURL(scoring: Bool, subpath: String, queryItems: [URLQueryItem]) -> String {
-        let base = "\(bulkApiBaseUrl)\(scoring ? "/scoring" : "")"
+        let base = scoring ? bulkApiScoringBaseUrl : bulkApiBaseUrl
         var components = URLComponents(string: base + subpath)!
         components.queryItems = queryItems
         return components.url!.absoluteString

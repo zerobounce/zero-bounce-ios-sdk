@@ -68,12 +68,28 @@ public struct ZBBulkFileJobOptions {
     }
 }
 
+/// One entry of the `providers` list of a new Inbox Placement test: how many
+/// seeds of a given provider the test should use. `providerIds` asks for a
+/// provider without capping its seeds; this caps it.
+public struct ZBInboxPlacementTestProvider {
+    public var id: Int
+    public var maxSeeds: Int
+
+    public init(id: Int, maxSeeds: Int) {
+        self.id = id
+        self.maxSeeds = maxSeeds
+    }
+}
+
 /// The optional fields of a new Inbox Placement test. Only what is set is sent.
 public struct ZBCreateInboxPlacementTestOptions {
+    /// 1 (send your own email), 2 or 3. `senderEmail` is required when it is 1.
     public var testType: Int?
     public var senderEmail: String?
     public var providerIds: [Int]?
     public var seedIds: [Int]?
+    /// Per-provider seed caps, sent as `providers: [{"id": …, "maxSeeds": …}]`.
+    public var providers: [ZBInboxPlacementTestProvider]?
     public var webhookUrl: String?
 
     public init(
@@ -81,24 +97,41 @@ public struct ZBCreateInboxPlacementTestOptions {
         senderEmail: String? = nil,
         providerIds: [Int]? = nil,
         seedIds: [Int]? = nil,
+        providers: [ZBInboxPlacementTestProvider]? = nil,
         webhookUrl: String? = nil
     ) {
         self.testType = testType
         self.senderEmail = senderEmail
         self.providerIds = providerIds
         self.seedIds = seedIds
+        self.providers = providers
         self.webhookUrl = webhookUrl
     }
 }
 
 /// The documented filters of the Inbox Placement test list.
 public struct ZBListInboxPlacementTestsOptions {
+    /// `running` or `finished`. Anything else is rejected before a request.
     public var status: String?
+    /// Sent as `createdAfter`, the way the endpoint spells it.
+    public var createdAfter: String?
+    /// Sent as `createdBefore`.
+    public var createdBefore: String?
     public var page: Int?
+    /// 1–100. LIVE: it goes on the wire as `page_size`; `pageSize` is accepted
+    /// and then silently ignored, so the whole list comes back unpaginated.
     public var pageSize: Int?
 
-    public init(status: String? = nil, page: Int? = nil, pageSize: Int? = nil) {
+    public init(
+        status: String? = nil,
+        createdAfter: String? = nil,
+        createdBefore: String? = nil,
+        page: Int? = nil,
+        pageSize: Int? = nil
+    ) {
         self.status = status
+        self.createdAfter = createdAfter
+        self.createdBefore = createdBefore
         self.page = page
         self.pageSize = pageSize
     }

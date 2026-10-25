@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ZBError.httpError(message:statusCode:)` for an error the API itself reported, and `ZBError.statusCode` to read the status back, so a caller can tell 429 from 500 without parsing the message.
 - Safety rails: `initialize` refuses a key with surrounding whitespace or control characters rather than storing it, only `https://` URLs are called (loopback aside, so an offline test can use a local stub), and redirects are not followed.
 - `Zero Bounce iOS SDKTests/LiveApiTests.swift`, an opt-in live suite. The documented test command and CI pass `-skip-testing:"Zero Bounce iOS SDKTests/LiveApiTests"`, and it does nothing without keys. Keys come from `TEST_RUNNER_ZEROBOUNCE_API_KEY` and `TEST_RUNNER_ZEROBOUNCE_WARMUP_API_KEY` — xcodebuild strips that prefix on the way into the test process, which does not otherwise inherit its environment. `TEST_RUNNER_ZEROBOUNCE_LIVE_SPEND=1` and `TEST_RUNNER_ZEROBOUNCE_LIVE_CHANGES=1` opt in to calls that spend credits or make reversible account changes.
+- `ZBCreateInboxPlacementTestOptions.providers`, the documented per-provider seed caps, sent as `providers: [{"id": …, "maxSeeds": …}]`. They were missing, so a test could ask for a provider but not cap its seeds. The entries are the new `ZBInboxPlacementTestProvider`.
+- `ZBListInboxPlacementTestsOptions.createdAfter` and `.createdBefore`, the two documented date filters of the test listing. They were missing entirely.
 
 ### Changed
 
@@ -36,11 +38,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `ZBValidateResponse.status` and `.processedAt` are now optional. While a greylist retry is still running the API answers with a `Message` and neither field, and the previous non-optional declarations made that response fail to decode entirely.
 - The list evaluator uses its own base URL instead of building the path from the bulk base, and the file id is encoded as a single path segment. `getListEvaluatorResult` rejects a blank file id before a request is sent.
 - `ZeroBounceSDK()` can be constructed directly. `shared` remains available.
+- **Breaking:** `ZBValidateS3FileOptions` and `ZBScoreS3FileOptions` take `returnUrl` in their initializer: `ZBValidateS3FileOptions(fileName:returnUrl:)`. LIVE: `POST /validateS3file` without one answers HTTP 400 "Provided return URL is not permitted: None", so it is required the way it is on every other S3/SFTP job rather than an optional field. `validateS3File` and `scoreS3File` now go through the same `file_name` / `return_url` check those jobs use.
+- `exportS3File` takes `exportBucket: String?`. `export_bucket` is optional — pass nil to use the export bucket from your ZeroBounce settings — and a blank one is still rejected, which is how `exportSFTPFile` has always treated `export_path`.
+- `findEmail`'s `firstName` is optional on both overloads, so a person can be looked up by middle or last name alone. At least one of the three names is still needed: with none of them `/guessformat` is the domain search, so `findEmail` says to use `findDomain` instead of quietly answering something else.
+- `sendEmailFinderFile` and `sendEmailFinderFileData` require `first_name_column` or `full_name_column` as well as `domain_column`. A file with neither has no name for the finder to search with.
+- `createInboxPlacementTest` checks the documented limits before sending: `name` at most 64 characters, `testType` 1, 2 or 3, and `senderEmail` when `testType` is 1.
+- `listInboxPlacementTests` checks `status` (`running` or `finished`) and `pageSize` (1–100) before sending.
 
 ### Changed
 
 - The minimum iOS deployment target is 15.0.
 - API requests time out after 120 seconds.
+
+### Removed
+
+- **Breaking:** `removeDuplicate` on `ZBValidateS3FileOptions` and `ZBScoreS3FileOptions`. The singular `remove_duplicate` was sent alongside the documented `remove_duplicates` and is not a parameter the API describes. Use `removeDuplicates`.
 
 ### Fixed
 
@@ -53,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bulk email finder and domain search send `has_header_row` when it is set to false.
 - `validateBatch` sends an empty `ip_address` as JSON `null`.
 - An empty API key is rejected before a request is sent.
+- `scoreS3File` can now succeed. `ZBScoreS3FileOptions` had no `returnUrl` field at all, so the parameter the live API requires was unreachable and every call was rejected. `validateS3File` sent `return_url` only when it happened to be set.
+- `listInboxPlacementTests` sends `page_size`. It sent `pageSize`, which the endpoint accepts and then ignores, so every call came back with the whole list however the page size was set.
 
 ### Security
 

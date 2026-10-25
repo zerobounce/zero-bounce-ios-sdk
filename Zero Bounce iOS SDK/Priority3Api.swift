@@ -19,8 +19,7 @@ internal final class Priority3Api {
         options: ZBEmailFinderSendFileOptions?,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        if domainColumn < 1 {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: domain_column"])))
+        guard checkEmailFinderColumns(domainColumn: domainColumn, options: options, completion: completion) else {
             return
         }
         let url = "\(sdk.bulkApiRootUrl)/email-finder/sendfile"
@@ -39,8 +38,7 @@ internal final class Priority3Api {
         options: ZBEmailFinderSendFileOptions?,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        if domainColumn < 1 {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: domain_column"])))
+        guard checkEmailFinderColumns(domainColumn: domainColumn, options: options, completion: completion) else {
             return
         }
         let url = "\(sdk.bulkApiRootUrl)/email-finder/sendfile"
@@ -51,6 +49,27 @@ internal final class Priority3Api {
             fields: buildEmailFinderFields(domainColumn: domainColumn, options: options),
             completion: completion
         )
+    }
+
+    /// The bulk email finder needs a column to read a name from: the docs make
+    /// first_name_column and full_name_column alternatives, and a file with
+    /// neither has nothing to search for.
+    private func checkEmailFinderColumns(
+        domainColumn: Int,
+        options: ZBEmailFinderSendFileOptions?,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) -> Bool {
+        if domainColumn < 1 {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: domain_column"])))
+            return false
+        }
+        if (options?.firstNameColumn ?? 0) < 1 && (options?.fullNameColumn ?? 0) < 1 {
+            completion(.Failure(ZBError.decodeError(messages: [
+                "Empty parameter: first_name_column or full_name_column is required"
+            ])))
+            return false
+        }
+        return true
     }
 
     private func buildEmailFinderFields(domainColumn: Int, options: ZBEmailFinderSendFileOptions?) -> [String: Any] {
@@ -306,29 +325,37 @@ internal final class Priority3Api {
         )
     }
 
+    /// LIVE: return_url is required, as it is on every other S3/SFTP job, so
+    /// this goes through the same check. Without one the API answers HTTP 400
+    /// "Provided return URL is not permitted: None".
     func validateS3File(
         options: ZBValidateS3FileOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        if options.fileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_name"])))
-            return
-        }
+        guard checkBulkJobRequiredFields(
+            fileName: options.fileName,
+            returnUrl: options.returnUrl,
+            completion: completion
+        ) else { return }
         postBulkRootForm(path: "/validateS3file", fields: buildValidateS3Fields(options: options), completion: completion)
     }
 
+    /// LIVE: return_url is required here too. See `validateS3File`.
     func scoreS3File(
         options: ZBScoreS3FileOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        if options.fileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_name"])))
-            return
-        }
-        var fields: [String: String] = ["file_name": options.fileName]
+        guard checkBulkJobRequiredFields(
+            fileName: options.fileName,
+            returnUrl: options.returnUrl,
+            completion: completion
+        ) else { return }
+        var fields: [String: String] = [
+            "file_name": options.fileName,
+            "return_url": options.returnUrl
+        ]
         putOptionalBool(&fields, key: "has_header_row", value: options.hasHeaderRow)
         putOptionalBool(&fields, key: "remove_duplicates", value: options.removeDuplicates)
-        putOptionalBool(&fields, key: "remove_duplicate", value: options.removeDuplicate)
         if let col = options.emailAddressColumn {
             fields["email_address_column"] = String(col)
         }
@@ -355,22 +382,18 @@ internal final class Priority3Api {
         sdk.priority3SendJson(url: url, completion: completion)
     }
 
+    /// `export_bucket` is optional: pass nil to use the export bucket from
+    /// your ZeroBounce settings, the way `exportSFTPFile` treats export_path.
     func exportS3File(
         fileId: String,
-        exportBucket: String,
+        exportBucket: String?,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        if fileId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_id"])))
-            return
-        }
-        if exportBucket.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: export_bucket"])))
-            return
-        }
-        postBulkRootForm(
+        exportBulkFile(
             path: "/exportS3file",
-            fields: ["file_id": fileId, "export_bucket": exportBucket],
+            destinationField: "export_bucket",
+            fileId: fileId,
+            destination: exportBucket,
             completion: completion
         )
     }
@@ -441,6 +464,28 @@ internal final class Priority3Api {
         )
     }
 
+    /// The two fields every S3 and SFTP file job must carry. Reports what is
+    /// missing and answers false when the caller has already been completed.
+    ///
+    /// LIVE: both are required on all of them — validateSFTPfile, whose
+    /// file_name the docs call optional, and validateS3file and scoreS3file,
+    /// whose return_url the docs call optional, included.
+    private func checkBulkJobRequiredFields(
+        fileName: String?,
+        returnUrl: String?,
+        completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
+    ) -> Bool {
+        if (fileName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_name"])))
+            return false
+        }
+        if (returnUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: return_url"])))
+            return false
+        }
+        return true
+    }
+
     /// POSTs one of the six documented S3 / SFTP file jobs on the bulkapi root.
     ///
     /// Booleans go on the wire as the strings "true"/"false", and an option the
@@ -455,16 +500,11 @@ internal final class Priority3Api {
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        let fileName = options.fileName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if fileName.isEmpty {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: file_name"])))
-            return
-        }
-        let returnUrl = options.returnUrl?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if returnUrl.isEmpty {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: return_url"])))
-            return
-        }
+        guard checkBulkJobRequiredFields(
+            fileName: options.fileName,
+            returnUrl: options.returnUrl,
+            completion: completion
+        ) else { return }
 
         var fields: [String: String] = [
             "has_header_row": options.hasHeaderRow ? "true" : "false",
@@ -522,8 +562,30 @@ internal final class Priority3Api {
         options: ZBCreateInboxPlacementTestOptions?,
         completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
     ) {
-        if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedName.isEmpty {
             completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: name"])))
+            return
+        }
+        if trimmedName.count > 64 {
+            completion(.Failure(ZBError.decodeError(messages: [
+                "Invalid parameter: name (must be at most 64 characters)"
+            ])))
+            return
+        }
+        if let testType = options?.testType, testType < 1 || testType > 3 {
+            completion(.Failure(ZBError.decodeError(messages: [
+                "Invalid parameter: testType (must be 1, 2 or 3)"
+            ])))
+            return
+        }
+        // Test type 1 is the one you send the email for yourself, so the
+        // address it will come from has to be known up front.
+        if options?.testType == 1,
+           (options?.senderEmail?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty {
+            completion(.Failure(ZBError.decodeError(messages: [
+                "Empty parameter: senderEmail is required when testType is 1"
+            ])))
             return
         }
         var body: [String: Any] = ["name": name]
@@ -532,6 +594,9 @@ internal final class Priority3Api {
             if let senderEmail = options.senderEmail { body["senderEmail"] = senderEmail }
             if let providerIds = options.providerIds { body["providerIds"] = providerIds }
             if let seedIds = options.seedIds { body["seedIds"] = seedIds }
+            if let providers = options.providers {
+                body["providers"] = providers.map { ["id": $0.id, "maxSeeds": $0.maxSeeds] }
+            }
             if let webhookUrl = options.webhookUrl { body["webhookUrl"] = webhookUrl }
         }
         inboxPlacementRequest(method: "POST", path: "/test", query: [:], body: body, completion: completion)
@@ -551,9 +616,29 @@ internal final class Priority3Api {
     ) {
         var query: [String: String] = [:]
         if let options = options {
-            if let status = options.status { query["status"] = status }
+            if let status = options.status {
+                let trimmed = status.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed != "running" && trimmed != "finished" {
+                    completion(.Failure(ZBError.decodeError(messages: [
+                        "Invalid parameter: status (must be running or finished)"
+                    ])))
+                    return
+                }
+                query["status"] = trimmed
+            }
+            if let pageSize = options.pageSize, pageSize < 1 || pageSize > 100 {
+                completion(.Failure(ZBError.decodeError(messages: [
+                    "Invalid parameter: page_size (must be between 1 and 100)"
+                ])))
+                return
+            }
+            if let createdAfter = options.createdAfter { query["createdAfter"] = createdAfter }
+            if let createdBefore = options.createdBefore { query["createdBefore"] = createdBefore }
             if let page = options.page { query["page"] = String(page) }
-            if let pageSize = options.pageSize { query["pageSize"] = String(pageSize) }
+            // LIVE: the page size is page_size. Sent as pageSize, the way the
+            // other filters are spelled, it is accepted and then ignored, and
+            // the whole list comes back unpaginated.
+            if let pageSize = options.pageSize { query["page_size"] = String(pageSize) }
         }
         // LIVE: the listing is GET /tests (plural). /test is the single-test
         // path and answers 'Method "GET" not allowed'.
@@ -619,14 +704,15 @@ internal final class Priority3Api {
     }
 
     private func buildValidateS3Fields(options: ZBValidateS3FileOptions) -> [String: String] {
-        var fields: [String: String] = ["file_name": options.fileName]
+        var fields: [String: String] = [
+            "file_name": options.fileName,
+            "return_url": options.returnUrl
+        ]
         putOptionalBool(&fields, key: "has_header_row", value: options.hasHeaderRow)
         putOptionalBool(&fields, key: "remove_duplicates", value: options.removeDuplicates)
-        putOptionalBool(&fields, key: "remove_duplicate", value: options.removeDuplicate)
         if let col = options.emailAddressColumn {
             fields["email_address_column"] = String(col)
         }
-        if let returnUrl = options.returnUrl { fields["return_url"] = returnUrl }
         if options.firstNameColumn > 0 { fields["first_name_column"] = String(options.firstNameColumn) }
         if options.lastNameColumn > 0 { fields["last_name_column"] = String(options.lastNameColumn) }
         if options.genderColumn > 0 { fields["gender_column"] = String(options.genderColumn) }
