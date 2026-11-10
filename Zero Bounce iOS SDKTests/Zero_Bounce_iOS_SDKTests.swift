@@ -346,8 +346,11 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         )!
         let validateResponse = ZBValidateResponse(
             address: email, status: .valid, subStatus: nil, account: "",
-            domain: "", didYouMean: "", domainAgeDays: "", mxRecord: "",
-            smtpProvider: "", firstName: nil, lastName: nil, gender: nil,
+            domain: "", didYouMean: "", domainAgeDays: "",
+            activeInDays: "30", activeFirstSeen: "2024-01-15",
+            freeEmail: true, mxFound: true, mxRecord: "",
+            smtpProvider: "", catchallDomain: false,
+            firstName: nil, lastName: nil, gender: nil,
             city: nil, region: nil, zipCode: nil, country: nil, processedAt: "date",
             domainWebsiteExists: nil, domainRegistrantCompanyName: nil, message: nil
         )
@@ -449,8 +452,11 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
         let apiEndpoint = URL(string: "\(ZeroBounceSDK.shared.apiBaseUrl)/validatebatch")!
         let validateResponse = ZBValidateResponse(
             address: "example@gmail.com", status: .valid, subStatus: nil, account: "",
-            domain: "", didYouMean: "", domainAgeDays: "", mxRecord: "",
-            smtpProvider: "", firstName: nil, lastName: nil, gender: nil,
+            domain: "", didYouMean: "", domainAgeDays: "",
+            activeInDays: "30", activeFirstSeen: "2024-01-15",
+            freeEmail: true, mxFound: true, mxRecord: "",
+            smtpProvider: "", catchallDomain: false,
+            firstName: nil, lastName: nil, gender: nil,
             city: nil, region: nil, zipCode: nil, country: nil, processedAt: "date",
             domainWebsiteExists: nil, domainRegistrantCompanyName: nil, message: nil
         )
@@ -1057,6 +1063,8 @@ struct OfflineRecord {
     let body: String
     /// The Authorization or API-Key header the request carried, or "".
     let authHeader: String
+    /// The timeout the request was built with.
+    let timeout: TimeInterval
 }
 
 final class OfflineURLProtocol: URLProtocol {
@@ -1116,7 +1124,8 @@ final class OfflineURLProtocol: URLProtocol {
             apiKey: apiKey,
             query: url.query ?? "",
             body: body,
-            authHeader: authHeader
+            authHeader: authHeader,
+            timeout: request.timeoutInterval
         )
         OfflineURLProtocol.lock.lock()
         OfflineURLProtocol.records.append(record)
@@ -1165,6 +1174,25 @@ final class OfflineURLProtocol: URLProtocol {
         if key.hasPrefix("empty-") { return (200, "application/json", Data()) }
         if key.hasPrefix("malformed-") {
             return (200, "application/json", Data(("<<<not-json>>>" + String(repeating: "x", count: 5000)).utf8))
+        }
+        // LIVE (2026-11-11): what an invalid or drained key gets back, each
+        // with an HTTP 200 and no "success" field.
+        if key.hasPrefix("dead-key-") {
+            let path = request.path
+            var body = #"{"error":"Invalid API key or your account ran out of credits"}"#
+            if path.contains("guessformat") {
+                body = #"{"Message":"Invalid API key or your account ran out of credits"}"#
+            } else if path.contains("filters") {
+                body = #"{  "Error": "Invalid API key or your account ran out of credits"}"#
+            } else if path.contains("getapiusage") {
+                body = #"{"error":"Invalid API key"}"#
+            } else if path.contains("getcredits") {
+                body = #"{"Credits":"-1"}"#
+            }
+            return (200, "application/json", Data(body.utf8))
+        }
+        if key.hasPrefix("filter-message-") && request.path.contains("filters") {
+            return (200, "application/json", Data(#"{"Message":"Filter has been added."}"#.utf8))
         }
         if key.hasPrefix("success-false") {
             return (200, "application/json", Data(#"{"success":false,"message":"File cannot be found."}"#.utf8))
@@ -1563,6 +1591,83 @@ final class OfflineApiTests: XCTestCase {
         wait(for: [done], timeout: 5)
         XCTAssertNotNil(message, "expected a failure")
         return message ?? ""
+    }
+
+    /// An invalid or drained key answers with an HTTP 200 and an error-only
+    /// body. Every call must fail with the API's own message.
+    func testOfflineADeadKeyIsAFailureOnEveryCall() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "dead-key-user")
+        let drained = "Invalid API key or your account ran out of credits"
+        func dictText(_ result: ZeroBounceSDK.ZBDictionaryResult) -> String? {
+            if case .Failure(let error) = result { return shortMessage(error) }
+            return nil
+        }
+        func jsonText(_ result: ZeroBounceSDK.ZBJsonResult) -> String? {
+            if case .Failure(let error) = result { return shortMessage(error) }
+            return nil
+        }
+        func typedText<T>(_ result: ZeroBounceSDK.ZBResult<T>) -> String? {
+            if case .Failure(let error) = result { return shortMessage(error) }
+            return nil
+        }
+        let calls: [(String, String, (@escaping (String?) -> ()) -> ())] = [
+            ("validate", drained, { report in sdk.validate(email: "a@example.com") { report(typedText($0)) } }),
+            ("activity", drained, { report in sdk.getActivityData(email: "a@example.com") { report(typedText($0)) } }),
+            ("apiUsage", "Invalid API key", { report in
+                sdk.getApiUsage(startDate: Date(timeIntervalSince1970: 0), endDate: Date(timeIntervalSince1970: 86_400)) { report(typedText($0)) }
+            }),
+            ("findEmail", drained, { report in sdk.findEmail(domain: "example.com", firstName: "john") { report(typedText($0)) } }),
+            ("findDomain", drained, { report in sdk.findDomain(domain: "example.com") { report(typedText($0)) } }),
+            ("addFilter", drained, { report in sdk.addFilter(rule: "allow", target: "email", value: "x@example.com") { report(dictText($0)) } }),
+            ("deleteFilter", drained, { report in sdk.deleteFilter(rule: "allow", target: "email", value: "x@example.com") { report(dictText($0)) } }),
+            ("listFilters", drained, { report in sdk.listFilters { report(jsonText($0)) } }),
+            ("listFilters POST", drained, { report in sdk.listFilters(usePost: true) { report(jsonText($0)) } }),
+        ]
+        for (name, expected, call) in calls {
+            let message = failureMessage(call)
+            XCTAssertTrue(message.contains(expected), "\(name): \(message)")
+            XCTAssertFalse(message.contains("{"), "\(name) carries raw JSON: \(message)")
+        }
+    }
+
+    func testOfflineAFilterMessageIsStillAResult() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "filter-message-user")
+        var added: [String: Any]?
+        let done = expectation(description: "added")
+        sdk.addFilter(rule: "allow", target: "email", value: "x@example.com") { result in
+            if case .Success(let dict) = result { added = dict }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        XCTAssertEqual(added?["Message"] as? String, "Filter has been added.")
+    }
+
+    /// LIVE (2026-11-11): the finder answers a search it could not resolve
+    /// with email_confidence "undetermined", which the enum did not have, so
+    /// the whole response failed to decode. The docs spell the values in
+    /// capitals (HIGH, MEDIUM, LOW); a value the SDK does not know yet must
+    /// not fail the response either.
+    func testOfflineEmailConfidenceDecodesEveryValueTheApiSends() throws {
+        func finder(_ confidence: String) throws -> ZBEmailFinderResponse {
+            let json = #"{"email":"","email_confidence":"\#(confidence)","domain":"example.com","company_name":"","did_you_mean":"","failure_reason":""}"#
+            return try JSONDecoder().decode(ZBEmailFinderResponse.self, from: Data(json.utf8))
+        }
+        XCTAssertEqual(try finder("undetermined").emailConfidence, .undetermined)
+        XCTAssertEqual(try finder("high").emailConfidence, .high)
+        XCTAssertEqual(try finder("HIGH").emailConfidence, .high)
+        XCTAssertEqual(try finder("Medium").emailConfidence, .medium)
+        XCTAssertEqual(try finder("").emailConfidence, .none)
+        XCTAssertEqual(try finder("something-new").emailConfidence, .unknown)
+
+        func domain(_ confidence: String) throws -> ZBDomainSearchResponse {
+            let json = #"{"domain":"example.com","company_name":"","format":"unknown","confidence":"\#(confidence)","did_you_mean":"","failure_reason":"","other_domain_formats":[]}"#
+            return try JSONDecoder().decode(ZBDomainSearchResponse.self, from: Data(json.utf8))
+        }
+        XCTAssertEqual(try domain("undetermined").confidence, .undetermined)
+        XCTAssertEqual(try domain("LOW").confidence, .low)
+        XCTAssertEqual(try domain("something-new").confidence, .unknown)
     }
 
     func testOfflineValidateSendsTheNewOptionsOnlyWhenSet() {
@@ -2322,6 +2427,159 @@ final class OfflineApiTests: XCTestCase {
         }
         wait(for: [done], timeout: 5)
         XCTAssertTrue(message.contains("downloadPath"), message)
+    }
+
+    // MARK: Release fixes (2.2.0)
+
+    /// Synthesized `Decodable` skips a `let` that already has a value, so
+    /// `activeInDays`, `activeFirstSeen`, `freeEmail`, `mxFound` and
+    /// `catchallDomain` were never read: `active_in_days: "30"` came back nil
+    /// and `free_email: true` came back false.
+    func testValidateResponseReadsActivityAndTheBooleanFields() throws {
+        func decode(_ fields: String) throws -> ZBValidateResponse {
+            let json = #"{"address":"a@example.com","status":"valid","processed_at":"2010-01-01"\#(fields)}"#
+            return try JSONDecoder().decode(ZBValidateResponse.self, from: Data(json.utf8))
+        }
+        let full = try decode(#","active_in_days":"30","active_first_seen":"2024-01-15","free_email":true,"mx_found":"true","catchall_domain":true"#)
+        XCTAssertEqual(full.activeInDays, "30")
+        XCTAssertEqual(full.activeFirstSeen, "2024-01-15")
+        XCTAssertTrue(full.freeEmail)
+        // The API sends mx_found as the string "true" rather than a boolean.
+        XCTAssertTrue(full.mxFound)
+        XCTAssertEqual(full.catchallDomain, true)
+
+        let strings = try decode(#","free_email":"True","mx_found":"false","catchall_domain":"false","active_in_days":180"#)
+        XCTAssertTrue(strings.freeEmail)
+        XCTAssertFalse(strings.mxFound)
+        XCTAssertEqual(strings.catchallDomain, false)
+        XCTAssertEqual(strings.activeInDays, "180")
+
+        // Absent, null or of an unexpected type: the default, and the rest of
+        // the response still decodes.
+        let absent = try decode("")
+        XCTAssertNil(absent.activeInDays)
+        XCTAssertNil(absent.activeFirstSeen)
+        XCTAssertFalse(absent.freeEmail)
+        XCTAssertFalse(absent.mxFound)
+        XCTAssertNil(absent.catchallDomain)
+        let odd = try decode(#","free_email":null,"mx_found":"maybe","catchall_domain":[],"active_in_days":{}"#)
+        XCTAssertFalse(odd.freeEmail)
+        XCTAssertFalse(odd.mxFound)
+        XCTAssertNil(odd.catchallDomain)
+        XCTAssertNil(odd.activeInDays)
+        XCTAssertEqual(odd.status, .valid)
+
+        // Through validate, and through a batch.
+        let encoded = try JSONEncoder().encode(full)
+        XCTAssertEqual(try JSONDecoder().decode(ZBValidateResponse.self, from: encoded), full)
+        let batch = #"{"email_batch":[{"address":"a@example.com","status":"valid","processed_at":"2010-01-01","active_in_days":"30","free_email":true}],"errors":[]}"#
+        let decodedBatch = try JSONDecoder().decode(ZBValidateBatchResponse.self, from: Data(batch.utf8))
+        XCTAssertEqual(decodedBatch.emailBatch.first?.activeInDays, "30")
+        XCTAssertEqual(decodedBatch.emailBatch.first?.freeEmail, true)
+    }
+
+    /// The release notes promise a 120 s timeout on API requests, but the
+    /// downloads, the GETs built from a bare URL and every upload were left at
+    /// URLRequest's default of 60.
+    func testEveryRequestTimesOutAfter120Seconds() throws {
+        let csv = Data("email\na@example.com\n".utf8)
+        let byPath = try ZBMultiPartRequest.createFileRequest(
+            url: "https://bulkapi.zerobounce.net/v2/sendfile", parameters: ["api_key": "k"],
+            filePathKey: "file", paths: [writeTemporaryCsv("zb-timeout-path.csv")]
+        )
+        XCTAssertEqual(byPath.timeoutInterval, 120)
+        let byData = try ZBMultiPartRequest.createFileRequestWithData(
+            url: "https://bulkapi.zerobounce.net/v2/sendfile", parameters: ["api_key": "k"],
+            filePathKey: "file", fileData: csv, fileName: "list.csv"
+        )
+        XCTAssertEqual(byData.timeoutInterval, 120)
+
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "timeout-key")
+        let csvPath = writeTemporaryCsv("zb-timeout-upload.csv")
+        let download = NSTemporaryDirectory() + "zb-timeout-download.csv"
+        var finderOptions = ZBEmailFinderSendFileOptions()
+        finderOptions.firstNameColumn = 2
+        let calls: [(String, (@escaping () -> ()) -> ())] = [
+            ("getFile", { done in sdk.getFile(fileId: "f") { _ in done() } }),
+            ("scoringGetFile", { done in sdk.scoringGetFile(fileId: "f") { _ in done() } }),
+            ("emailFinderGetFile", { done in sdk.emailFinderGetFile(fileId: "f", downloadPath: download) { _ in done() } }),
+            ("domainSearchGetFile", { done in sdk.domainSearchGetFile(fileId: "f", downloadPath: download) { _ in done() } }),
+            ("listFilters", { done in sdk.listFilters { _ in done() } }),
+            ("getListEvaluatorResult", { done in sdk.getListEvaluatorResult(fileId: "f") { _ in done() } }),
+            ("sendFile path", { done in sdk.sendFile(filePath: csvPath, emailAddressColumn: 1) { _ in done() } }),
+            ("sendFile data", { done in
+                sdk.sendFile(fileData: csv, fileName: "list.csv", emailAddressColumn: 1) { _ in done() }
+            }),
+            ("scoringSendFile", { done in sdk.scoringSendFile(filePath: csvPath, emailAddressColumn: 1) { _ in done() } }),
+            ("sendEmailFinderFile", { done in
+                sdk.sendEmailFinderFile(filePath: csvPath, domainColumn: 1, options: finderOptions) { _ in done() }
+            }),
+            ("sendListEvaluatorFileData", { done in
+                sdk.sendListEvaluatorFileData(fileData: csv, fileName: "list.csv", emailAddressColumn: 1) { _ in done() }
+            }),
+            ("getCredits", { done in sdk.getCredits { _ in done() } }),
+            ("getFileStreaming", { done in sdk.getFileStreaming(fileId: "f", downloadPath: download) { _ in done() } }),
+        ]
+        for (name, call) in calls {
+            XCTAssertEqual(send(call).timeout, 120, name)
+        }
+        try? FileManager.default.removeItem(atPath: download)
+    }
+
+    /// The Inbox Placement Tester sent "Authorization: Bearer " with an empty
+    /// key instead of reporting notInitialized like every other call.
+    func testInboxPlacementRejectsAMissingOrEmptyKeyBeforeSending() {
+        let empty = ZeroBounceSDK()
+        empty.initialize(apiKey: "")
+        let uninitialized = ZeroBounceSDK()
+        for sdk in [empty, uninitialized] {
+            let calls: [(@escaping (String?) -> ()) -> ()] = [
+                { report in sdk.getInboxPlacementProviders { report(self.dictFailureText($0)) } },
+                { report in sdk.getInboxPlacementTestTypes { report(self.dictFailureText($0)) } },
+                { report in sdk.createInboxPlacementTest(name: "Launch") { report(self.dictFailureText($0)) } },
+                { report in sdk.getInboxPlacementTest(testId: "123") { report(self.dictFailureText($0)) } },
+                { report in sdk.listInboxPlacementTests { report(self.dictFailureText($0)) } },
+                { report in sdk.deleteInboxPlacementTest(testId: "123") { report(self.dictFailureText($0)) } },
+                { report in sdk.getInboxPlacementWebhook { report(self.dictFailureText($0)) } },
+                { report in
+                    sdk.setInboxPlacementWebhook(webhookUrl: "https://example.com/hook") { report(self.dictFailureText($0)) }
+                },
+            ]
+            for call in calls {
+                expectRejected("notInitialized", call)
+            }
+        }
+    }
+
+    /// A URLProtocol registered globally does not reach the SDK's own session,
+    /// so apps need a supported way to put one on it.
+    func testSessionConfigurationIsTheWayToStubRequests() {
+        // A session with no stub on it, as an app starts with.
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OfflineURLProtocol.self]
+        ZeroBounceSDK.setSessionConfiguration(configuration)
+        // The caller's configuration object is left as it was given.
+        XCTAssertEqual(configuration.protocolClasses?.count, 1)
+
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "hooked-key")
+        let record = send { done in sdk.getCredits { _ in done() } }
+        XCTAssertEqual(record.apiKey, "hooked-key")
+        XCTAssertEqual(record.timeout, 120)
+
+        // nil goes back to the default session, which carries no stub.
+        ZeroBounceSDK.setSessionConfiguration(nil)
+        let restored = ZeroBounceSDK.urlSession.configuration.protocolClasses ?? []
+        XCTAssertFalse(restored.contains { ObjectIdentifier($0) == ObjectIdentifier(OfflineURLProtocol.self) })
+        XCTAssertEqual(ZeroBounceSDK.urlSession.configuration.timeoutIntervalForRequest, 120)
+    }
+
+    private func writeTemporaryCsv(_ name: String) -> String {
+        let path = NSTemporaryDirectory() + name
+        try? "email\na@example.com\n".write(toFile: path, atomically: true, encoding: .utf8)
+        return path
     }
 }
 

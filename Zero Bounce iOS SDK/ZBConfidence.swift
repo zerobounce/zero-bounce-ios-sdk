@@ -15,4 +15,11 @@ public enum ZBConfidence: String, Codable {
     case high
     case unknown
     case undetermined
+
+    /// Matches case-insensitively, and maps a value this SDK does not know to
+    /// `.unknown` instead of failing the whole domain search response.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ZBConfidence(rawValue: raw.trimmingCharacters(in: .whitespaces).lowercased()) ?? .unknown
+    }
 }

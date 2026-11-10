@@ -24,6 +24,7 @@ internal class ZBMultiPartRequest {
         
         var request = URLRequest(url: URL(string: url)!)
         request.httpMethod = "POST"
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = try createBody(with: parameters, filePathKey: filePathKey, paths: paths, boundary: boundary)
         
@@ -36,6 +37,7 @@ internal class ZBMultiPartRequest {
         
         var request = URLRequest(url: URL(string: url)!)
         request.httpMethod = "POST"
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = createBodyWithData(parameters: parameters, filePathKey: filePathKey, fileData: fileData, fileName: fileName, boundary: boundary)
         

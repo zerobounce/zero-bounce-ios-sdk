@@ -1,4 +1,4 @@
-// swift-tools-version:5.3
+// swift-tools-version:5.5
 //
 //  Package.swift
 //
@@ -7,7 +7,7 @@ import PackageDescription
 
 let package = Package(
     name: "ZeroBounceSDK",
-    platforms: [.iOS(.v9)],
+    platforms: [.iOS(.v15), .macCatalyst(.v15)],
     products: [.library(name: "ZeroBounceSDK", targets: ["ZeroBounceSDK"])],
     targets: [
         .target(

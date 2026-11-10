@@ -136,7 +136,7 @@ internal final class Priority3Api {
         fileId: String,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBFileStatusResponse>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -155,7 +155,7 @@ internal final class Priority3Api {
         downloadPath: String,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBGetFileResponse>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -171,7 +171,7 @@ internal final class Priority3Api {
         fileId: String,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBDeleteFileResponse>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -224,7 +224,7 @@ internal final class Priority3Api {
         fileId: String,
         completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -251,7 +251,7 @@ internal final class Priority3Api {
         fileId: String,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -273,7 +273,7 @@ internal final class Priority3Api {
         value: String,
         completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -290,7 +290,7 @@ internal final class Priority3Api {
         usePost: Bool,
         completion: @escaping (ZeroBounceSDK.ZBJsonResult) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -314,7 +314,7 @@ internal final class Priority3Api {
         value: String,
         completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -367,7 +367,7 @@ internal final class Priority3Api {
         search: String?,
         completion: @escaping (ZeroBounceSDK.ZBResult<[ZBS3ListFileEntry]>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -417,8 +417,8 @@ internal final class Priority3Api {
     /// The server, path and protocol are never sent by the SDK; they come from
     /// your ZeroBounce settings.
     ///
-    /// This is the one job whose file_name the docs list as optional: leave
-    /// `options.fileName` nil to use the input bucket from those settings.
+    /// The docs list this job's file_name as optional, but the live API
+    /// requires it, so `bulkRootFileJob` rejects a missing one like any other.
     func validateSFTPFile(
         options: ZBBulkFileJobOptions,
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
@@ -690,7 +690,7 @@ internal final class Priority3Api {
         body: [String: Any]?,
         completion: @escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -730,7 +730,7 @@ internal final class Priority3Api {
         fields: [String: String],
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -745,7 +745,7 @@ internal final class Priority3Api {
         fields: [String: Any],
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }
@@ -771,7 +771,7 @@ internal final class Priority3Api {
         fields: [String: Any],
         completion: @escaping (ZeroBounceSDK.ZBResult<ZBSendFileResponse>) -> ()
     ) {
-        guard let apiKey = sdk.apiKey else {
+        guard let apiKey = sdk.normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
         }

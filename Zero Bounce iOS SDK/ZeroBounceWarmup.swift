@@ -617,7 +617,7 @@ public class ZeroBounceWarmup {
         guard let url = components.url else { return nil }
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = 120
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(apiKey, forHTTPHeaderField: "API-Key")
         if let body = body {

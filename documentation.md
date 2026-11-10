@@ -1,4 +1,23 @@
-##### Installation (CocoaPods)
+##### Installation
+The SDK needs iOS 15.0 or later (Mac Catalyst 15.0 or later with Swift Package Manager).
+
+###### Swift Package Manager
+In Xcode, choose **File → Add Package Dependencies…**, enter
+`https://github.com/zerobounce/zero-bounce-ios-sdk` and add the **ZeroBounceSDK**
+library to your target. In a `Package.swift` (Swift tools 5.5 or later):
+
+```
+dependencies: [
+    .package(url: "https://github.com/zerobounce/zero-bounce-ios-sdk", from: "2.2.0")
+],
+targets: [
+    .target(name: "YourApp", dependencies: [
+        .product(name: "ZeroBounceSDK", package: "zero-bounce-ios-sdk")
+    ])
+]
+```
+
+###### CocoaPods
 Add the pod to your Podfile
 ```pod 'ZeroBounceSDK' ```
 and run 
@@ -30,11 +49,17 @@ ZeroBounceSDK.shared.validate(email: email, ipAddress: ipAddress) { result in
         NSLog("validate failure error=\(String(describing: error))")
         switch error as? ZBError {
         case .notInitialized:
+            // No API key, or an empty one: nothing was sent.
             break
         case .decodeError(let messages):
-            /// decodeError is used to extract and decode errors and messages 
-            /// when they are not part of the response object
-            break
+            // An error the API reported in the body of an HTTP 200 (such as an
+            // invalid key), a body that could not be decoded, or an argument
+            // rejected before the request was sent.
+            NSLog("messages=\(messages)")
+        case .httpError(let message, let statusCode):
+            // An HTTP error status (statusCode is 4xx/5xx), or an HTTP 200
+            // whose body was empty, an HTML page or "success": false.
+            NSLog("HTTP \(statusCode): \(message)")
         default:
             break
         }
@@ -174,7 +199,7 @@ ZeroBounceSDK.shared.getApiUsage(startDate: startDate, endDate: endDate) { resul
 
 * ####### The sendfile API allows user to send a file for bulk email validation
 ```swift
-let filePath = File("<FILE_PATH>"); // The csv or txt file
+let filePath = "<FILE_PATH>";       // Path to the local csv or txt file
 let emailAddressColumn = 3;         // The index of "email" column in the file. Index starts at 1
 let firstNameColumn = 3;            // The index of "first name" column in the file
 let lastNameColumn = 3;             // The index of "last name" column in the file
@@ -221,6 +246,8 @@ ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
 ```
 
 ```swift
+let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
+
 ZeroBounceSDK.shared.getFile(
     fileId: fileId,
     options: ZBGetFileOptions(downloadType: .combined, activityData: true)
@@ -265,7 +292,7 @@ ZeroBounceSDK.shared.deleteFile(fileId: fileId) { result in
 ##### AI Scoring API
 * ####### The scoringSendFile API allows user to send a file for bulk email validation
 ```swift
-let filePath = File("<FILE_PATH>"); // The csv or txt file
+let filePath = "<FILE_PATH>";       // Path to the local csv or txt file
 let emailAddressColumn = 3;         // The index of "email" column in the file. Index starts at 1
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
 let returnUrl = "https://domain.com/called/after/processing/request";
@@ -301,6 +328,8 @@ ZeroBounceSDK.shared.scoringGetFile(fileId: fileId) { result in
 ```
 
 ```swift
+let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
+
 ZeroBounceSDK.shared.scoringGetFile(
     fileId: fileId,
     options: ZBGetFileOptions(downloadType: .phase2)
@@ -405,7 +434,7 @@ who can run `ps`.
 
 
 
-`ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids build failures when embedding **Mocker.framework** into the test bundle under strict Xcode sandboxing. There are **25** unit tests; you should see **TEST SUCCEEDED** and **Executed 25 tests, with 0 failures**.
+`ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids build failures when embedding **Mocker.framework** into the test bundle under strict Xcode sandboxing. With the live suite skipped, as in the Mac Catalyst command above, there are **76** unit tests; you should see **TEST SUCCEEDED** and **Executed 76 tests, with 0 failures**.
 
 #### Validate options
 
@@ -555,6 +584,8 @@ back for bulk validation. The evaluator has its own base URL, and the file id
 is one path segment, so a slash in it stays encoded.
 
 ```swift
+let zb = ZeroBounceSDK.shared
+
 zb.sendListEvaluatorFile(filePath: "emails.csv", emailAddressColumn: 1) { _ in }
 zb.getListEvaluatorResult(fileId: "<FILE_ID>") { _ in }
 
@@ -616,6 +647,36 @@ The list evaluator and the Inbox Placement Tester are separate hosts, so
 ```swift
 ZeroBounceSDK.shared.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/listevaluator")
 ZeroBounceSDK.shared.setInboxPlacementBaseUrl("https://bulkapi.zerobounce.net/api/ipt")
+```
+
+## Stubbing HTTP in your tests
+
+Requests go through the SDK's own `URLSession`, not `URLSession.shared`, so a
+`URLProtocol` registered with `URLProtocol.registerClass(_:)` does not see
+them. Hand the SDK a session configuration that carries your protocol instead.
+It applies to `ZeroBounceSDK` and `ZeroBounceWarmup`; redirects are still
+refused and only `https://` (or loopback) URLs are called.
+
+```swift
+final class StubProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data(#"{"Credits":"100"}"#.utf8))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
+let configuration = URLSessionConfiguration.ephemeral
+configuration.protocolClasses = [StubProtocol.self]
+ZeroBounceSDK.setSessionConfiguration(configuration)   // e.g. in setUp()
+
+// ... exercise your code ...
+
+ZeroBounceSDK.setSessionConfiguration(nil)             // back to the default, e.g. in tearDown()
 ```
 
 ## Sample App

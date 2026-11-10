@@ -71,6 +71,10 @@ That `xcodebuild` compile is the typecheck. There is no separate lint step. CI (
 - **Safety rails.** `initialize` refuses a key with surrounding whitespace or control characters, `ZeroBounceSDK.isAllowedURL` allows https only (loopback aside, for a local stub), `escapePathSegment` keeps a slash encoded, and redirects are never followed. Use them rather than adding a second rail beside them.
 - **Requests go through `ZeroBounceSDK.urlSession`**, not `URLSession.shared`, because a shared session cannot refuse a redirect. A test that stubs HTTP puts its `URLProtocol` on that session; `URLProtocol.registerClass` alone reaches only the shared one.
 - **Offline tests register their protocol on `ZeroBounceSDK.urlSession`.** Do not call the live API from anything but `LiveApiTests`.
+- **Apps reach that session through `ZeroBounceSDK.setSessionConfiguration(_:)`**, the public hook for stubbing; keep the redirect blocker and the https check in force whatever configuration it is given.
+- **Every `URLRequest` sets `timeoutInterval = ZeroBounceSDK.requestTimeout`** (120 s), uploads and downloads included. `URLRequest`'s own default is 60.
+- **No `let` with a default value in a `Codable` model.** Synthesized `Decodable` skips it, so the field is never read; `ZBValidateResponse` lost five fields that way. Make it optional, or decode it in an explicit `init(from:)`.
+- **A missing or empty key is `notInitialized` before anything is sent**, on every public call: guard on `normalizedApiKey`, not `apiKey`.
 - **Never from the live suite:** creating an Inbox Placement test (it cannot be deleted while running), setting the Inbox Placement webhook (it cannot be cleared), or ZB managed Warmup onboarding (it provisions a mailbox). Everything the `ZEROBOUNCE_LIVE_CHANGES=1` tier creates is removed again in the same run.
 - Match the surrounding style. Do not reformat unrelated code.
 

@@ -48,6 +48,23 @@ public enum ZBError: LocalizedError {
         return false
     }
     
+    /// Whether a JSON body is an error with no "success" field to gate on: a
+    /// non-empty "error", "error_message" or "Error" string. LIVE: an invalid
+    /// or drained key answers validate, activity and getapiusage with
+    /// {"error": ...}, and the filters with {"Error": ...}, on an HTTP 200.
+    /// "message" and "Message" are not among the keys: successful responses
+    /// use them too (a filter change answers with a bare "Message").
+    static func errorOnlyBody(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["success"] == nil else {
+            return false
+        }
+        return ["error", "error_message", "Error"].contains { key in
+            guard let text = object[key] as? String else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     static func decodeError(jsonData: Data) -> ZBError {
         guard let response = try? JSONSerialization.jsonObject(with: jsonData, options: .mutableLeaves) as? [String: Any] else {
             return .decodeError(messages: [])
@@ -92,7 +109,7 @@ public enum ZBError: LocalizedError {
                    (object["cloudflare_error"] as? Bool) == true {
                     return title
                 }
-                for key in ["message", "error_message", "error"] {
+                for key in ["message", "error_message", "error", "Message", "Error"] {
                     if let value = object[key] as? String {
                         let text = stripErrorPrefix(value)
                         if !text.isEmpty { return text }

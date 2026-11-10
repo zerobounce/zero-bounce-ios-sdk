@@ -41,14 +41,14 @@ public struct ZBValidateOptions {
         self.callbackUrl = callbackUrl
         self.usePost = usePost
     }
-
-    /// The documented fields shared by the six S3 and SFTP/FTP file jobs.
-    ///
-    /// `fileName` is required by every job except `validateSFTPFile`, where the
-    /// docs list it as optional: leaving it nil there uses the input bucket
-    /// configured in your ZeroBounce settings.
 }
 
+/// The documented fields shared by the six S3 and SFTP/FTP file jobs.
+///
+/// `fileName` and `returnUrl` are required by every one of them,
+/// `validateSFTPFile` included (the docs call its file_name optional, but the
+/// live API rejects the call without one). A missing or blank value is
+/// rejected before a request is sent.
 public struct ZBBulkFileJobOptions {
     public var fileName: String?
     public var hasHeaderRow: Bool

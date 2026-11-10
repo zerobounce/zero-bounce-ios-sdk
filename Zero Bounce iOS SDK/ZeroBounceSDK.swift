@@ -733,8 +733,10 @@ public class ZeroBounceSDK {
         priority3Api.domainSearchS3File(options: options, completion: completion)
     }
 
-    /// This is the one job whose file_name the docs list as optional: leave
-    /// `options.fileName` nil to use the input bucket from your settings.
+    /// `options.fileName` and `options.returnUrl` are both required, and a
+    /// missing or blank one is rejected before a request is sent. The docs list
+    /// this job's file_name as optional, but the live API rejects the call
+    /// without it ("Empty parameter: file_name").
     public func validateSFTPFile(options: ZBBulkFileJobOptions, completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()) {
         guard normalizedApiKey != nil else {
             completion(.Failure(ZBError.notInitialized))
@@ -782,13 +784,23 @@ public class ZeroBounceSDK {
     //
     // Its own host, camelCase JSON bodies, and the key in an
     // Authorization: Bearer header rather than on the query string.
-    // Spends the account's inbox-test credits.
+    // Spends the account's inbox-test credits. As everywhere else, a missing
+    // or empty key is reported as `notInitialized` before anything is sent,
+    // rather than going out as an empty "Bearer " header.
 
     public func getInboxPlacementProviders(completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.getInboxPlacementProviders(completion: completion)
     }
 
     public func getInboxPlacementTestTypes(completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.getInboxPlacementTestTypes(completion: completion)
     }
 
@@ -797,10 +809,18 @@ public class ZeroBounceSDK {
         options: ZBCreateInboxPlacementTestOptions? = nil,
         completion: @escaping (ZBDictionaryResult) -> ()
     ) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.createInboxPlacementTest(name: name, options: options, completion: completion)
     }
 
     public func getInboxPlacementTest(testId: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.getInboxPlacementTest(testId: testId, completion: completion)
     }
 
@@ -808,18 +828,34 @@ public class ZeroBounceSDK {
         options: ZBListInboxPlacementTestsOptions? = nil,
         completion: @escaping (ZBDictionaryResult) -> ()
     ) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.listInboxPlacementTests(options: options, completion: completion)
     }
 
     public func deleteInboxPlacementTest(testId: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.deleteInboxPlacementTest(testId: testId, completion: completion)
     }
 
     public func getInboxPlacementWebhook(completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.getInboxPlacementWebhook(completion: completion)
     }
 
     public func setInboxPlacementWebhook(webhookUrl: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        guard normalizedApiKey != nil else {
+            completion(.Failure(ZBError.notInitialized))
+            return
+        }
         priority3Api.setInboxPlacementWebhook(webhookUrl: webhookUrl, completion: completion)
     }
 
@@ -1169,7 +1205,7 @@ public class ZeroBounceSDK {
         }
 
         var request = URLRequest(url: requestURL)
-        request.timeoutInterval = 120
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         ZeroBounceSDK.urlSession.downloadTask(with: request) { location, response, error in
@@ -1362,14 +1398,14 @@ public class ZeroBounceSDK {
         }
         var r = URLRequest(url: urlValue)
         r.httpMethod = "GET"
-        r.timeoutInterval = 120
+        r.timeoutInterval = ZeroBounceSDK.requestTimeout
         sendJsonRequest(request: r, completion: completion)
     }
     
     private func sendPostJsonRequest<T: Codable>(url: String, params: Data?, completion: @escaping (ZBResult<T>) -> ()) {
         var r = URLRequest(url: URL(string: url)!)
         r.httpMethod = "POST"
-        r.timeoutInterval = 120
+        r.timeoutInterval = ZeroBounceSDK.requestTimeout
         
         guard let data = params else { return }
         r.httpBody = data
@@ -1390,7 +1426,7 @@ public class ZeroBounceSDK {
         components.queryItems = formFields.map { URLQueryItem(name: $0.key, value: $0.value) }
         var request = URLRequest(url: urlValue)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         sendJsonRequest(request: request, completion: completion)
@@ -1405,6 +1441,13 @@ public class ZeroBounceSDK {
         sendRequest(request: request) { result in
             switch result {
             case .success(_, let data):
+                // A model whose fields are all optional, such as
+                // ZBGetApiUsageResponse, decodes {"error": "Invalid API key"}
+                // as an empty result.
+                if let failure = self.errorOnlyFailure(data) {
+                    completion(.Failure(failure))
+                    return
+                }
                 do {
                     let value = try JSONDecoder().decode(T.self, from: data)
                     completion(.Success(value))
@@ -1421,7 +1464,13 @@ public class ZeroBounceSDK {
     }
     
     private func sendRequest(url:String, result: @escaping (RequestResult) -> ()) {
-        sendRequest(request: URLRequest(url: URL(string: url)!), result: result)
+        guard let urlValue = URL(string: url) else {
+            result(.failure(ZBError.invalidEndpoint))
+            return
+        }
+        var request = URLRequest(url: urlValue)
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
+        sendRequest(request: request, result: result)
     }
     
     private func sendRequest(request:URLRequest,  result: @escaping (RequestResult) -> ()) {
@@ -1485,19 +1534,57 @@ public class ZeroBounceSDK {
         }).resume()
     }
 
-    /// The session every request goes through. Redirects are not followed: one
-    /// could send the api_key to another host. The offline suite replaces this
-    /// with a session whose configuration registers its stub protocol.
+    /// How long every request waits before timing out, in seconds. Set on
+    /// each `URLRequest` the SDK builds, uploads and downloads included;
+    /// `URLRequest`'s own default is 60.
+    internal static let requestTimeout: TimeInterval = 120
+
+    /// The session every request goes through, `ZeroBounceWarmup`'s included.
+    /// Redirects are not followed: one could send the api_key to another host.
+    /// Apps change it through `setSessionConfiguration(_:)`; the offline suite
+    /// replaces it with a session whose configuration registers its stub
+    /// protocol.
     internal static var urlSession: URLSession = ZeroBounceSDK.makeSession()
 
     private static let redirectBlocker = ZBRedirectBlocker()
 
-    internal static func makeSession(protocolClasses: [AnyClass]? = nil) -> URLSession {
-        let configuration = URLSessionConfiguration.ephemeral
-        if let protocolClasses = protocolClasses {
-            configuration.protocolClasses = protocolClasses
+    /// Builds every request from `configuration` instead of the default
+    /// ephemeral one — for example to stub HTTP in your own tests by putting a
+    /// `URLProtocol` subclass in its `protocolClasses`. Pass nil to go back to
+    /// the default.
+    ///
+    /// Requests go through the SDK's own `URLSession`, not `URLSession.shared`,
+    /// so a protocol registered globally with `URLProtocol.registerClass(_:)`
+    /// does not see them; this is the supported way in. It applies to
+    /// `ZeroBounceSDK` and `ZeroBounceWarmup` alike. Whatever the
+    /// configuration, redirects are still refused and only https:// URLs
+    /// (or loopback) are called.
+    ///
+    /// Call it before making requests, such as at launch or in a test's
+    /// `setUp`. Requests already in flight finish on the previous session.
+    public static func setSessionConfiguration(_ configuration: URLSessionConfiguration?) {
+        let previous = urlSession
+        urlSession = makeSession(configuration: configuration)
+        previous.finishTasksAndInvalidate()
+    }
+
+    internal static func makeSession(
+        configuration: URLSessionConfiguration? = nil,
+        protocolClasses: [AnyClass]? = nil
+    ) -> URLSession {
+        let sessionConfiguration: URLSessionConfiguration
+        if let configuration = configuration {
+            // URLSession copies its configuration; copying here as well keeps
+            // the protocolClasses below off the caller's object.
+            sessionConfiguration = (configuration.copy() as? URLSessionConfiguration) ?? configuration
+        } else {
+            sessionConfiguration = URLSessionConfiguration.ephemeral
+            sessionConfiguration.timeoutIntervalForRequest = requestTimeout
         }
-        return URLSession(configuration: configuration, delegate: redirectBlocker, delegateQueue: nil)
+        if let protocolClasses = protocolClasses {
+            sessionConfiguration.protocolClasses = protocolClasses
+        }
+        return URLSession(configuration: sessionConfiguration, delegate: redirectBlocker, delegateQueue: nil)
     }
 
     /// Escapes a value as a single path segment, so a slash in it stays encoded.
@@ -1522,7 +1609,7 @@ public class ZeroBounceSDK {
         }
         var request = URLRequest(url: urlValue)
         request.httpMethod = method
-        request.timeoutInterval = 120
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         for (name, value) in extraHeaders {
             request.setValue(value, forHTTPHeaderField: name)
@@ -1561,6 +1648,17 @@ public class ZeroBounceSDK {
         return components.url!.absoluteString
     }
 
+    /// The failure for a body that is an error with no "success" field.
+    /// LIVE: an invalid or drained key answers getapiusage with
+    /// {"error": "Invalid API key"} and the filters with {"Error": ...} on an
+    /// HTTP 200, which used to come back as their result. Reported as
+    /// `.decodeError`, the case a typed call already reported when such a
+    /// body failed to decode.
+    private func errorOnlyFailure(_ data: Data) -> ZBError? {
+        guard ZBError.errorOnlyBody(data) else { return nil }
+        return .decodeError(messages: [ZBError.message(from: data, statusCode: 200)])
+    }
+
     internal func priority3SendJson<T: Codable>(url: String, completion: @escaping (ZBResult<T>) -> ()) {
         sendJsonRequest(url: url, completion: completion)
     }
@@ -1583,6 +1681,10 @@ public class ZeroBounceSDK {
         sendRequest(url: url) { result in
             switch result {
             case .success(_, let data):
+                if let failure = self.errorOnlyFailure(data) {
+                    completion(.Failure(failure))
+                    return
+                }
                 do {
                     completion(.Success(try JSONSerialization.jsonObject(with: data, options: [])))
                 } catch {
@@ -1613,6 +1715,10 @@ public class ZeroBounceSDK {
         sendRequest(url: url) { result in
             switch result {
             case .success(_, let data):
+                if let failure = self.errorOnlyFailure(data) {
+                    completion(.Failure(failure))
+                    return
+                }
                 do {
                     let object = try JSONSerialization.jsonObject(with: data, options: [])
                     if let dict = object as? [String: Any] {
@@ -1642,12 +1748,16 @@ public class ZeroBounceSDK {
         components.queryItems = formFields.map { URLQueryItem(name: $0.key, value: $0.value) }
         var request = URLRequest(url: urlValue)
         request.httpMethod = "POST"
-        request.timeoutInterval = 120
+        request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         sendRequest(request: request) { result in
             switch result {
             case .success(_, let data):
+                if let failure = self.errorOnlyFailure(data) {
+                    completion(.Failure(failure))
+                    return
+                }
                 do {
                     let object = try JSONSerialization.jsonObject(with: data, options: [])
                     if let dict = object as? [String: Any] {

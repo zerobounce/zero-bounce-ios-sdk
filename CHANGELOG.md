@@ -7,70 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-11
+
+Compared with 2.1.4. Items marked **Breaking** can stop existing code compiling or change what it receives.
+
 ### Added
 
-- `validate` and `validateBatch` take `ZBValidateOptions`: `timeout`, `activityData`, `verifyPlus`, and `usePost` (form-encoded `POST /validate`).
-- `ZBValidateResponse` reads `activeInDays` and `activeFirstSeen`.
-- `scoreEmail` (`GET /v2/scoring`) and `scoreEmailPost` (form-encoded `POST /v2/scoring`).
-- Bulk email finder, bulk domain search, list evaluator, filters, and S3 bulk methods, including `listS3files`, `emailFinderS3File` and `domainSearchS3File`.
-- SFTP/FTP bulk: `validateSFTPFile`, `scoreSFTPFile`, `emailFinderSFTPFile`, `domainSearchSFTPFile`, and `exportSFTPFile`, sharing the new `ZBBulkFileJobOptions`. The server, path and protocol come from your ZeroBounce settings. `validateSFTPFile`'s `fileName` is optional; `exportSFTPFile` takes `export_path` rather than the `export_bucket` `exportS3File` sends.
-- `ZBValidateOptions` accepts `domainInfo`, `greylistProcessing` and `callbackUrl`. `callbackUrl` needs `greylistProcessing: true` and is rejected without it, and when blank, before a request is sent.
-- `ZBValidateResponse` reads `domain_website_exists`, `domain_registrant_company_name` and `Message`.
-- Inbox Placement Tester on `https://bulkapi.zerobounce.net/api/ipt`: `getInboxPlacementProviders`, `getInboxPlacementTestTypes`, `createInboxPlacementTest`, `getInboxPlacementTest`, `listInboxPlacementTests`, `deleteInboxPlacementTest`, `getInboxPlacementWebhook`, `setInboxPlacementWebhook`. It authenticates with an `Authorization: Bearer` header, bodies are camelCase JSON, and unset fields are left out.
+- `validate` and `validateBatch` take `ZBValidateOptions`: `timeout` (3–60 s for `validate`, 10–120 s for `validateBatch`), `activityData`, `verifyPlus`, `domainInfo`, `greylistProcessing`, `callbackUrl` and `usePost` (form-encoded `POST /validate`). An option left `nil` is not sent. `callbackUrl` needs `greylistProcessing: true` and is rejected without it, and when blank, before a request is sent. `validateBatch` sends `timeout` as a JSON string: sent as a number, the live API rejects the whole batch with "Invalid API Key or your account ran out of credits".
+- `ZBValidateResponse` reads `active_in_days`, `active_first_seen`, `domain_website_exists`, `domain_registrant_company_name` and `Message` into `activeInDays`, `activeFirstSeen`, `domainWebsiteExists`, `domainRegistrantCompanyName` and `message`.
+- `scoreEmail` (`GET /v2/scoring`) and `scoreEmailPost` (form-encoded `POST /v2/scoring`), returning `ZBScoreEmailResponse`.
+- Bulk email finder and bulk domain search: `sendEmailFinderFile` / `sendEmailFinderFileData`, `emailFinderFileStatus`, `emailFinderGetFile`, `emailFinderDeleteFile`, and the matching `sendDomainSearchFile…` / `domainSearch…` methods. `has_header_row` is sent whether true or false. The email finder upload requires `first_name_column` or `full_name_column` as well as `domain_column`, and is rejected before sending without one.
+- List evaluator: `sendListEvaluatorFile`, `sendListEvaluatorFileData`, `getListEvaluatorResult` and `sendEvaluatedFile(fileId:)`, which submits a finished evaluation by id as a form field. The evaluator has its own base URL, the file id is encoded as a single path segment, and a blank file id is rejected before a request is sent.
+- Filters: `addFilter`, `deleteFilter` and `listFilters`. `/filters/list` answers with a JSON array (`[]` when no filters are set), so `listFilters` completes with the new `ZeroBounceSDK.ZBJsonResult`; cast the success value to `[[String: Any]]`.
+- Amazon S3 bulk: `listS3files`, `validateS3File(options: ZBValidateS3FileOptions(fileName:returnUrl:))`, `scoreS3File(options: ZBScoreS3FileOptions(fileName:returnUrl:))`, `emailFinderS3File`, `domainSearchS3File` and `exportS3File(fileId:exportBucket:)`. `exportBucket: nil` uses the export bucket from your ZeroBounce settings; a blank one is rejected.
+- SFTP/FTP bulk: `validateSFTPFile`, `scoreSFTPFile`, `emailFinderSFTPFile`, `domainSearchSFTPFile` and `exportSFTPFile(fileId:exportPath:)`, which sends `export_path` rather than `export_bucket`. The server, path and protocol come from your ZeroBounce settings. These and the S3 finder/domain-search jobs share `ZBBulkFileJobOptions`.
+- Every S3 and SFTP job requires both `fileName` and `returnUrl`, checked before the request is sent. The docs call `validateSFTPFile`'s `file_name` and the S3 validate/score `return_url` optional; the live API rejects the call without them.
+- Inbox Placement Tester on `https://bulkapi.zerobounce.net/api/ipt`: `getInboxPlacementProviders`, `getInboxPlacementTestTypes`, `createInboxPlacementTest`, `getInboxPlacementTest`, `listInboxPlacementTests`, `deleteInboxPlacementTest`, `getInboxPlacementWebhook` and `setInboxPlacementWebhook`, with `ZBCreateInboxPlacementTestOptions` (including per-provider seed caps, `providers: [ZBInboxPlacementTestProvider]`) and `ZBListInboxPlacementTestsOptions` (`status`, `createdAfter`, `createdBefore`, `page`, `pageSize`). It authenticates with an `Authorization: Bearer` header rather than the `api_key` parameter, bodies are camelCase JSON, and unset fields are left out. The listing is `GET /tests` and sends the page size as `page_size`. Before sending, `createInboxPlacementTest` checks `name` (at most 64 characters), `testType` (1, 2 or 3) and `senderEmail` (required for test type 1), and `listInboxPlacementTests` checks `status` (`running` or `finished`) and `pageSize` (1–100). A missing or empty API key is reported as `ZBError.notInitialized` before anything is sent.
 - `setListEvaluatorBaseUrl` and `setInboxPlacementBaseUrl`.
-- `ZeroBounceWarmup`, a client for the [Warmup API](https://www.zerobounce.net/docs/warmup-api): a separate product with its own host, its own team-scoped key (`initialize(apiKey:)`, sent in an `API-Key` header) and all 26 documented endpoints. The body comes back parsed — a dictionary, an array or a number depending on the endpoint, and `nil` for the documented empty successes (HTTP 204 and an empty 200). `downloadSeeds` and `downloadStatistics` hand over CSV text.
-- `ZBError.httpError(message:statusCode:)` for an error the API itself reported, and `ZBError.statusCode` to read the status back, so a caller can tell 429 from 500 without parsing the message.
-- Safety rails: `initialize` refuses a key with surrounding whitespace or control characters rather than storing it, only `https://` URLs are called (loopback aside, so an offline test can use a local stub), and redirects are not followed.
+- `ZeroBounceWarmup`, a client for the [Warmup API](https://www.zerobounce.net/docs/warmup-api): a separate product with its own host and its own team-scoped key (`initialize(apiKey:)`, sent in an `API-Key` header), with 26 endpoint methods. The body comes back parsed — a dictionary, an array or a number depending on the endpoint, and `nil` for the documented empty successes (HTTP 204 and an empty 200). `downloadSeeds` and `downloadStatistics` hand over CSV text.
+- `getFileStreaming` and `scoringGetFileStreaming`, which write a result file straight to `downloadPath` instead of holding it in memory. The first bytes are checked first, so a JSON error still reaches the failure result and no partial file is left behind.
+- `ZBError.httpError(message:statusCode:)` and `ZBError.statusCode`, so a caller can tell 429 from 500 without parsing the message. See **Changed** for when it is produced.
+- `ZeroBounceSDK()` can be constructed directly (the initializer was `fileprivate`). `shared` remains available.
+- `ZeroBounceSDK.setSessionConfiguration(_:)`, the supported way to route the SDK's requests (`ZeroBounceWarmup`'s included) through your own `URLSessionConfiguration` — for example one whose `protocolClasses` holds a test `URLProtocol`. Pass `nil` to return to the default. Redirects are still refused and only `https://` (or loopback) URLs are called.
+- A public memberwise initializer on `ZBGetApiUsageResponse`, and its `subStatusLeadingPeriodRemoved` and `subStatusAliasAddress` counters (`sub_status_leading_period_removed`, `sub_status_alias_address`).
+- `ZBValidateSubStatus.aiAgentMailbox` (`ai_agent_mailbox`) and `ZBValidateSubStatus.unknown`. See **Changed**.
 - `Zero Bounce iOS SDKTests/LiveApiTests.swift`, an opt-in live suite. The documented test command and CI pass `-skip-testing:"Zero Bounce iOS SDKTests/LiveApiTests"`, and it does nothing without keys. Keys come from `TEST_RUNNER_ZEROBOUNCE_API_KEY` and `TEST_RUNNER_ZEROBOUNCE_WARMUP_API_KEY` — xcodebuild strips that prefix on the way into the test process, which does not otherwise inherit its environment. `TEST_RUNNER_ZEROBOUNCE_LIVE_SPEND=1` and `TEST_RUNNER_ZEROBOUNCE_LIVE_CHANGES=1` opt in to calls that spend credits or make reversible account changes.
-- `ZBCreateInboxPlacementTestOptions.providers`, the documented per-provider seed caps, sent as `providers: [{"id": …, "maxSeeds": …}]`. They were missing, so a test could ask for a provider but not cap its seeds. The entries are the new `ZBInboxPlacementTestProvider`.
-- `ZBListInboxPlacementTestsOptions.createdAfter` and `.createdBefore`, the two documented date filters of the test listing. They were missing entirely.
 
 ### Changed
 
-- Verified against the live API. Where it disagrees with the docs, the API wins and the call site says so:
-  - `validateBatch` sends `timeout` as a JSON **string**. Sent as a number the API rejects the whole batch with the account-level "Invalid API Key or your account ran out of credits".
-  - The Inbox Placement Tester authenticates with `Authorization: Bearer`, not the `api_key` query parameter the rest of the API takes, and its listing is `GET /tests` (plural) — `/test` answers `Method "GET" not allowed`.
-  - Every S3/SFTP job requires both `fileName` and `returnUrl`, `validateSFTPFile` included, although the docs call its `fileName` optional. Both are checked before the request is sent.
-  - **Breaking:** `sendEvaluatedFile` takes `fileId:` rather than `filePath:`. The live endpoint takes the id of a finished evaluation as a form field, not an upload.
-- A `"success": false` field on an HTTP 200 is now a failure instead of a success value. `getFile` and `deleteFile` report an unknown or deleted file id that way.
-- **Breaking:** errors the API reported are `ZBError.httpError` rather than `ZBError.decodeError`, which now covers only bodies that could not be read.
-- Requests go through `ZeroBounceSDK.urlSession` instead of `URLSession.shared`, because a shared session cannot refuse a redirect. A test that stubs HTTP should put its `URLProtocol` on that session.
-- **Breaking:** `ZBValidateResponse.status` and `.processedAt` are now optional. While a greylist retry is still running the API answers with a `Message` and neither field, and the previous non-optional declarations made that response fail to decode entirely.
-- The list evaluator uses its own base URL instead of building the path from the bulk base, and the file id is encoded as a single path segment. `getListEvaluatorResult` rejects a blank file id before a request is sent.
-- `ZeroBounceSDK()` can be constructed directly. `shared` remains available.
-- **Breaking:** `ZBValidateS3FileOptions` and `ZBScoreS3FileOptions` take `returnUrl` in their initializer: `ZBValidateS3FileOptions(fileName:returnUrl:)`. LIVE: `POST /validateS3file` without one answers HTTP 400 "Provided return URL is not permitted: None", so it is required the way it is on every other S3/SFTP job rather than an optional field. `validateS3File` and `scoreS3File` now go through the same `file_name` / `return_url` check those jobs use.
-- `exportS3File` takes `exportBucket: String?`. `export_bucket` is optional — pass nil to use the export bucket from your ZeroBounce settings — and a blank one is still rejected, which is how `exportSFTPFile` has always treated `export_path`.
-- `findEmail`'s `firstName` is optional on both overloads, so a person can be looked up by middle or last name alone. At least one of the three names is still needed: with none of them `/guessformat` is the domain search, so `findEmail` says to use `findDomain` instead of quietly answering something else.
-- `sendEmailFinderFile` and `sendEmailFinderFileData` require `first_name_column` or `full_name_column` as well as `domain_column`. A file with neither has no name for the finder to search with.
-- `createInboxPlacementTest` checks the documented limits before sending: `name` at most 64 characters, `testType` 1, 2 or 3, and `senderEmail` when `testType` is 1.
-- `listInboxPlacementTests` checks `status` (`running` or `finished`) and `pageSize` (1–100) before sending.
-
-### Changed
-
-- The minimum iOS deployment target is 15.0.
-- API requests time out after 120 seconds.
-
-### Removed
-
-- **Breaking:** `removeDuplicate` on `ZBValidateS3FileOptions` and `ZBScoreS3FileOptions`. The singular `remove_duplicate` was sent alongside the documented `remove_duplicates` and is not a parameter the API describes. Use `removeDuplicates`.
+- **Breaking:** the minimum deployment target is iOS 15.0, up from iOS 9.0 in both the podspec and `Package.swift`. The Swift package also declares Mac Catalyst 15.0.
+- **Breaking:** `Package.swift` needs Swift tools 5.5 (Xcode 13) or later, up from 5.3.
+- **Breaking:** an HTTP error status is reported as `ZBError.httpError(message:statusCode:)`, carrying the API's message, instead of `ZBError.invalidResponse(statusCode:)`. `.invalidResponse` is still declared but is no longer produced, so code that matched it to detect a failed request no longer sees one. `.httpError` is also what you now get for an HTTP 200 whose body is empty, an HTML page or `"success": false`, and for a redirect (see below). An error the API reports in the body of an HTTP 200 — such as `{"error": "Invalid API key"}` from `validate` or `getApiUsage`, `{"Message": …}` from `findEmail`, or the batch-wide error of `validateBatch` — still arrives as `ZBError.decodeError(messages:)`, as do a body that cannot be decoded and an argument rejected before a request is sent.
+- **Breaking:** `ZBError` has a new case, `httpError`, so a `switch` over it without a `default` no longer compiles.
+- **Breaking:** `ZBValidateSubStatus` has two new cases, `aiAgentMailbox` and `unknown`, so a `switch` over it without a `default` no longer compiles. A `sub_status` the SDK does not recognise now decodes as `.unknown` instead of failing the whole response.
+- **Breaking:** `ZBValidateResponse.status` and `.processedAt` are now optional. While a greylist retry is still running the API answers with a `Message` and neither field, and the previous non-optional declarations made that response fail to decode.
+- **Breaking:** an HTTP 200 whose body has `"success": false` is now always a failure, `ZBError.httpError` with `statusCode` 200. In 2.1.4 it came back as a success value when the rest of the body decoded into the response type, and as `.decodeError` otherwise — which is how an unknown or deleted file id usually surfaced from `getFile` and `deleteFile`.
+- **Breaking:** `validateBatch` reports an account-level failure (HTTP 200 with an error for the address `all`, such as an invalid API key or no credits) as a `.decodeError` failure instead of a successful result whose `errors` contains it. An error for one address stays on the successful result.
+- **Breaking:** requests go through the SDK's own ephemeral `URLSession` instead of `URLSession.shared`, because a shared session cannot refuse a redirect. A `URLProtocol` registered globally with `URLProtocol.registerClass(_:)` therefore no longer intercepts the SDK's requests; use `ZeroBounceSDK.setSessionConfiguration(_:)` instead.
+- `findEmail`'s `firstName` is optional on both overloads, so a person can be looked up by middle or last name alone. At least one of the three names is still needed: with none of them `/guessformat` is the domain search, so `findEmail` says to use `findDomain` instead of sending it.
+- Requests time out after 120 seconds, up from `URLRequest`'s default of 60 — uploads and file downloads included.
+- `initialize` refuses a key with surrounding whitespace or control characters instead of storing it, and the SDK stays uninitialized.
+- `validateBatch` sends an empty `ip_address` as JSON `null`.
+- Error messages are short text: an HTTP error carries the API's message (or the title of an HTML error page) rather than only the status code; an empty body, or a non-JSON body over 1,000 characters, is reported as such instead of with an empty message list; and a repeated `Error:` / `[Error]:` prefix is removed.
 
 ### Fixed
 
-- `getApiUsage` no longer fails outright. The live API returns only the counters that apply to the account and date range, and `sub_status_gold` and `sub_status_role_based_accept_all` are absent from an ordinary response; decoding them as required keys threw, so the whole call failed with "ZeroBounce returned a response that is not valid JSON." A missing counter now reads as 0, and a counter the API adds later is ignored rather than fatal. `sub_status_leading_period_removed` and `sub_status_alias_address`, which the API does return, are now read.
-- `listFilters` no longer fails outright. `/filters/list` answers with a JSON array — `[]` when no filters are set — which could not be carried by a dictionary-only result. **Breaking:** it now completes with `ZeroBounceSDK.ZBJsonResult`; cast the success value to `[[String: Any]]`.
-
-- A 403 HTML "Access denied" page is returned as a short error. An HTML page with status 200 is an error as well, including `getFile`, instead of a saved file.
-- Empty and non-JSON bodies are a short error. A repeated `Error:` / `[Error]:` prefix is removed.
-- `validateBatch` reports an account-level failure (HTTP 200, error for address `all`, such as an invalid API key or no credits) through the failure result. An error for one address stays on the successful result.
-- Bulk email finder and domain search send `has_header_row` when it is set to false.
-- `validateBatch` sends an empty `ip_address` as JSON `null`.
-- An empty API key is rejected before a request is sent.
-- `scoreS3File` can now succeed. `ZBScoreS3FileOptions` had no `returnUrl` field at all, so the parameter the live API requires was unreachable and every call was rejected. `validateS3File` sent `return_url` only when it happened to be set.
-- `listInboxPlacementTests` sends `page_size`. It sent `pageSize`, which the endpoint accepts and then ignores, so every call came back with the whole list however the page size was set.
+- `ZBValidateResponse.freeEmail`, `.mxFound` and `.catchallDomain` were never read from the response and were always `false`, `false` and `nil`: they were declared as `let` constants with a default value, which synthesized `Decodable` skips. They are now decoded, accepting a JSON boolean or the string `"true"`/`"false"` (the API sends `mx_found` as a string).
+- `findEmail` failed to decode any result the finder could not resolve. The API answers those with `"email_confidence": "undetermined"`, which `ZBEmailConfidence` did not have, so the whole response became a decode error. **Breaking:** `ZBEmailConfidence` gains `undetermined` and `unknown`, so a `switch` over it without a `default` needs the two new cases. It and `ZBConfidence` now match their values case-insensitively (the docs write `HIGH`, `MEDIUM`, `LOW`; the API sends lowercase) and decode a value the SDK does not know as `.unknown` instead of failing the response.
+- `getApiUsage` no longer fails on an ordinary response. The live API returns only the counters that apply to the account and date range, and `sub_status_gold` and `sub_status_role_based_accept_all` are often absent; decoding them as required keys failed the whole call. A missing counter now reads as 0, and a counter the API adds later is ignored. An invalid key is still reported as `ZBError.decodeError` carrying the API's message.
+- `getFile` and `scoringGetFile` saved an HTML page served with HTTP 200 (such as an "Access denied" page) as the result file. It is now a failure.
+- An empty API key is rejected with `ZBError.notInitialized` before a request is sent; it used to go out as an empty `api_key`.
 
 ### Security
 
-- Error results no longer include the raw HTML access-denied page.
+- Version 2.1.4 logged every request URL — which carries the API key as the `api_key` query parameter — and every response body with `NSLog`, and `getFile` printed the whole downloaded result file. These logs are removed; only the saved file's name and an upload's local path are still logged.
+- `getFile` keeps only the last path component of the server-suggested file name, so the result is always written inside `Documents/SavedFiles` and a name such as `../x` cannot place it elsewhere.
+- Query parameters are built with `URLComponents` instead of string interpolation, so a value containing `&`, `=`, `#` or a space is percent-encoded and can no longer end the value or add a parameter. (`URLComponents` leaves `+` as is.)
+- Only `https://` URLs are called (loopback aside, so an offline test can use a local stub), and redirects are not followed, so the API key cannot be sent in the clear or to another host.
 
 ## [2.1.3] - 2026-06-18
 
@@ -97,7 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Release 2.0.0 of the SDK.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.4...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.4...v2.2.0
 [2.1.3]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.2...v2.1.3
 [2.1.2]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.0...v2.1.2
 [2.1.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.0.0...v2.1.0

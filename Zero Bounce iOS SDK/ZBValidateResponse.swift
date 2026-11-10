@@ -34,16 +34,16 @@ public struct ZBValidateResponse : Codable, Equatable {
     public let domainAgeDays: String?
 
     ///Last activity bucket when activity_data was requested.
-    public let activeInDays: String? = nil
+    public let activeInDays: String?
 
     ///First date activity was detected (YYYY-MM-DD).
-    public let activeFirstSeen: String? = nil
+    public let activeFirstSeen: String?
 
     ///[true/false] If the email comes from a free provider.
-    public let freeEmail: Bool = false
+    public let freeEmail: Bool
 
     ///[true/false] Does the domain have an MX record.
-    public let mxFound: Bool = false
+    public let mxFound: Bool
 
     ///The preferred MX record of the domain
     public let mxRecord: String?
@@ -52,7 +52,7 @@ public struct ZBValidateResponse : Codable, Equatable {
     public let smtpProvider: String?
 
     ///[true/false or null] Is the domain name a catch-all (the domain email server responds with valid to any SMTP checks and emailing to an invalid might not bounce)?
-    public let catchallDomain: Bool? = nil
+    public let catchallDomain: Bool?
 
     ///The first name of the owner of the email when available or [null].
     public let firstName: String?
@@ -115,5 +115,78 @@ public struct ZBValidateResponse : Codable, Equatable {
         case domainWebsiteExists = "domain_website_exists"
         case domainRegistrantCompanyName = "domain_registrant_company_name"
         case message = "Message"
+    }
+}
+
+extension ZBValidateResponse {
+    /// Written out because synthesized `Decodable` skips a `let` that already
+    /// has a default value: `activeInDays`, `activeFirstSeen`, `freeEmail`,
+    /// `mxFound` and `catchallDomain` used to be declared `= nil` / `= false`
+    /// and so were never read from the response, whatever the API sent.
+    ///
+    /// Those five are read leniently, so a value of an unexpected type leaves
+    /// the field at its default instead of failing the whole response. The API
+    /// sends `mx_found` (and sometimes `free_email`) as the string "true" or
+    /// "false" rather than a JSON boolean, so both spellings are accepted.
+    ///
+    /// Declared in an extension so the memberwise initializer is kept.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        address = try container.decode(String.self, forKey: .address)
+        status = try container.decodeIfPresent(ZBValidateStatus.self, forKey: .status)
+        subStatus = try container.decodeIfPresent(ZBValidateSubStatus.self, forKey: .subStatus)
+        account = try container.decodeIfPresent(String.self, forKey: .account)
+        domain = try container.decodeIfPresent(String.self, forKey: .domain)
+        didYouMean = try container.decodeIfPresent(String.self, forKey: .didYouMean)
+        domainAgeDays = try container.decodeIfPresent(String.self, forKey: .domainAgeDays)
+        activeInDays = ZBValidateResponse.lenientString(container, .activeInDays)
+        activeFirstSeen = ZBValidateResponse.lenientString(container, .activeFirstSeen)
+        freeEmail = ZBValidateResponse.lenientBool(container, .freeEmail) ?? false
+        mxFound = ZBValidateResponse.lenientBool(container, .mxFound) ?? false
+        mxRecord = try container.decodeIfPresent(String.self, forKey: .mxRecord)
+        smtpProvider = try container.decodeIfPresent(String.self, forKey: .smtpProvider)
+        catchallDomain = ZBValidateResponse.lenientBool(container, .catchallDomain)
+        firstName = try container.decodeIfPresent(String.self, forKey: .firstName)
+        lastName = try container.decodeIfPresent(String.self, forKey: .lastName)
+        gender = try container.decodeIfPresent(String.self, forKey: .gender)
+        city = try container.decodeIfPresent(String.self, forKey: .city)
+        region = try container.decodeIfPresent(String.self, forKey: .region)
+        zipCode = try container.decodeIfPresent(String.self, forKey: .zipCode)
+        country = try container.decodeIfPresent(String.self, forKey: .country)
+        processedAt = try container.decodeIfPresent(String.self, forKey: .processedAt)
+        domainWebsiteExists = try container.decodeIfPresent(String.self, forKey: .domainWebsiteExists)
+        domainRegistrantCompanyName = try container.decodeIfPresent(String.self, forKey: .domainRegistrantCompanyName)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+    }
+
+    /// A JSON boolean, or the string "true" / "false" in any case. Anything
+    /// else, a null or a missing key is nil.
+    private static func lenientBool(
+        _ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys
+    ) -> Bool? {
+        if let flag = try? container.decodeIfPresent(Bool.self, forKey: key) {
+            return flag
+        }
+        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
+            switch text.trimmingCharacters(in: .whitespaces).lowercased() {
+            case "true": return true
+            case "false": return false
+            default: return nil
+            }
+        }
+        return nil
+    }
+
+    /// A JSON string, or a number spelled as one. Anything else is nil.
+    private static func lenientString(
+        _ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys
+    ) -> String? {
+        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
+            return text
+        }
+        if let number = try? container.decodeIfPresent(Int.self, forKey: key) {
+            return String(number)
+        }
+        return nil
     }
 }
