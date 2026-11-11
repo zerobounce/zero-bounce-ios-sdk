@@ -127,7 +127,10 @@ public class ZeroBounceWarmup {
 
     internal var apiKey: String?
     /// The base URL ZeroBounce gave you. Tests point this at a local stub.
-    public var baseUrl = "https://warmup-api.zerobounce.net"
+    /// Trailing slashes are dropped when it is set.
+    public var baseUrl = "https://warmup-api.zerobounce.net" {
+        didSet { baseUrl = ZeroBounceSDK.normalizedBaseUrl(baseUrl) }
+    }
 
     public init() {}
 
@@ -137,12 +140,19 @@ public class ZeroBounceWarmup {
     /// A key with surrounding whitespace or control characters is refused
     /// rather than stored: it would otherwise be quoted, unredacted, in a
     /// transport error.
-    public func initialize(apiKey: String) {
+    ///
+    /// - returns: false when the key was refused. The client is then left
+    ///   uninitialized, so every call fails with "not initialized" instead of
+    ///   going on with a key set earlier.
+    @discardableResult
+    public func initialize(apiKey: String) -> Bool {
         guard ZeroBounceSDK.isCleanApiKey(apiKey) else {
             print("ZeroBounce: the Warmup api_key has surrounding whitespace or control characters; it was not accepted.")
-            return
+            self.apiKey = nil
+            return false
         }
         self.apiKey = apiKey
+        return true
     }
 
     // MARK: Sending accounts

@@ -7,9 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- `getFile`, `scoringGetFile`, `getFileStreaming`, `scoringGetFileStreaming`, `emailFinderGetFile` and `domainSearchGetFile` report a JSON body (a body that is a JSON object, whatever its keys and content type) as `ZBError.httpError(message:statusCode:)` carrying the HTTP status, and save no file. In 2.2.0 `getFile`, `scoringGetFile`, `emailFinderGetFile` and `domainSearchGetFile` reported a body with a `message`, `error` or `error_message` key - such as `{"message": "File is still processing"}` on an HTTP 200 - as `ZBError.decodeError(messages:)`, whose `statusCode` is nil, and saved any other JSON object (`{"Message": ...}`, for example) as the result file; the two streaming downloads saved every JSON body except `"success": false` as the file. Code that matched `.decodeError` for these calls should match `.httpError` (or read `statusCode`).
+- `ZeroBounceSDK.initialize(apiKey:apiBaseUrl:)` and `ZeroBounceWarmup.initialize(apiKey:)` return `Bool` (`@discardableResult`): false when the key is refused for surrounding whitespace or control characters. A refused key now also clears a key set by an earlier `initialize`, so every call reports `ZBError.notInitialized` (Warmup: "not initialized") and nothing is sent. In 2.2.0 the refusal was only printed and the client went on sending the previous key. Calls that ignore the result compile unchanged; only code that uses `initialize` as a `Void`-returning function value has to change.
+
+### Changed
+
+- The license file is `LICENSE` (was `LICENSE.md`), the name GitHub and the package tools look for; its text is unchanged. The podspec and the Xcode project point at it.
+- `getFileStreaming` and `scoringGetFileStreaming` with a base URL that is not https now fail with `ZBError.decodeError(messages: ["url must be an https:// URL"])`, as every other call does, instead of `ZBError.invalidEndpoint`. No request was sent in either version.
+
+### Fixed
+
+- A trailing slash on a base URL - `ZeroBounceWarmup.baseUrl`, or the list evaluator and Inbox Placement Tester URLs given to `setListEvaluatorBaseUrl` / `setInboxPlacementBaseUrl` - built request paths with `//` (for example `https://warmup-api.zerobounce.net//api/v1/warmup/seeds`). Trailing slashes are now dropped from every base URL when it is set.
+
+### Added
+
+- Offline tests that sweep every public request method (64 on `ZeroBounceSDK`, 26 on `ZeroBounceWarmup`): each refuses a plain `http://` base URL before sending, stops at a redirect with its status, and sets the 120-second request timeout.
+
 ## [2.2.0] - 2026-11-11
 
 Compared with 2.1.4. Items marked **Breaking** can stop existing code compiling or change what it receives.
+
+### Upgrading from 2.1.4
+
+- Raise your deployment target to iOS 15.0 (was 9.0); Swift Package Manager users also need Swift tools 5.5 (Xcode 13) or later.
+- Update error handling: HTTP failures are now `ZBError.httpError(message:statusCode:)`. `ZBError.invalidResponse` is still declared but no longer produced. An error the API returns in an HTTP 200 body (invalid key, the batch-wide `validateBatch` error) still arrives as `ZBError.decodeError(messages:)`.
+- Add `default` (or the new cases) to exhaustive `switch` statements over `ZBError` (`httpError`), `ZBValidateSubStatus` (`aiAgentMailbox`, `unknown`) and `ZBEmailConfidence` (`undetermined`, `unknown`).
+- Handle the now optional `ZBValidateResponse.status` and `.processedAt`; they are absent while a greylist retry is still running.
+- If you intercept requests with `URLProtocol.registerClass(_:)` (typically in tests), use `ZeroBounceSDK.setSessionConfiguration(_:)` instead; the global registration no longer sees the SDK's traffic.
+
+The **Breaking** entries below give the details.
 
 ### Added
 

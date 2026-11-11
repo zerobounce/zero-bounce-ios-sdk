@@ -14,8 +14,14 @@ public class ZeroBounceSDK {
     
     static public let shared = ZeroBounceSDK()
     
-    var bulkApiRootUrl = "https://bulkapi.zerobounce.net"
-    var bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2"
+    // Every base URL drops its trailing slashes when set: each path appended
+    // to it starts with one, so "https://host/v2/" would build "/v2//validate".
+    var bulkApiRootUrl = "https://bulkapi.zerobounce.net" {
+        didSet { bulkApiRootUrl = ZeroBounceSDK.normalizedBaseUrl(bulkApiRootUrl) }
+    }
+    var bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2" {
+        didSet { bulkApiBaseUrl = ZeroBounceSDK.normalizedBaseUrl(bulkApiBaseUrl) }
+    }
     /// The bulk AI scoring endpoints are the bulk ones under `/scoring`, so
     /// this follows `bulkApiBaseUrl` rather than standing beside it as a
     /// second base that an override would silently miss.
@@ -23,10 +29,16 @@ public class ZeroBounceSDK {
     /// The list evaluator and the Inbox Placement Tester have their own base
     /// URLs, not paths built from the bulk one. `initialize` alone leaves them
     /// pointing at the live API.
-    var listEvaluatorBaseUrl = "https://bulkapi.zerobounce.net/v2/listevaluator"
-    var inboxPlacementBaseUrl = "https://bulkapi.zerobounce.net/api/ipt"
+    var listEvaluatorBaseUrl = "https://bulkapi.zerobounce.net/v2/listevaluator" {
+        didSet { listEvaluatorBaseUrl = ZeroBounceSDK.normalizedBaseUrl(listEvaluatorBaseUrl) }
+    }
+    var inboxPlacementBaseUrl = "https://bulkapi.zerobounce.net/api/ipt" {
+        didSet { inboxPlacementBaseUrl = ZeroBounceSDK.normalizedBaseUrl(inboxPlacementBaseUrl) }
+    }
     var apiKey: String?
-    var apiBaseUrl = ZBApiURL.API_DEFAULT_URL.rawValue
+    var apiBaseUrl = ZBApiURL.API_DEFAULT_URL.rawValue {
+        didSet { apiBaseUrl = ZeroBounceSDK.normalizedBaseUrl(apiBaseUrl) }
+    }
     let dateFormatter = DateFormatter()
     
     private lazy var priority3Api = Priority3Api(sdk: self)
@@ -43,16 +55,30 @@ public class ZeroBounceSDK {
     /// Sets the API key. A key with surrounding whitespace or control
     /// characters is refused rather than stored: it would otherwise be quoted,
     /// unredacted, in a transport error.
+    ///
+    /// - returns: false when the key was refused. The client is then left
+    ///   uninitialized, so every call reports `ZBError.notInitialized` instead
+    ///   of going on with a key set earlier.
+    @discardableResult
     public func initialize(
         apiKey: String,
         apiBaseUrl: ZBApiURL = .API_DEFAULT_URL
-    ) {
+    ) -> Bool {
         guard ZeroBounceSDK.isCleanApiKey(apiKey) else {
             print("ZeroBounce: api_key has surrounding whitespace or control characters; it was not accepted.")
-            return
+            self.apiKey = nil
+            return false
         }
         self.apiKey = apiKey
         self.apiBaseUrl = apiBaseUrl.rawValue
+        return true
+    }
+
+    /// The URL without trailing slashes or surrounding whitespace.
+    internal static func normalizedBaseUrl(_ url: String) -> String {
+        var value = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        while value.hasSuffix("/") { value.removeLast() }
+        return value
     }
 
     /// Whether a key is free of surrounding whitespace and control characters.
@@ -1199,8 +1225,12 @@ public class ZeroBounceSDK {
         }
         guard let requestURL = buildGetFileURL(
             scoring: scoring, apiKey: apiKey, fileId: fileId, options: options
-        ), ZeroBounceSDK.isAllowedURL(requestURL) else {
+        ) else {
             completion(.Failure(ZBError.invalidEndpoint))
+            return
+        }
+        guard ZeroBounceSDK.isAllowedURL(requestURL) else {
+            completion(.Failure(ZBError.decodeError(messages: ["url must be an https:// URL"])))
             return
         }
 
@@ -1243,7 +1273,8 @@ public class ZeroBounceSDK {
                 return
             }
             let message = ZBError.message(from: probe, statusCode: statusCode)
-            if message.contains("HTML error page") || ZBError.successMeansFailure(probe) {
+            if message.contains("HTML error page") || ZBError.successMeansFailure(probe)
+                || ZBError.looksLikeJsonObject(probe) {
                 completion(.Failure(ZBError.httpError(message: message, statusCode: statusCode)))
                 return
             }
@@ -1292,16 +1323,6 @@ public class ZeroBounceSDK {
         return comp?.url
     }
     
-    private func getFileJsonIndicatesFailure(_ d: [String: Any]) -> Bool {
-        if let success = d["success"] as? Bool, success == false { return true }
-        func nonEmpty(_ key: String) -> Bool {
-            guard let s = d[key] as? String else { return false }
-            return !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-        if nonEmpty("message") || nonEmpty("error") || nonEmpty("error_message") { return true }
-        return false
-    }
-    
     private func _getFile(scoring: Bool, fileId: String, options: ZBGetFileOptions?, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
         guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
@@ -1315,23 +1336,17 @@ public class ZeroBounceSDK {
         sendRequest(url: requestURL.absoluteString) { result in
             switch result {
             case .success(let response, let data):
-                if ZBError.message(from: data, statusCode: 200).contains("HTML error page")
-                    || data.isEmpty {
-                    completion(.Failure(ZBError.decodeError(messages: [
-                        ZBError.message(from: data, statusCode: 200)
-                    ])))
+                // getfile answers with the file or not at all. An HTML page,
+                // an empty body or a JSON body - whatever its keys and content
+                // type - is an error that keeps the HTTP status.
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                if ZBError.message(from: data, statusCode: statusCode).contains("HTML error page")
+                    || data.isEmpty || ZBError.looksLikeJsonObject(data) {
+                    completion(.Failure(ZBError.httpError(
+                        message: ZBError.message(from: data, statusCode: statusCode),
+                        statusCode: statusCode
+                    )))
                     return
-                }
-                
-                if let dict = try? JSONSerialization.jsonObject(with: data, options: .mutableLeaves) as? [String: Any] {
-                    if self.getFileJsonIndicatesFailure(dict) {
-                        completion(.Failure(ZBError.decodeError(jsonData: data)))
-                        return
-                    }
-                    if dict["success"] != nil {
-                        completion(.Failure(ZBError.decodeError(jsonData: data)))
-                        return
-                    }
                 }
                 
                 let fileName = (response.suggestedFilename != nil) ? response.suggestedFilename! : "file_\(fileId).csv"
@@ -1781,19 +1796,15 @@ public class ZeroBounceSDK {
     ) {
         sendRequest(url: url) { result in
             switch result {
-            case .success(_, let data):
-                let bodyStr = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if bodyStr.hasPrefix("{") {
-                    if let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        if let success = dict["success"] as? Bool, success == false {
-                            completion(.Failure(ZBError.decodeError(jsonData: data)))
-                            return
-                        }
-                        if dict["message"] != nil || dict["error"] != nil || dict["error_message"] != nil {
-                            completion(.Failure(ZBError.decodeError(jsonData: data)))
-                            return
-                        }
-                    }
+            case .success(let response, let data):
+                // As getfile: a JSON body is an error with the HTTP status.
+                if ZBError.looksLikeJsonObject(data) {
+                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                    completion(.Failure(ZBError.httpError(
+                        message: ZBError.message(from: data, statusCode: statusCode),
+                        statusCode: statusCode
+                    )))
+                    return
                 }
                 do {
                     let outURL = URL(fileURLWithPath: downloadPath)

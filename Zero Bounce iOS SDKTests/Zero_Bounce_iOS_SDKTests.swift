@@ -781,8 +781,8 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/getfile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
-        let getFileResponse = ZBGetFileResponse(localFilePath: "path")
-        let mockedData = try! JSONEncoder().encode(getFileResponse)
+        // getfile answers with the file itself; a JSON body would be an error.
+        let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
@@ -809,8 +809,8 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/getfile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
-        let getFileResponse = ZBGetFileResponse(localFilePath: "path")
-        let mockedData = try! JSONEncoder().encode(getFileResponse)
+        // getfile answers with the file itself; a JSON body would be an error.
+        let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
@@ -1002,8 +1002,8 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             URLQueryItem(name: "activity_data", value: "true")
         ]
         let apiEndpoint = comp!.url!
-        let getFileResponse = ZBGetFileResponse(localFilePath: "path")
-        let mockedData = try! JSONEncoder().encode(getFileResponse)
+        // getfile answers with the file itself; a JSON body would be an error.
+        let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
@@ -1031,8 +1031,8 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             URLQueryItem(name: "download_type", value: "phase_2")
         ]
         let apiEndpoint = comp!.url!
-        let getFileResponse = ZBGetFileResponse(localFilePath: "path")
-        let mockedData = try! JSONEncoder().encode(getFileResponse)
+        // getfile answers with the file itself; a JSON body would be an error.
+        let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
         let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
@@ -1132,6 +1132,21 @@ final class OfflineURLProtocol: URLProtocol {
         OfflineURLProtocol.lock.unlock()
         usleep(UInt32(Int.random(in: 0...20) * 1000))
 
+        // A redirect to another host. Handed to the session the way a real
+        // HTTP loader would, so a session that follows it sends a second
+        // request, to /followed, which is recorded like any other.
+        if apiKey.hasPrefix("redirect-") && !url.path.hasPrefix("/followed") {
+            let target = URL(string: "https://elsewhere.example/followed?api_key=\(apiKey)")!
+            let redirect = HTTPURLResponse(url: url, statusCode: 302, httpVersion: "HTTP/1.1", headerFields: [
+                "Location": target.absoluteString
+            ])!
+            client?.urlProtocol(self, wasRedirectedTo: URLRequest(url: target), redirectResponse: redirect)
+            client?.urlProtocol(self, didReceive: redirect, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data())
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+
         let (status, type, payload) = OfflineURLProtocol.answer(record)
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: [
             "Content-Type": type
@@ -1193,6 +1208,14 @@ final class OfflineURLProtocol: URLProtocol {
         }
         if key.hasPrefix("filter-message-") && request.path.contains("filters") {
             return (200, "application/json", Data(#"{"Message":"Filter has been added."}"#.utf8))
+        }
+        if key.hasPrefix("getfile-message-") && request.path.contains("getfile") {
+            // What getfile answers while the file is still being processed:
+            // a JSON message on an HTTP 200, with a download content type.
+            return (200, "application/octet-stream", Data(#"{"message":"File is still processing"}"#.utf8))
+        }
+        if key.hasPrefix("getfile-Message-") && request.path.contains("getfile") {
+            return (200, "application/json", Data(#"{"Message":"File is still processing"}"#.utf8))
         }
         if key.hasPrefix("success-false") {
             return (200, "application/json", Data(#"{"success":false,"message":"File cannot be found."}"#.utf8))
@@ -3119,5 +3142,332 @@ final class OfflineWarmupTests: XCTestCase {
         expectRejected("c_from") { report in
             warmup.getCustomEngagement(cFrom: "..") { report(self.failureText($0)) }
         }
+    }
+}
+
+
+/// Transport rules that hold for every public request method: HTTPS only, no
+/// redirects, an explicit timeout, base URLs without a trailing slash.
+///
+/// Every request is answered by `OfflineURLProtocol`; nothing here reaches the
+/// live API.
+final class TransportSafetyTests: XCTestCase {
+    private var liveSession: URLSession!
+    private var csvPath = ""
+    private let download = NSTemporaryDirectory() + "zb-transport-download.csv"
+
+    override func setUp() {
+        super.setUp()
+        OfflineURLProtocol.enabled = true
+        OfflineURLProtocol.records = []
+        liveSession = ZeroBounceSDK.urlSession
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession(protocolClasses: [OfflineURLProtocol.self])
+        csvPath = NSTemporaryDirectory() + "zb-transport-upload.csv"
+        try? "email\na@example.com\n".write(toFile: csvPath, atomically: true, encoding: .utf8)
+    }
+
+    override func tearDown() {
+        OfflineURLProtocol.enabled = false
+        ZeroBounceSDK.urlSession = liveSession
+        try? FileManager.default.removeItem(atPath: download)
+        super.tearDown()
+    }
+
+    private typealias Report = (Error?) -> ()
+
+    private func err<T>(_ r: ZeroBounceSDK.ZBResult<T>) -> Error? {
+        if case .Failure(let e) = r { return e }
+        return nil
+    }
+    private func err(_ r: ZeroBounceSDK.ZBDictionaryResult) -> Error? {
+        if case .Failure(let e) = r { return e }
+        return nil
+    }
+    private func err(_ r: ZeroBounceSDK.ZBJsonResult) -> Error? {
+        if case .Failure(let e) = r { return e }
+        return nil
+    }
+    private func err(_ r: ZeroBounceWarmup.ZBWarmupResult) -> Error? {
+        if case .Failure(let e) = r { return e }
+        return nil
+    }
+    private func err(_ r: ZeroBounceWarmup.ZBWarmupCsvResult) -> Error? {
+        if case .Failure(let e) = r { return e }
+        return nil
+    }
+
+    /// Every public method that sends a request, with arguments that pass the
+    /// local checks, so each one reaches the transport.
+    private func everyCall(_ sdk: ZeroBounceSDK, _ warmup: ZeroBounceWarmup) -> [(String, (@escaping Report) -> ())] {
+        let csv = Data("email\na@example.com\n".utf8)
+        let path = csvPath
+        let download = self.download
+        var finder = ZBEmailFinderSendFileOptions()
+        finder.firstNameColumn = 2
+        let job = ZBBulkFileJobOptions(fileName: "f.csv", returnUrl: "https://example.com/done")
+        let s3 = ZBValidateS3FileOptions(fileName: "f.csv", returnUrl: "https://example.com/done")
+        let score = ZBScoreS3FileOptions(fileName: "f.csv", returnUrl: "https://example.com/done")
+        var post = ZBValidateOptions()
+        post.usePost = true
+        var selfManaged = ZBWarmupAddSendingAccountOptions()
+        selfManaged.engagementRuleId = 2
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        return [
+            ("validate", { r in sdk.validate(email: "a@example.com") { r(self.err($0)) } }),
+            ("validate POST", { r in sdk.validate(email: "a@example.com", options: post) { r(self.err($0)) } }),
+            ("validateBatch", { r in sdk.validateBatch(emails: [["email_address": "a@example.com"]]) { r(self.err($0)) } }),
+            ("findEmail domain", { r in sdk.findEmail(domain: "example.com", firstName: "Ada") { r(self.err($0)) } }),
+            ("findEmail company", { r in sdk.findEmail(companyName: "Example", firstName: "Ada") { r(self.err($0)) } }),
+            ("findDomain domain", { r in sdk.findDomain(domain: "example.com") { r(self.err($0)) } }),
+            ("findDomain company", { r in sdk.findDomain(companyName: "Example") { r(self.err($0)) } }),
+            ("guessFormat", { r in sdk.guessFormat(domain: "example.com") { r(self.err($0)) } }),
+            ("getCredits", { r in sdk.getCredits { r(self.err($0)) } }),
+            ("getApiUsage", { r in sdk.getApiUsage(startDate: start, endDate: start) { r(self.err($0)) } }),
+            ("getActivityData", { r in sdk.getActivityData(email: "a@example.com") { r(self.err($0)) } }),
+            ("scoreEmail", { r in sdk.scoreEmail(email: "a@example.com") { r(self.err($0)) } }),
+            ("scoreEmailPost", { r in sdk.scoreEmailPost(email: "a@example.com") { r(self.err($0)) } }),
+            ("sendEmailFinderFile", { r in sdk.sendEmailFinderFile(filePath: path, domainColumn: 1, options: finder) { r(self.err($0)) } }),
+            ("sendEmailFinderFileData", { r in
+                sdk.sendEmailFinderFileData(fileData: csv, fileName: "f.csv", domainColumn: 1, options: finder) { r(self.err($0)) }
+            }),
+            ("emailFinderFileStatus", { r in sdk.emailFinderFileStatus(fileId: "f") { r(self.err($0)) } }),
+            ("emailFinderGetFile", { r in sdk.emailFinderGetFile(fileId: "f", downloadPath: download) { r(self.err($0)) } }),
+            ("emailFinderDeleteFile", { r in sdk.emailFinderDeleteFile(fileId: "f") { r(self.err($0)) } }),
+            ("sendDomainSearchFile", { r in sdk.sendDomainSearchFile(filePath: path, domainColumn: 1) { r(self.err($0)) } }),
+            ("sendDomainSearchFileData", { r in
+                sdk.sendDomainSearchFileData(fileData: csv, fileName: "f.csv", domainColumn: 1) { r(self.err($0)) }
+            }),
+            ("domainSearchFileStatus", { r in sdk.domainSearchFileStatus(fileId: "f") { r(self.err($0)) } }),
+            ("domainSearchGetFile", { r in sdk.domainSearchGetFile(fileId: "f", downloadPath: download) { r(self.err($0)) } }),
+            ("domainSearchDeleteFile", { r in sdk.domainSearchDeleteFile(fileId: "f") { r(self.err($0)) } }),
+            ("sendListEvaluatorFile", { r in sdk.sendListEvaluatorFile(filePath: path, emailAddressColumn: 1) { r(self.err($0)) } }),
+            ("sendListEvaluatorFileData", { r in
+                sdk.sendListEvaluatorFileData(fileData: csv, fileName: "f.csv", emailAddressColumn: 1) { r(self.err($0)) }
+            }),
+            ("getListEvaluatorResult", { r in sdk.getListEvaluatorResult(fileId: "f") { r(self.err($0)) } }),
+            ("sendEvaluatedFile", { r in sdk.sendEvaluatedFile(fileId: "f") { r(self.err($0)) } }),
+            ("addFilter", { r in sdk.addFilter(rule: "allow", target: "email", value: "a@example.com") { r(self.err($0)) } }),
+            ("listFilters GET", { r in sdk.listFilters { r(self.err($0)) } }),
+            ("listFilters POST", { r in sdk.listFilters(usePost: true) { r(self.err($0)) } }),
+            ("deleteFilter", { r in sdk.deleteFilter(rule: "allow", target: "email", value: "a@example.com") { r(self.err($0)) } }),
+            ("validateS3File", { r in sdk.validateS3File(options: s3) { r(self.err($0)) } }),
+            ("scoreS3File", { r in sdk.scoreS3File(options: score) { r(self.err($0)) } }),
+            ("exportS3File", { r in sdk.exportS3File(fileId: "f", exportBucket: nil) { r(self.err($0)) } }),
+            ("emailFinderS3File", { r in sdk.emailFinderS3File(options: job) { r(self.err($0)) } }),
+            ("domainSearchS3File", { r in sdk.domainSearchS3File(options: job) { r(self.err($0)) } }),
+            ("validateSFTPFile", { r in sdk.validateSFTPFile(options: job) { r(self.err($0)) } }),
+            ("scoreSFTPFile", { r in sdk.scoreSFTPFile(options: job) { r(self.err($0)) } }),
+            ("emailFinderSFTPFile", { r in sdk.emailFinderSFTPFile(options: job) { r(self.err($0)) } }),
+            ("domainSearchSFTPFile", { r in sdk.domainSearchSFTPFile(options: job) { r(self.err($0)) } }),
+            ("exportSFTPFile", { r in sdk.exportSFTPFile(fileId: "f", exportPath: nil) { r(self.err($0)) } }),
+            ("getInboxPlacementProviders", { r in sdk.getInboxPlacementProviders { r(self.err($0)) } }),
+            ("getInboxPlacementTestTypes", { r in sdk.getInboxPlacementTestTypes { r(self.err($0)) } }),
+            ("createInboxPlacementTest", { r in sdk.createInboxPlacementTest(name: "Launch") { r(self.err($0)) } }),
+            ("getInboxPlacementTest", { r in sdk.getInboxPlacementTest(testId: "1") { r(self.err($0)) } }),
+            ("listInboxPlacementTests", { r in sdk.listInboxPlacementTests { r(self.err($0)) } }),
+            ("deleteInboxPlacementTest", { r in sdk.deleteInboxPlacementTest(testId: "1") { r(self.err($0)) } }),
+            ("getInboxPlacementWebhook", { r in sdk.getInboxPlacementWebhook { r(self.err($0)) } }),
+            ("setInboxPlacementWebhook", { r in sdk.setInboxPlacementWebhook(webhookUrl: "https://example.com/hook") { r(self.err($0)) } }),
+            ("listS3files", { r in sdk.listS3files { r(self.err($0)) } }),
+            ("fileStatus", { r in sdk.fileStatus(fileId: "f") { r(self.err($0)) } }),
+            ("scoringFileStatus", { r in sdk.scoringFileStatus(fileId: "f") { r(self.err($0)) } }),
+            ("deleteFile", { r in sdk.deleteFile(fileId: "f") { r(self.err($0)) } }),
+            ("scoringDeleteFile", { r in sdk.scoringDeleteFile(fileId: "f") { r(self.err($0)) } }),
+            ("sendFile path", { r in sdk.sendFile(filePath: path, emailAddressColumn: 1) { r(self.err($0)) } }),
+            ("sendFile data", { r in sdk.sendFile(fileData: csv, fileName: "f.csv", emailAddressColumn: 1) { r(self.err($0)) } }),
+            ("scoringSendFile path", { r in sdk.scoringSendFile(filePath: path, emailAddressColumn: 1) { r(self.err($0)) } }),
+            ("scoringSendFile data", { r in
+                sdk.scoringSendFile(fileData: csv, fileName: "f.csv", emailAddressColumn: 1) { r(self.err($0)) }
+            }),
+            ("getFile", { r in sdk.getFile(fileId: "f") { r(self.err($0)) } }),
+            ("getFile options", { r in sdk.getFile(fileId: "f", options: ZBGetFileOptions()) { r(self.err($0)) } }),
+            ("getFileStreaming", { r in sdk.getFileStreaming(fileId: "f", downloadPath: download) { r(self.err($0)) } }),
+            ("scoringGetFileStreaming", { r in sdk.scoringGetFileStreaming(fileId: "f", downloadPath: download) { r(self.err($0)) } }),
+            ("scoringGetFile", { r in sdk.scoringGetFile(fileId: "f") { r(self.err($0)) } }),
+            ("scoringGetFile options", { r in sdk.scoringGetFile(fileId: "f", options: ZBGetFileOptions()) { r(self.err($0)) } }),
+            ("warmup listSendingAccounts", { r in warmup.listSendingAccounts { r(self.err($0)) } }),
+            ("warmup getSendingAccount", { r in warmup.getSendingAccount(fromAddress: "s@example.com") { r(self.err($0)) } }),
+            ("warmup addSendingAccount", { r in
+                warmup.addSendingAccount(fromAddress: "s@example.com", onboardingModel: ZeroBounceWarmup.selfManaged, options: selfManaged) { r(self.err($0)) }
+            }),
+            ("warmup updateSendingAccount", { r in
+                warmup.updateSendingAccount(fromAddress: "s@example.com", engagementRuleId: 1, statusId: 4, autoEnable: true) { r(self.err($0)) }
+            }),
+            ("warmup deleteSendingAccount", { r in warmup.deleteSendingAccount(fromAddress: "s@example.com") { r(self.err($0)) } }),
+            ("warmup changeFromAddress", { r in
+                warmup.changeFromAddress(oldFromAddress: "old@example.com", newFromAddress: "new@example.com") { r(self.err($0)) }
+            }),
+            ("warmup listFromAddresses", { r in warmup.listFromAddresses { r(self.err($0)) } }),
+            ("warmup getEngagementRules", { r in warmup.getEngagementRules { r(self.err($0)) } }),
+            ("warmup setEngagementRule", { r in warmup.setEngagementRule(cFrom: "s@example.com", ruleId: 3) { r(self.err($0)) } }),
+            ("warmup getCustomEngagement", { r in warmup.getCustomEngagement(cFrom: "s@example.com") { r(self.err($0)) } }),
+            ("warmup createCustomEngagement", { r in
+                warmup.createCustomEngagement(cFrom: "s@example.com", replyPct: 10, importantPct: 20, clickPct: 30) { r(self.err($0)) }
+            }),
+            ("warmup updateCustomEngagement", { r in
+                warmup.updateCustomEngagement(cFrom: "s@example.com", replyPct: 10, importantPct: 20, clickPct: 30) { r(self.err($0)) }
+            }),
+            ("warmup deleteCustomEngagement", { r in
+                warmup.deleteCustomEngagement(cFrom: "s@example.com", engagementRuleId: 2) { r(self.err($0)) }
+            }),
+            ("warmup getSeeds", { r in warmup.getSeeds { r(self.err($0)) } }),
+            ("warmup downloadSeeds", { r in warmup.downloadSeeds { r(self.err($0)) } }),
+            ("warmup getSeedCount", { r in warmup.getSeedCount { r(self.err($0)) } }),
+            ("warmup getProgressToday", { r in warmup.getProgressToday { r(self.err($0)) } }),
+            ("warmup getSentToday", { r in warmup.getSentToday { r(self.err($0)) } }),
+            ("warmup getEmailsPerDay", { r in warmup.getEmailsPerDay { r(self.err($0)) } }),
+            ("warmup getStatistics", { r in warmup.getStatistics(fromAddress: "s@example.com") { r(self.err($0)) } }),
+            ("warmup getStatisticsPerDay", { r in
+                warmup.getStatisticsPerDay(fromAddress: "s@example.com", startDate: "2026-10-01", endDate: "2026-10-07") { r(self.err($0)) }
+            }),
+            ("warmup getStatisticsDetailed", { r in warmup.getStatisticsDetailed(cFrom: "s@example.com") { r(self.err($0)) } }),
+            ("warmup downloadStatistics", { r in warmup.downloadStatistics(cFrom: "s@example.com") { r(self.err($0)) } }),
+            ("warmup getFromAddressStatistics", { r in warmup.getFromAddressStatistics(fromAddress: "s@example.com") { r(self.err($0)) } }),
+            ("warmup checkDomainDmarc", { r in warmup.checkDomainDmarc(fromAddress: "s@example.com") { r(self.err($0)) } }),
+            ("warmup testSmtpConfiguration", { r in
+                warmup.testSmtpConfiguration(fromAddress: "s@example.com", username: "s@example.com", password: "pw", server: "smtp.example.com", port: 587) { r(self.err($0)) }
+            }),
+        ]
+    }
+
+    private func clients(_ key: String) -> (ZeroBounceSDK, ZeroBounceWarmup) {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: key)
+        let warmup = ZeroBounceWarmup()
+        warmup.initialize(apiKey: key)
+        return (sdk, warmup)
+    }
+
+    /// Runs one call, waits for its completion and returns the error it
+    /// reported (nil on success) and the requests it sent.
+    private func run(_ name: String, _ call: (@escaping Report) -> ()) -> (Error?, [OfflineRecord]) {
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.records = []
+        OfflineURLProtocol.lock.unlock()
+        var reported: Error?
+        let done = expectation(description: name)
+        call { error in
+            reported = error
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+        OfflineURLProtocol.lock.lock()
+        defer { OfflineURLProtocol.lock.unlock() }
+        return (reported, OfflineURLProtocol.records)
+    }
+
+    private func describe(_ error: Error?) -> String {
+        guard let error = error else { return "succeeded" }
+        return (error as? LocalizedError)?.errorDescription ?? "\(error)"
+    }
+
+    /// The sweep covers every public request method: a method added later
+    /// without an entry here fails this count and has to be added.
+    func testTheSweepCoversEveryPublicRequestMethod() {
+        let (sdk, warmup) = clients("count-key")
+        XCTAssertEqual(everyCall(sdk, warmup).count, 64 + 26)
+    }
+
+    /// Plain http to a real host is refused by every method before anything
+    /// is sent, with a message that says why. Loopback stays allowed for
+    /// tests; see `isAllowedURL`.
+    func testEveryPublicMethodRefusesPlainHttp() {
+        let (sdk, warmup) = clients("http-key")
+        sdk.apiBaseUrl = "http://api.zerobounce.net/v2"
+        sdk.bulkApiRootUrl = "http://bulkapi.zerobounce.net"
+        sdk.bulkApiBaseUrl = "http://bulkapi.zerobounce.net/v2"
+        sdk.setListEvaluatorBaseUrl("http://bulkapi.zerobounce.net/v2/listevaluator")
+        sdk.setInboxPlacementBaseUrl("http://bulkapi.zerobounce.net/api/ipt")
+        warmup.baseUrl = "http://warmup-api.zerobounce.net"
+        for (name, call) in everyCall(sdk, warmup) {
+            let (error, sent) = run(name, call)
+            XCTAssertEqual(sent.count, 0, "\(name) sent a request over plain http")
+            XCTAssertTrue(describe(error).contains("https://"), "\(name): \(describe(error))")
+        }
+    }
+
+    /// A redirect could carry the key to another host. Every method stops at
+    /// the 302 and reports it with its status.
+    func testEveryPublicMethodRefusesARedirect() {
+        let (sdk, warmup) = clients("redirect-key")
+        for (name, call) in everyCall(sdk, warmup) {
+            let (error, sent) = run(name, call)
+            XCTAssertEqual(sent.count, 1, "\(name) followed the redirect: \(sent.map { $0.host + $0.path })")
+            XCTAssertFalse(sent.contains { $0.path.hasPrefix("/followed") }, name)
+            XCTAssertEqual((error as? ZBError)?.statusCode, 302, "\(name): \(describe(error))")
+        }
+    }
+
+    /// Every request carries the SDK's timeout, not URLRequest's default.
+    func testEveryPublicMethodSetsTheRequestTimeout() {
+        // "success-false" makes every answer an error, so the downloads write
+        // no file.
+        let (sdk, warmup) = clients("success-false-timeout")
+        for (name, call) in everyCall(sdk, warmup) {
+            let (_, sent) = run(name, call)
+            XCTAssertEqual(sent.count, 1, name)
+            XCTAssertEqual(sent.first?.timeout, ZeroBounceSDK.requestTimeout, name)
+        }
+        XCTAssertEqual(ZeroBounceSDK.requestTimeout, 120)
+        XCTAssertEqual(ZeroBounceSDK.makeSession().configuration.timeoutIntervalForRequest, 120)
+    }
+
+    /// Every base URL can be set; a trailing slash on any of them must not
+    /// put "//" into the request path.
+    func testBaseUrlsWithATrailingSlash() {
+        let (sdk, warmup) = clients("success-false-slash")
+        sdk.apiBaseUrl = "https://api.zerobounce.net/v2/"
+        sdk.bulkApiRootUrl = "https://bulkapi.zerobounce.net/"
+        sdk.bulkApiBaseUrl = "https://bulkapi.zerobounce.net/v2//"
+        sdk.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/listevaluator/")
+        sdk.setInboxPlacementBaseUrl("https://bulkapi.zerobounce.net/api/ipt/")
+        warmup.baseUrl = "https://warmup-api.zerobounce.net/"
+        for (name, call) in everyCall(sdk, warmup) {
+            let (_, sent) = run(name, call)
+            XCTAssertEqual(sent.count, 1, name)
+            XCTAssertFalse(sent.first?.rawPath.contains("//") ?? true, "\(name): \(sent.first?.rawPath ?? "")")
+        }
+    }
+
+    /// getfile answers with a file or not at all. A JSON body, whatever its
+    /// keys and content type, is an error that keeps the HTTP status.
+    func testGetFileJsonBodyIsAnErrorWithItsStatus() {
+        for key in ["getfile-message-key", "getfile-Message-key"] {
+            let (sdk, _) = clients(key)
+            let calls: [(String, (@escaping Report) -> ())] = [
+                ("getFile", { r in sdk.getFile(fileId: "f") { r(self.err($0)) } }),
+                ("scoringGetFile", { r in sdk.scoringGetFile(fileId: "f") { r(self.err($0)) } }),
+                ("getFileStreaming", { r in sdk.getFileStreaming(fileId: "f", downloadPath: self.download) { r(self.err($0)) } }),
+                ("emailFinderGetFile", { r in sdk.emailFinderGetFile(fileId: "f", downloadPath: self.download) { r(self.err($0)) } }),
+                ("domainSearchGetFile", { r in sdk.domainSearchGetFile(fileId: "f", downloadPath: self.download) { r(self.err($0)) } }),
+            ]
+            for (name, call) in calls {
+                try? FileManager.default.removeItem(atPath: download)
+                let (error, _) = run(name, call)
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(key) \(name): \(describe(error))")
+                XCTAssertTrue(describe(error).contains("still processing"), "\(key) \(name): \(describe(error))")
+                XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(key) \(name) saved the error as a file")
+            }
+        }
+    }
+
+    /// A dirty key given to a client that already has one must not leave the
+    /// old key in place: the caller is told, and nothing is sent with either.
+    func testReinitializingWithADirtyKeyDoesNotKeepThePreviousKey() {
+        let sdk = ZeroBounceSDK()
+        XCTAssertTrue(sdk.initialize(apiKey: "first-key"))
+        XCTAssertFalse(sdk.initialize(apiKey: " second-key\n"))
+        let (error, sent) = run("getCredits") { r in sdk.getCredits { r(self.err($0)) } }
+        XCTAssertEqual(sent.count, 0, "sent with key \(sent.first?.apiKey ?? "")")
+        if case .notInitialized? = error as? ZBError {} else {
+            XCTFail("expected notInitialized, got \(describe(error))")
+        }
+
+        let warmup = ZeroBounceWarmup()
+        XCTAssertTrue(warmup.initialize(apiKey: "first-warm"))
+        XCTAssertFalse(warmup.initialize(apiKey: "second-warm\t"))
+        let (warmError, warmSent) = run("getSeeds") { r in warmup.getSeeds { r(self.err($0)) } }
+        XCTAssertEqual(warmSent.count, 0, "sent with key \(warmSent.first?.apiKey ?? "")")
+        XCTAssertTrue(describe(warmError).contains("not initialized"), describe(warmError))
     }
 }
