@@ -434,7 +434,7 @@ who can run `ps`.
 
 
 
-`ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids build failures when embedding **Mocker.framework** into the test bundle under strict Xcode sandboxing. With the live suite skipped, as in the Mac Catalyst command above, there are **76** unit tests; you should see **TEST SUCCEEDED** and **Executed 76 tests, with 0 failures**.
+`ENABLE_USER_SCRIPT_SANDBOXING=NO` avoids build failures when embedding **Mocker.framework** into the test bundle under strict Xcode sandboxing. With the live suite skipped, as in the Mac Catalyst command above, you should see **TEST SUCCEEDED** and **Executed N tests, with 0 failures**, where N is the number of offline unit tests.
 
 #### Validate options
 

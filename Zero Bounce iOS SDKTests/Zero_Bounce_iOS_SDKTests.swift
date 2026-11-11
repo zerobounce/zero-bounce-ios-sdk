@@ -3361,6 +3361,47 @@ final class TransportSafetyTests: XCTestCase {
         return (error as? LocalizedError)?.errorDescription ?? "\(error)"
     }
 
+    /// A request that gets no answer fails with URLSession's own error, which
+    /// quotes the request URL, api_key included, in its user info
+    /// (NSErrorFailingURLStringKey, NSErrorFailingURLKey and the underlying
+    /// error). No method may hand the key back to the caller that way.
+    func testATransportErrorNeverCarriesTheApiKey() {
+        // The real transport, not the stub.
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession()
+        let key = "transport-secret-key"
+        let (sdk, warmup) = clients(key)
+        // Nothing listens on port 1, so every connection is refused at once.
+        sdk.apiBaseUrl = "http://127.0.0.1:1/v2"
+        sdk.bulkApiRootUrl = "http://127.0.0.1:1"
+        sdk.bulkApiBaseUrl = "http://127.0.0.1:1/v2"
+        sdk.setListEvaluatorBaseUrl("http://127.0.0.1:1/v2/listevaluator")
+        sdk.setInboxPlacementBaseUrl("http://127.0.0.1:1/api/ipt")
+        warmup.baseUrl = "http://127.0.0.1:1"
+        for (name, call) in everyCall(sdk, warmup) {
+            let (error, _) = run(name, call)
+            guard let error = error else {
+                XCTFail("\(name) succeeded without a server")
+                continue
+            }
+            XCTAssertFalse(mentions(error, key), "\(name): \(error)")
+        }
+        // Still the URLError a caller can switch on, with the URL it failed on.
+        let (credits, _) = run("getCredits") { r in sdk.getCredits { r(self.err($0)) } }
+        XCTAssertEqual((credits as? URLError)?.code, .cannotConnectToHost)
+        XCTAssertEqual((credits as? URLError)?.failingURL?.path, "/v2/getcredits")
+    }
+
+    private func mentions(_ value: Any, _ key: String) -> Bool {
+        if let error = value as? NSError {
+            return "\(error)".contains(key) || error.localizedDescription.contains(key)
+                || error.userInfo.values.contains { mentions($0, key) }
+        }
+        if let list = value as? [Any] {
+            return list.contains { mentions($0, key) }
+        }
+        return "\(value)".contains(key)
+    }
+
     /// The sweep covers every public request method: a method added later
     /// without an entry here fails this count and has to be added.
     func testTheSweepCoversEveryPublicRequestMethod() {

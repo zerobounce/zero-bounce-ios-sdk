@@ -93,6 +93,42 @@ public class ZeroBounceSDK {
     /// Refuses a URL that is not https, so the api_key is never put on the
     /// wire in the clear. Loopback is allowed so an offline test can point the
     /// SDK at a local stub.
+    /// `error` with the API key replaced by "***" wherever its user info
+    /// carries it. URLSession puts the request URL, `api_key` query parameter
+    /// included, into every transport error (`NSErrorFailingURLKey`,
+    /// `NSErrorFailingURLStringKey`, and again in the underlying error). The
+    /// domain and code stay the same, so `error as? URLError` and checks such
+    /// as `.code == .timedOut` keep working.
+    internal static func redactingApiKey(_ apiKey: String?, in error: Error) -> Error {
+        guard let apiKey = apiKey, !apiKey.isEmpty, !(error is ZBError) else { return error }
+        let forms = Set([apiKey, apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? apiKey])
+        func clean(_ text: String) -> String {
+            forms.reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+        }
+        func scrub(_ value: Any) -> Any {
+            switch value {
+            case let text as String:
+                return clean(text)
+            case let url as URL:
+                return URL(string: clean(url.absoluteString)) ?? clean(url.absoluteString)
+            case let nested as NSError:
+                return redact(nested)
+            case let list as [Any]:
+                return list.map(scrub)
+            default:
+                return value
+            }
+        }
+        func redact(_ error: NSError) -> NSError {
+            NSError(domain: error.domain, code: error.code, userInfo: error.userInfo.mapValues(scrub))
+        }
+        let redacted = redact(error as NSError)
+        if redacted.domain == NSURLErrorDomain {
+            return URLError(URLError.Code(rawValue: redacted.code), userInfo: redacted.userInfo)
+        }
+        return redacted
+    }
+
     internal static func isAllowedURL(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased() ?? ""
         if scheme == "https" { return true }
@@ -1240,7 +1276,7 @@ public class ZeroBounceSDK {
 
         ZeroBounceSDK.urlSession.downloadTask(with: request) { location, response, error in
             if let error = error {
-                completion(.Failure(error))
+                completion(.Failure(ZeroBounceSDK.redactingApiKey(self.apiKey, in: error)))
                 return
             }
             guard let location = location,
@@ -1495,7 +1531,7 @@ public class ZeroBounceSDK {
         }
         ZeroBounceSDK.urlSession.dataTask(with: request, completionHandler: { data, response, error -> Void in
             if let error = error {
-                result(RequestResult.failure(error))
+                result(RequestResult.failure(ZeroBounceSDK.redactingApiKey(self.apiKey, in: error)))
                 return
             }
             
