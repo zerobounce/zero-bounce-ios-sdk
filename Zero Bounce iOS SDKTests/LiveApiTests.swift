@@ -172,12 +172,20 @@ final class LiveApiTests: XCTestCase {
         print("Validation API (free calls)")
 
         var creditsBefore = -2
-        check("getCredits returns a balance") { report in
+        check("getCredits returns a positive balance") { report in
             sdk.getCredits { result in
                 switch result {
                 case .Success(let response):
-                    creditsBefore = Int(response.credits) ?? -2
-                    report("")
+                    // LIVE: -1 is the API's answer for an INVALID key, not a
+                    // balance. Accepting whatever came back let a dead key sail
+                    // through the one check meant to catch it while every
+                    // billable call below failed.
+                    guard let credits = Int(response.credits.trimmingCharacters(in: .whitespaces)) else {
+                        report("credits is not a number: \(response.credits)")
+                        return
+                    }
+                    creditsBefore = credits
+                    report(credits > 0 ? "" : "not a usable credit balance: \(credits)")
                 case .Failure(let error):
                     report(self.text(error))
                 }
