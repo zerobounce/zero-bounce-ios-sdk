@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- A transport failure (connection refused, timeout, TLS failure) was passed to the completion handler as URLSession's own error, unchanged, and URLSession puts the request URL into that error's user info (`NSErrorFailingURLStringKey`, `NSErrorFailingURLKey`, and again in the underlying error). For every `ZeroBounceSDK` call that sends `api_key` in the query string, the key appeared in `String(describing: error)` and in anything that logged the error. The key is now replaced by `***` everywhere in the error before it is handed over. The error keeps its domain and code, so `error as? URLError` and checks such as `.code == .timedOut` work as before. `ZeroBounceWarmup` already reported transport errors with the key masked and is not affected.
+
 ## [3.0.0] - 2026-11-12
 
 ### Breaking

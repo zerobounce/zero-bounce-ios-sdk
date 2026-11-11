@@ -722,11 +722,11 @@ If `xcodebuild` reports `CoreSimulator is out of date`, run `xcrun simctl list d
 
 ### Expected Output
 
-All 76 offline unit tests should pass (the command above skips the live suite):
+All the offline unit tests should pass (the command above skips the live suite):
 
 ```
 ** TEST SUCCEEDED **
-   Executed 76 tests, with 0 failures (0 unexpected)
+   Executed N tests, with 0 failures (0 unexpected)
 ```
 
 **Any of the following email addresses can be used for testing the API, no credits are charged for these test email addresses:**
