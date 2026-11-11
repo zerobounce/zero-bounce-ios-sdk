@@ -3,7 +3,7 @@
 //  ZeroBounceSampleApp
 //
 //  Created by Andreea Sinescu on 16.03.2023.
-//  Copyright © 2023 Mount Software. All rights reserved.
+//  Copyright © 2023 ZeroBounce. All rights reserved.
 //
 
 import UIKit
