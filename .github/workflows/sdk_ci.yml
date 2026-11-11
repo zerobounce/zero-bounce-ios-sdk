@@ -1,4 +1,4 @@
-# Run XCTest suite on every PR (macOS runner, Mac Catalyst destination).
+# On every PR: run the XCTest suite (macOS runner, Mac Catalyst destination) and build the Swift Package for the iOS Simulator.
 name: SDK CI
 
 on:
@@ -33,3 +33,24 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO
+
+  swift-package:
+    name: Build Swift Package (iOS Simulator)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The repository root also holds the CocoaPods project and workspace,
+      # which xcodebuild would pick instead of Package.swift, so name the
+      # package's own workspace explicitly.
+      - name: Build Swift Package (iOS Simulator)
+        run: |
+          xcodebuild build \
+            -workspace .swiftpm/xcode/package.xcworkspace \
+            -scheme ZeroBounceSDK \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO

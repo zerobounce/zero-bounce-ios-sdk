@@ -346,7 +346,7 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1420;
 				LastUpgradeCheck = 2620;
-				ORGANIZATIONNAME = "Mount Software";
+				ORGANIZATIONNAME = "ZeroBounce";
 				TargetAttributes = {
 					4502126B29C3781D00C12510 = {
 						CreatedOnToolsVersion = 14.2;

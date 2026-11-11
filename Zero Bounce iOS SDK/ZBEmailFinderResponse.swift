@@ -3,7 +3,7 @@
 //  Zero Bounce iOS SDK
 //
 //  Created by Andreea Sinescu on 23.08.2023.
-//  Copyright © 2023 Mount Software. All rights reserved.
+//  Copyright © 2023 ZeroBounce. All rights reserved.
 //
 
 import Foundation

@@ -764,3 +764,7 @@ All 76 offline unit tests should pass (the command above skips the live suite):
 2. **Actions → Publish → Run workflow** with that tag.
 
 Registry: [ZeroBounceSDK on CocoaPods](https://cocoapods.org/pods/ZeroBounceSDK)
+
+## License
+
+MIT. See [LICENSE.md](LICENSE.md).
