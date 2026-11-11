@@ -65,6 +65,14 @@ public enum ZBError: LocalizedError {
         }
     }
 
+    /// Whether a body is a JSON object. A file download never is: getfile
+    /// answers with JSON only to say why there is no file.
+    static func looksLikeJsonObject(_ data: Data) -> Bool {
+        let head = String(decoding: data.prefix(64), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return head.hasPrefix("{")
+    }
+
     static func decodeError(jsonData: Data) -> ZBError {
         guard let response = try? JSONSerialization.jsonObject(with: jsonData, options: .mutableLeaves) as? [String: Any] else {
             return .decodeError(messages: [])

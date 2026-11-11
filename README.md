@@ -45,6 +45,8 @@ Initialize the SDK with your api key and preferred api:
 ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiBaseUrl: .API_DEFAULT_URL)
 ```
 
+`initialize` returns `false` (the result is discardable) when it refuses a key with surrounding whitespace or control characters. The SDK is then uninitialized, and every call fails with `ZBError.notInitialized`, even if an earlier `initialize` had set a key. `ZeroBounceWarmup.initialize(apiKey:)` works the same way.
+
 ## Examples
 Then you can use any of the SDK methods, for example:
 * ##### Validate an email address
@@ -257,7 +259,7 @@ ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
 }
 ```
 
-Optional `download_type` and `activity_data` (validation only). An unknown or deleted file id comes back as JSON on an HTTP 200 rather than a file, and is returned as `.Failure`: `ZBError.httpError` with `statusCode` 200 when the body says `"success": false`, otherwise `ZBError.decodeError`:
+Optional `download_type` and `activity_data` (validation only). An unknown or deleted file id, or a file still being processed, comes back as JSON (often on an HTTP 200) rather than a file. Any JSON body is returned as `.Failure(ZBError.httpError(message:statusCode:))` with the HTTP status, and no file is saved. The other downloads (`getFileStreaming`, the scoring, email finder and domain search ones) behave the same way:
 
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
@@ -767,4 +769,4 @@ Registry: [ZeroBounceSDK on CocoaPods](https://cocoapods.org/pods/ZeroBounceSDK)
 
 ## License
 
-MIT. See [LICENSE.md](LICENSE.md).
+MIT. See [LICENSE](LICENSE).
