@@ -183,9 +183,125 @@ public class ZeroBounceSDK {
         return forms
     }
 
-    /// `text` with every form of every secret replaced by "***".
+    /// What an error says in place of text that still held a secret after
+    /// masking.
+    internal static let secretOmittedMessage = "The response body was omitted because it contained a credential."
+
+    /// `text` with every form of every secret replaced by "***". Redaction is
+    /// closed under encoding: when a view of the result decoded up to three
+    /// times (URL-decoding, "+" as a space, JSON-unescaping, in any order)
+    /// still holds a secret, the whole text is replaced by
+    /// `secretOmittedMessage`.
     internal static func redacting(_ secrets: [String], in text: String) -> String {
-        secretForms(secrets).reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+        let masked = secretForms(secrets).reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+        return revealsSecret(masked, secrets) ? secretOmittedMessage : masked
+    }
+
+    /// Whether a secret can be read in `text` or in any view of it decoded
+    /// up to three times: URL-decoded, form-decoded ("+" as a space too) and
+    /// JSON-unescaped (`\/` and `\uXXXX` included), in any order.
+    internal static func revealsSecret(_ text: String, _ secrets: [String]) -> Bool {
+        let needles = secrets.filter { !$0.isEmpty }.map { Array($0.utf8) }
+        guard !needles.isEmpty else { return false }
+        func search(_ bytes: [UInt8], _ layers: Int) -> Bool {
+            if needles.contains(where: { containsBytes(bytes, $0) }) { return true }
+            guard layers > 0, bytes.contains(where: { $0 == 0x25 || $0 == 0x2B || $0 == 0x5C }) else { return false }
+            for view in [percentDecoded(bytes, plusAsSpace: false), percentDecoded(bytes, plusAsSpace: true),
+                         jsonUnescaped(bytes)] where view != bytes {
+                if search(view, layers - 1) { return true }
+            }
+            return false
+        }
+        return search(Array(text.utf8), 3)
+    }
+
+    private static func containsBytes(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
+        guard !needle.isEmpty, haystack.count >= needle.count else { return false }
+        var start = 0
+        while start + needle.count <= haystack.count {
+            if haystack[start] == needle[0] && Array(haystack[start..<start + needle.count]) == needle {
+                return true
+            }
+            start += 1
+        }
+        return false
+    }
+
+    private static func hexValue(_ byte: UInt8) -> UInt8? {
+        switch byte {
+        case 0x30...0x39: return byte - 0x30
+        case 0x41...0x46: return byte - 0x37
+        case 0x61...0x66: return byte - 0x57
+        default: return nil
+        }
+    }
+
+    /// Each %XX as its byte, and "+" as a space when `plusAsSpace` is set.
+    private static func percentDecoded(_ bytes: [UInt8], plusAsSpace: Bool) -> [UInt8] {
+        var out: [UInt8] = []
+        out.reserveCapacity(bytes.count)
+        var i = 0
+        while i < bytes.count {
+            if bytes[i] == 0x25, i + 2 < bytes.count, let high = hexValue(bytes[i + 1]), let low = hexValue(bytes[i + 2]) {
+                out.append(high << 4 | low)
+                i += 3
+            } else if plusAsSpace && bytes[i] == 0x2B {
+                out.append(0x20)
+                i += 1
+            } else {
+                out.append(bytes[i])
+                i += 1
+            }
+        }
+        return out
+    }
+
+    private static func hex4(_ bytes: [UInt8], _ at: Int) -> UInt32? {
+        guard at + 4 <= bytes.count else { return nil }
+        var value: UInt32 = 0
+        for byte in bytes[at..<at + 4] {
+            guard let digit = hexValue(byte) else { return nil }
+            value = value << 4 | UInt32(digit)
+        }
+        return value
+    }
+
+    /// JSON string escapes undone; anything else is kept.
+    private static func jsonUnescaped(_ bytes: [UInt8]) -> [UInt8] {
+        let simple: [UInt8: UInt8] = [0x22: 0x22, 0x5C: 0x5C, 0x2F: 0x2F, 0x62: 0x08, 0x66: 0x0C,
+                                      0x6E: 0x0A, 0x72: 0x0D, 0x74: 0x09]
+        var out: [UInt8] = []
+        out.reserveCapacity(bytes.count)
+        var i = 0
+        while i < bytes.count {
+            guard bytes[i] == 0x5C, i + 1 < bytes.count else {
+                out.append(bytes[i])
+                i += 1
+                continue
+            }
+            if let decoded = simple[bytes[i + 1]] {
+                out.append(decoded)
+                i += 2
+                continue
+            }
+            guard bytes[i + 1] == 0x75, var code = hex4(bytes, i + 2) else {
+                out.append(bytes[i])
+                i += 1
+                continue
+            }
+            i += 6
+            if (0xD800...0xDBFF).contains(code), i + 1 < bytes.count, bytes[i] == 0x5C, bytes[i + 1] == 0x75,
+               let low = hex4(bytes, i + 2), (0xDC00...0xDFFF).contains(low) {
+                code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                i += 6
+            }
+            if let scalar = Unicode.Scalar(code) {
+                out.append(contentsOf: Array(String(Character(scalar)).utf8))
+            } else {
+                out.append(contentsOf: Array("\u{FFFD}".utf8))
+            }
+        }
+        return out
     }
 
     /// `error` with every form of every secret replaced by "***", wherever
@@ -196,7 +312,10 @@ public class ZeroBounceSDK {
         guard !forms.isEmpty else { return error }
         var changed = false
         func clean(_ text: String) -> String {
-            let cleaned = forms.reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+            var cleaned = forms.reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+            if revealsSecret(cleaned, secrets) {
+                cleaned = secretOmittedMessage
+            }
             if cleaned != text { changed = true }
             return cleaned
         }
@@ -1672,6 +1791,11 @@ public class ZeroBounceSDK {
                     return
                 }
                 do {
+                    // JSONDecoder is lenient (trailing commas, leading zeros,
+                    // raw control characters), so the body is checked first.
+                    guard ZBStrictJson.isStrict(data) else {
+                        throw ZBError.decodeError(messages: ["not strict JSON"])
+                    }
                     let value = try JSONDecoder().decode(T.self, from: data)
                     if let failure = inspect?(value, statusCode) {
                         completion(.Failure(failure))
@@ -1887,7 +2011,7 @@ public class ZeroBounceSDK {
                     return
                 }
                 do {
-                    let object = try JSONSerialization.jsonObject(with: data, options: [])
+                    let object = try ZBStrictJson.jsonObject(with: data, options: [])
                     if let dict = object as? [String: Any] {
                         completion(.Success(dict))
                     } else {
@@ -1988,7 +2112,7 @@ public class ZeroBounceSDK {
                     return
                 }
                 do {
-                    completion(.Success(try JSONSerialization.jsonObject(with: data, options: [])))
+                    completion(.Success(try ZBStrictJson.jsonObject(with: data, options: [])))
                 } catch {
                     completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                 }
@@ -2023,7 +2147,7 @@ public class ZeroBounceSDK {
                     return
                 }
                 do {
-                    let object = try JSONSerialization.jsonObject(with: data, options: [])
+                    let object = try ZBStrictJson.jsonObject(with: data, options: [])
                     if let dict = object as? [String: Any] {
                         completion(.Success(dict))
                     } else {
@@ -2063,7 +2187,7 @@ public class ZeroBounceSDK {
                     return
                 }
                 do {
-                    let object = try JSONSerialization.jsonObject(with: data, options: [])
+                    let object = try ZBStrictJson.jsonObject(with: data, options: [])
                     if let dict = object as? [String: Any] {
                         completion(.Success(dict))
                     } else {

@@ -145,7 +145,7 @@ public enum ZBError: LocalizedError {
     /// refused before sending.
     static func unreadableBody(_ data: Data, statusCode: Int) -> ZBError {
         let text = message(from: data, statusCode: statusCode)
-        let isJson = (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil
+        let isJson = ZBStrictJson.isStrict(data)
         if isJson || text.hasPrefix("ZeroBounce returned") || text.hasPrefix("Empty response") {
             return .httpError(message: text, statusCode: statusCode)
         }
@@ -241,6 +241,154 @@ public enum ZBError: LocalizedError {
             return message
         default:
             return "No error description provided"
+        }
+    }
+}
+
+/// A strict RFC 8259 check of a response body. JSONSerialization and
+/// JSONDecoder are lenient: they take trailing commas (`{"a":1,}`), leading
+/// zeros (`01`), raw control characters in strings and unknown escapes
+/// (`\x41`), so almost-JSON from a proxy would pass as the API's answer. Only
+/// space, tab, CR and LF may surround the value.
+internal struct ZBStrictJson {
+    private let bytes: [UInt8]
+    private var at = 0
+    private static let maxDepth = 512
+
+    private init(_ data: Data) {
+        bytes = [UInt8](data)
+    }
+
+    /// Whether `data` is exactly one strict JSON value.
+    static func isStrict(_ data: Data) -> Bool {
+        var scan = ZBStrictJson(data)
+        scan.whitespace()
+        guard scan.value(depth: 0) else { return false }
+        scan.whitespace()
+        return scan.at == scan.bytes.count
+    }
+
+    /// `JSONSerialization.jsonObject(with:options:)` for a body that passed
+    /// `isStrict`; anything else throws.
+    static func jsonObject(with data: Data, options: JSONSerialization.ReadingOptions = []) throws -> Any {
+        guard isStrict(data) else {
+            throw ZBError.decodeError(messages: ["not strict JSON"])
+        }
+        return try JSONSerialization.jsonObject(with: data, options: options)
+    }
+
+    private var current: UInt8? { at < bytes.count ? bytes[at] : nil }
+
+    private mutating func whitespace() {
+        while let byte = current, byte == 0x20 || byte == 0x09 || byte == 0x0A || byte == 0x0D {
+            at += 1
+        }
+    }
+
+    private mutating func digits() -> Bool {
+        guard let byte = current, (0x30...0x39).contains(byte) else { return false }
+        while let byte = current, (0x30...0x39).contains(byte) { at += 1 }
+        return true
+    }
+
+    private mutating func number() -> Bool {
+        if current == 0x2D { at += 1 }  // -
+        if current == 0x30 {
+            at += 1
+        } else if !digits() {
+            return false
+        }
+        if current == 0x2E {  // .
+            at += 1
+            guard digits() else { return false }
+        }
+        if current == 0x65 || current == 0x45 {  // e E
+            at += 1
+            if current == 0x2B || current == 0x2D { at += 1 }
+            guard digits() else { return false }
+        }
+        return true
+    }
+
+    private mutating func string() -> Bool {
+        guard current == 0x22 else { return false }
+        at += 1
+        while let byte = current {
+            at += 1
+            switch byte {
+            case 0x22:
+                return true
+            case 0x00..<0x20:
+                return false
+            case 0x5C:  // backslash
+                guard let escape = current else { return false }
+                at += 1
+                if escape == 0x75 {  // u
+                    for _ in 0..<4 {
+                        guard let hex = current, (0x30...0x39).contains(hex) || (0x41...0x46).contains(hex)
+                            || (0x61...0x66).contains(hex) else { return false }
+                        at += 1
+                    }
+                } else if ![0x22, 0x5C, 0x2F, 0x62, 0x66, 0x6E, 0x72, 0x74].contains(escape) {
+                    return false
+                }
+            default:
+                break
+            }
+        }
+        return false
+    }
+
+    private mutating func literal(_ word: String) -> Bool {
+        let expected = Array(word.utf8)
+        guard at + expected.count <= bytes.count, Array(bytes[at..<at + expected.count]) == expected else {
+            return false
+        }
+        at += expected.count
+        return true
+    }
+
+    private mutating func value(depth: Int) -> Bool {
+        guard let byte = current, depth <= ZBStrictJson.maxDepth else { return false }
+        switch byte {
+        case 0x7B:  // {
+            at += 1
+            whitespace()
+            if current == 0x7D { at += 1; return true }
+            while true {
+                guard string() else { return false }
+                whitespace()
+                guard current == 0x3A else { return false }
+                at += 1
+                whitespace()
+                guard value(depth: depth + 1) else { return false }
+                whitespace()
+                if current == 0x2C { at += 1; whitespace(); continue }
+                if current == 0x7D { at += 1; return true }
+                return false
+            }
+        case 0x5B:  // [
+            at += 1
+            whitespace()
+            if current == 0x5D { at += 1; return true }
+            while true {
+                whitespace()
+                guard value(depth: depth + 1) else { return false }
+                whitespace()
+                if current == 0x2C { at += 1; continue }
+                if current == 0x5D { at += 1; return true }
+                return false
+            }
+        case 0x22:
+            return string()
+        case 0x74:
+            return literal("true")
+        case 0x66:
+            return literal("false")
+        case 0x6E:
+            return literal("null")
+        default:
+            return number()
         }
     }
 }

@@ -718,7 +718,7 @@ public class ZeroBounceWarmup {
                 }
                 // A 2xx that is not JSON (plain text, CSV sent as
                 // application/json) is an API error with its status.
-                guard let object = try? JSONSerialization.jsonObject(
+                guard let object = try? ZBStrictJson.jsonObject(
                     with: data, options: [.fragmentsAllowed]
                 ) else {
                     let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200

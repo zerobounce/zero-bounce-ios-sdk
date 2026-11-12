@@ -1123,6 +1123,9 @@ final class OfflineURLProtocol: URLProtocol {
     static var enabled = false
     static var records: [OfflineRecord] = []
     static let lock = NSLock()
+    /// When set, every request gets this answer instead of the one its key
+    /// picks. Set and cleared under `lock`.
+    static var scripted: (status: Int, contentType: String, body: Data)?
 
     override class func canInit(with request: URLRequest) -> Bool { enabled }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -1181,7 +1184,17 @@ final class OfflineURLProtocol: URLProtocol {
         )
         OfflineURLProtocol.lock.lock()
         OfflineURLProtocol.records.append(record)
+        let scripted = OfflineURLProtocol.scripted
         OfflineURLProtocol.lock.unlock()
+        if let scripted = scripted {
+            let response = HTTPURLResponse(url: url, statusCode: scripted.status, httpVersion: "HTTP/1.1", headerFields: [
+                "Content-Type": scripted.contentType
+            ])!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: scripted.body)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         usleep(UInt32(Int.random(in: 0...20) * 1000))
 
         // A redirect to another host. Handed to the session the way a real
@@ -4669,5 +4682,256 @@ extension TransportSafetyTests {
             let text = "Bad request: [\(form)] end"
             XCTAssertEqual(ZeroBounceSDK.redacting([secret], in: text), "Bad request: [***] end", "\(name): \(form)")
         }
+    }
+}
+
+/// One encoding a server or proxy may apply: URL-encoding with a space as %20
+/// (0) or "+" (1), JSON escaping (2), JSON escaping with "/" as `\/` (3).
+private func fuzzEncode(_ text: String, _ how: Int) -> String {
+    var out = ""
+    for byte in text.utf8 {
+        let scalar = Character(Unicode.Scalar(byte))
+        if how >= 2 {
+            if byte == 0x22 || byte == 0x5C || (how == 3 && byte == 0x2F) { out += "\\" }
+            out.append(scalar)
+        } else if (0x41...0x5A).contains(byte) || (0x61...0x7A).contains(byte) || (0x30...0x39).contains(byte)
+                    || byte == 0x2D || byte == 0x2E || byte == 0x5F || byte == 0x7E {
+            out.append(scalar)
+        } else if byte == 0x20 && how == 1 {
+            out += "+"
+        } else {
+            out += String(format: "%%%02X", byte)
+        }
+    }
+    return out
+}
+
+/// One decoding, written apart from the SDK's own: %XX (0), %XX and "+" (1),
+/// JSON unescaping (2).
+private func fuzzDecode(_ text: String, _ how: Int) -> String {
+    let bytes = Array(text.utf8)
+    var out: [UInt8] = []
+    var i = 0
+    func hex(_ b: UInt8) -> UInt8? { UInt8(String(UnicodeScalar(b)), radix: 16) }
+    while i < bytes.count {
+        if how < 2, bytes[i] == 0x25, i + 2 < bytes.count, let h = hex(bytes[i + 1]), let l = hex(bytes[i + 2]) {
+            out.append(h * 16 + l)
+            i += 3
+        } else if how == 1, bytes[i] == 0x2B {
+            out.append(0x20)
+            i += 1
+        } else if how == 2, bytes[i] == 0x5C, i + 1 < bytes.count,
+                  let to = [0x22: 0x22, 0x5C: 0x5C, 0x2F: 0x2F, 0x62: 0x08, 0x66: 0x0C, 0x6E: 0x0A, 0x72: 0x0D,
+                            0x74: 0x09][Int(bytes[i + 1])] {
+            out.append(UInt8(to))
+            i += 2
+        } else if how == 2, bytes[i] == 0x5C, i + 5 < bytes.count, bytes[i + 1] == 0x75,
+                  let code = UInt32(String(decoding: bytes[i + 2...i + 5], as: UTF8.self), radix: 16),
+                  let scalar = Unicode.Scalar(code) {
+            out.append(contentsOf: Array(String(Character(scalar)).utf8))
+            i += 6
+        } else {
+            out.append(bytes[i])
+            i += 1
+        }
+    }
+    return String(decoding: out, as: UTF8.self)
+}
+
+/// Whether `secret` is in `text` or in any view of it decoded up to `layers`
+/// times, in any order.
+private func fuzzReadable(_ text: String, _ secret: String, _ layers: Int = 3) -> Bool {
+    if text.contains(secret) { return true }
+    guard layers > 0 else { return false }
+    return (0..<3).contains { fuzzReadable(fuzzDecode(text, $0), secret, layers - 1) }
+}
+
+/// A fixed linear congruential generator, so a failing round repeats.
+private struct FuzzRandom {
+    var state: UInt64
+    mutating func next(_ bound: Int) -> Int {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return Int((state >> 33) % UInt64(bound))
+    }
+}
+
+/// A random composition of up to three encodings of `secret`, and the
+/// sequence used, e.g. "2,0".
+private func fuzzSpelling(_ secret: String, _ random: inout FuzzRandom) -> (String, String) {
+    var text = secret
+    var steps: [String] = []
+    for _ in 0..<random.next(4) {
+        let how = random.next(4)
+        text = fuzzEncode(text, how)
+        steps.append(String(how))
+    }
+    return (text, steps.joined(separator: ","))
+}
+
+/// A body quoting a spelling with a 400: a JSON error (one more JSON escape,
+/// which the SDK's parser undoes) or a text one.
+private func fuzzEcho(_ spelling: String, _ round: Int) -> (status: Int, contentType: String, body: Data) {
+    if round % 2 == 1 {
+        return (400, "application/json", Data((#"{"error":"Invalid API key "# + fuzzEncode(spelling, 2) + #""}"#).utf8))
+    }
+    return (400, "text/plain", Data("Bad Request: [\(spelling)] end".utf8))
+}
+
+extension TransportSafetyTests {
+    /// The bodies of `fixtures/strict-json-corpus.tsv` beside this file, a
+    /// byte-identical copy of
+    /// sdk-docs/skills/zerobounce-sdk/references/strict-json-corpus.tsv in
+    /// zerobounce/sdk-docs (standard section 3, check E7); update it from
+    /// there. Each line is REJECT or ACCEPT, a tab, and the body as a
+    /// JSON-encoded string.
+    private func strictJsonCorpus() throws -> [(accept: Bool, body: Data, line: String)] {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("fixtures").appendingPathComponent("strict-json-corpus.tsv")
+        let text = try String(contentsOf: url, encoding: .utf8)
+        var entries: [(accept: Bool, body: Data, line: String)] = []
+        for line in text.components(separatedBy: "\n") where !line.isEmpty && !line.hasPrefix("#") {
+            let parts = line.split(separator: "\t", maxSplits: 1).map(String.init)
+            XCTAssertEqual(parts.count, 2, line)
+            XCTAssertTrue(parts[0] == "ACCEPT" || parts[0] == "REJECT", line)
+            // The field is one JSON string. It is unescaped here rather than
+            // by JSONSerialization, whose bridged string loses a leading
+            // U+FEFF on its way to UTF-8.
+            let field = parts[1]
+            guard field.count >= 2, field.hasPrefix("\""), field.hasSuffix("\"") else {
+                XCTFail("not a JSON string: \(line)")
+                continue
+            }
+            let body = fuzzDecode(String(field.dropFirst().dropLast()), 2)
+            entries.append((parts[0] == "ACCEPT", Data(body.utf8), line))
+        }
+        // 42 REJECT and 9 ACCEPT lines when this was written; the NUL body
+        // decodes whole.
+        XCTAssertGreaterThanOrEqual(entries.count, 51)
+        XCTAssertTrue(entries.contains { $0.body == Data(Array(#"{"a":1}"#.utf8) + [0]) })
+        XCTAssertTrue(entries.contains { $0.body == Data([0xEF, 0xBB, 0xBF] + Array(#"{"a":1}"#.utf8)) })
+        return entries
+    }
+
+    /// Every public call against every corpus body on an HTTP 200
+    /// application/json: a REJECT body is an error with status 200, an
+    /// ACCEPT body is read as JSON. The downloads take any application/json
+    /// answer as the API's error; an empty 2xx is a Warmup JSON call's and
+    /// deleteInboxPlacementTest's documented empty success. A call whose
+    /// result needs a shape an ACCEPT body lacks (a dictionary, a model's
+    /// fields) reports that with status 200, not as invalid JSON.
+    func testEveryJsonCallTakesOnlyStrictJson() throws {
+        let corpus = try strictJsonCorpus()
+        let (sdk, warmup) = clients("corpus-key")
+        defer {
+            OfflineURLProtocol.lock.lock()
+            OfflineURLProtocol.scripted = nil
+            OfflineURLProtocol.lock.unlock()
+        }
+        for entry in corpus {
+            OfflineURLProtocol.lock.lock()
+            OfflineURLProtocol.scripted = (200, "application/json", entry.body)
+            OfflineURLProtocol.lock.unlock()
+            for (name, call) in everyCall(sdk, warmup) {
+                try? FileManager.default.removeItem(atPath: download)
+                let label = "\(name) with \(entry.line)"
+                let (error, sent) = run(label, call)
+                XCTAssertEqual(sent.count, 1, label)
+                let isDownload = name.lowercased().contains("getfile") || name.hasPrefix("warmup download")
+                let emptySuccess = entry.body.isEmpty
+                    && (name.hasPrefix("warmup ") || name == "deleteInboxPlacementTest")
+                if isDownload || (!entry.accept && !emptySuccess) {
+                    guard let error = error else {
+                        XCTFail("\(label): succeeded")
+                        continue
+                    }
+                    XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(label): \(describe(error))")
+                } else if let error = error {
+                    if emptySuccess || !entry.accept {
+                        XCTFail("\(label): \(describe(error))")
+                    } else {
+                        XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(label): \(describe(error))")
+                        XCTAssertFalse(describe(error).contains("not valid JSON"), "\(label): \(describe(error))")
+                    }
+                }
+                XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(label) saved a file")
+            }
+        }
+    }
+
+    /// Every text a caller can read from an error.
+    private func readableTexts(_ error: Error) -> [String] {
+        var texts = ["\(error)", String(reflecting: error), error.localizedDescription, describe(error)]
+        var dumped = ""
+        dump(error, to: &dumped)
+        texts.append(dumped)
+        texts.append("\((error as NSError).userInfo)")
+        return texts
+    }
+
+    /// Standard section 3: whatever composition of up to three URL and JSON
+    /// encodings a body uses to quote the API key, the Warmup key or the SMTP
+    /// username or password, no decoded view of any error holds it. Seeded,
+    /// so a failure repeats.
+    func testRedactionIsClosedUnderEncoding() {
+        let key = #"fz a"b/c\d+e%f&g=h<i>j'k"#
+        var random = FuzzRandom(state: 20261112)
+        defer {
+            OfflineURLProtocol.lock.lock()
+            OfflineURLProtocol.scripted = nil
+            OfflineURLProtocol.lock.unlock()
+        }
+        let (sdk, warmup) = clients(key)
+        for round in 0..<40 {
+            let (spelling, steps) = fuzzSpelling(key, &random)
+            OfflineURLProtocol.lock.lock()
+            OfflineURLProtocol.scripted = fuzzEcho(spelling, round)
+            OfflineURLProtocol.lock.unlock()
+            for (name, call) in everyCall(sdk, warmup) {
+                let label = "\(name), encodings [\(steps)]"
+                let (error, _) = run(label, call)
+                guard let error = error else {
+                    XCTFail("\(label): succeeded")
+                    continue
+                }
+                if let text = readableTexts(error).first(where: { fuzzReadable($0, key) }) {
+                    XCTFail("\(label): \(text)")
+                }
+            }
+        }
+        let user = #"us a"b/c\d+e%f&g=h<i>j'k"#
+        let password = #"pw a"b/c\d+e%f&g=h<i>j'k"#
+        let smtp = ZeroBounceWarmup()
+        smtp.initialize(apiKey: "fuzz-smtp-warmup-key")
+        for round in 0..<200 {
+            let secret = round % 3 == 0 ? user : password
+            let (spelling, steps) = fuzzSpelling(secret, &random)
+            OfflineURLProtocol.lock.lock()
+            OfflineURLProtocol.scripted = fuzzEcho(spelling, round)
+            OfflineURLProtocol.lock.unlock()
+            let label = "testSmtpConfiguration, encodings [\(steps)]"
+            let (error, _) = run(label) { r in
+                smtp.testSmtpConfiguration(fromAddress: "s@example.com", username: user, password: password,
+                                           server: "smtp.example.com", port: 587) { r(self.err($0)) }
+            }
+            guard let error = error else {
+                XCTFail("\(label): succeeded")
+                continue
+            }
+            if let text = readableTexts(error).first(where: { fuzzReadable($0, secret) }) {
+                XCTFail("\(label): \(text)")
+            }
+        }
+    }
+
+    /// A spelling no list of generated forms covers (three URL layers) is
+    /// dropped whole, with a message that says why; text without the secret
+    /// is kept as it is.
+    func testABodyStillHoldingTheKeyAfterMaskingIsDropped() {
+        let key = #"fz a"b/c\d+e%f&g=h<i>j'k"#
+        let thrice = fuzzEncode(fuzzEncode(fuzzEncode(key, 0), 0), 1)
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "echo [\(thrice)] end"), ZeroBounceSDK.secretOmittedMessage)
+        let error = ZeroBounceSDK.redacting([key], in: ZBError.httpError(message: "echo [\(thrice)] end", statusCode: 400))
+        XCTAssertEqual((error as? ZBError)?.errorDescription, ZeroBounceSDK.secretOmittedMessage)
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: #"nothing secret %41 A"#), #"nothing secret %41 A"#)
     }
 }
