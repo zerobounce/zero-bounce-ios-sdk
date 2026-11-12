@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Inbox Placement Tester calls (`getInboxPlacementProviders`, `getInboxPlacementTestTypes`, `createInboxPlacementTest`, `getInboxPlacementTest`, `listInboxPlacementTests`, `deleteInboxPlacementTest`, `getInboxPlacementWebhook`, `setInboxPlacementWebhook`) returned a dead or invalid key's error-only body on an HTTP 200 (`{"error": ...}` with no `success` field) as `.Success(["error": ...])`. They now fail with `ZBError.httpError(message:statusCode:)` and status 200, like every other JSON call.
+- `deleteInboxPlacementTest` failed with `ZBError.httpError("Empty response from ZeroBounce (HTTP 204)", 204)` when the API answered a 2xx with no body. An empty 2xx answer to a DELETE is now a success with an empty dictionary. An empty answer with a non-2xx status, or an empty 2xx to any other call, is still an error with its status.
 - `validate` reported the bare `{"Message": "Greylist validation still in progress, please try again later."}` that the API answers for a repeated greylisted address as `ZBError.decodeError(messages:)`, although the README said its text lands on `ZBValidateResponse.message`. It is now a result: `message` holds the text, `status` and `processedAt` are nil, and `address` is empty (the API sends none). A body with neither `address` nor `Message` is still a decode error.
 
 ### Security

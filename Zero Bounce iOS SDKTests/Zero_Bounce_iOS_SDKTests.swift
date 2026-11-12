@@ -1260,6 +1260,12 @@ final class OfflineURLProtocol: URLProtocol {
             // reports errors under "detail".
             return (404, "application/json", Data(#"{"detail":"Inbox placement test not found."}"#.utf8))
         }
+        if key.hasPrefix("ipt-empty-") && request.path.contains("/api/ipt") {
+            // "ipt-empty-<status>-...": that status with no body at all, the
+            // way a DELETE can answer.
+            let status = Int(key.split(separator: "-")[2]) ?? 200
+            return (status, "application/json", Data())
+        }
         if key.hasPrefix("double-error-") {
             return (400, "text/plain", Data("Error: Error: api_key is invalid".utf8))
         }
@@ -2415,6 +2421,103 @@ final class OfflineApiTests: XCTestCase {
         XCTAssertTrue(message.contains("Inbox placement test not found."), message)
     }
 
+    /// Every Inbox Placement method, with arguments that pass the local
+    /// checks.
+    private func inboxPlacementCalls(
+        _ sdk: ZeroBounceSDK
+    ) -> [(String, (@escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()) -> ())] {
+        [
+            ("getInboxPlacementProviders", { sdk.getInboxPlacementProviders(completion: $0) }),
+            ("getInboxPlacementTestTypes", { sdk.getInboxPlacementTestTypes(completion: $0) }),
+            ("createInboxPlacementTest", { sdk.createInboxPlacementTest(name: "Launch", completion: $0) }),
+            ("getInboxPlacementTest", { sdk.getInboxPlacementTest(testId: "123", completion: $0) }),
+            ("listInboxPlacementTests", { sdk.listInboxPlacementTests(completion: $0) }),
+            ("deleteInboxPlacementTest", { sdk.deleteInboxPlacementTest(testId: "123", completion: $0) }),
+            ("getInboxPlacementWebhook", { sdk.getInboxPlacementWebhook(completion: $0) }),
+            ("setInboxPlacementWebhook", { sdk.setInboxPlacementWebhook(webhookUrl: "https://example.com/hook", completion: $0) }),
+        ]
+    }
+
+    private func dictionaryOutcome(
+        _ name: String,
+        _ call: (@escaping (ZeroBounceSDK.ZBDictionaryResult) -> ()) -> ()
+    ) -> ZeroBounceSDK.ZBDictionaryResult? {
+        OfflineURLProtocol.records = []
+        var outcome: ZeroBounceSDK.ZBDictionaryResult?
+        let done = expectation(description: name)
+        call { result in
+            outcome = result
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+        return outcome
+    }
+
+    /// LIVE: a dead or drained key gets an HTTP 200 whose body is only
+    /// {"error": ...}. On the Inbox Placement Tester that came back as a
+    /// result holding the error; like every other JSON call it is an
+    /// `.httpError` with status 200.
+    func testOfflineADeadKeyIsAFailureOnEveryInboxPlacementCall() throws {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "dead-key-ipt")
+        let calls = inboxPlacementCalls(sdk)
+        let declared = try publicRequestMethodsInSources().keys.filter { $0.contains("InboxPlacement") }
+        XCTAssertEqual(Set(calls.map { $0.0 }), Set(declared), "every Inbox Placement method must be checked")
+        for (name, call) in calls {
+            let outcome = dictionaryOutcome(name, call)
+            guard case .Failure(let error)? = outcome else {
+                XCTFail("\(name) returned \(String(describing: outcome))")
+                continue
+            }
+            guard case .httpError(let message, let statusCode)? = error as? ZBError else {
+                XCTFail("\(name): \(error)")
+                continue
+            }
+            XCTAssertEqual(statusCode, 200, name)
+            XCTAssertEqual(message, "Invalid API key or your account ran out of credits", name)
+        }
+    }
+
+    /// A DELETE may answer a 2xx with no body at all; that is a success. Any
+    /// other status with no body is still an error with that status, and so
+    /// is an empty 2xx to any other method, which has lost its result.
+    func testOfflineInboxPlacementEmptyBodyIsASuccessOnlyForA2xxDelete() {
+        for status in [200, 204] {
+            let sdk = ZeroBounceSDK()
+            sdk.initialize(apiKey: "ipt-empty-\(status)-delete")
+            let outcome = dictionaryOutcome("DELETE \(status)") { sdk.deleteInboxPlacementTest(testId: "123", completion: $0) }
+            XCTAssertEqual(OfflineURLProtocol.records.first?.method, "DELETE")
+            guard case .Success(let body)? = outcome else {
+                XCTFail("an empty \(status) DELETE should succeed: \(String(describing: outcome))")
+                continue
+            }
+            XCTAssertTrue(body.isEmpty, "\(body)")
+        }
+        for status in [401, 404, 500] {
+            let sdk = ZeroBounceSDK()
+            sdk.initialize(apiKey: "ipt-empty-\(status)-delete")
+            let outcome = dictionaryOutcome("DELETE \(status)") { sdk.deleteInboxPlacementTest(testId: "123", completion: $0) }
+            guard case .Failure(let error)? = outcome else {
+                XCTFail("an empty \(status) DELETE should fail: \(String(describing: outcome))")
+                continue
+            }
+            XCTAssertEqual((error as? ZBError)?.statusCode, status, "\(error)")
+        }
+        for status in [200, 204] {
+            let sdk = ZeroBounceSDK()
+            sdk.initialize(apiKey: "ipt-empty-\(status)-other")
+            for (name, call) in inboxPlacementCalls(sdk) where name != "deleteInboxPlacementTest" {
+                let outcome = dictionaryOutcome(name, call)
+                XCTAssertNotEqual(OfflineURLProtocol.records.first?.method, "DELETE", name)
+                guard case .Failure(let error)? = outcome else {
+                    XCTFail("\(name): an empty \(status) should fail: \(String(describing: outcome))")
+                    continue
+                }
+                XCTAssertEqual((error as? ZBError)?.statusCode, status, "\(name): \(error)")
+            }
+        }
+    }
+
     func testOfflineStreamingDownloadWritesStraightToDisk() {
         let sdk = ZeroBounceSDK()
         sdk.initialize(apiKey: "stream-key")
@@ -3158,6 +3261,37 @@ final class OfflineWarmupTests: XCTestCase {
 ///
 /// Every request is answered by `OfflineURLProtocol`; nothing here reaches the
 /// live API.
+/// The public request methods the SDK declares, read from its sources when
+/// the test runs: every `public func` in "Zero Bounce iOS SDK/*.swift" that
+/// takes a `completion` handler, by name, with how many overloads it has.
+/// Sweeps that must reach every request method check themselves against
+/// this, so a method added later cannot be left out of them.
+func publicRequestMethodsInSources(testFile: String = #filePath) throws -> [String: Int] {
+    let sources = URL(fileURLWithPath: testFile)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Zero Bounce iOS SDK")
+    let files = try FileManager.default.contentsOfDirectory(at: sources, includingPropertiesForKeys: nil)
+        .filter { $0.pathExtension == "swift" }
+    let declaration = try NSRegularExpression(pattern: #"\bpublic\s+(?:(?:static|final|class)\s+)*func\s+(\w+)\s*\("#)
+    var methods: [String: Int] = [:]
+    for file in files {
+        // Comment lines are left out, so a doc example is not a declaration.
+        let text = try String(contentsOf: file, encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n") as NSString
+        for match in declaration.matches(in: text as String, range: NSRange(location: 0, length: text.length)) {
+            // The parameter list runs up to the body's opening brace.
+            let signature = text.substring(from: match.range.upperBound).prefix { $0 != "{" }
+            if signature.range(of: #"\bcompletion\s*:"#, options: .regularExpression) != nil {
+                methods[text.substring(with: match.range(at: 1)), default: 0] += 1
+            }
+        }
+    }
+    return methods
+}
+
 final class TransportSafetyTests: XCTestCase {
     private var liveSession: URLSession!
     private var csvPath = ""
@@ -3223,6 +3357,9 @@ final class TransportSafetyTests: XCTestCase {
             ("validate", { r in sdk.validate(email: "a@example.com") { r(self.err($0)) } }),
             ("validate POST", { r in sdk.validate(email: "a@example.com", options: post) { r(self.err($0)) } }),
             ("validateBatch", { r in sdk.validateBatch(emails: [["email_address": "a@example.com"]]) { r(self.err($0)) } }),
+            ("validateBatch options", { r in
+                sdk.validateBatch(emails: [["email_address": "a@example.com"]], options: ZBValidateOptions()) { r(self.err($0)) }
+            }),
             ("findEmail domain", { r in sdk.findEmail(domain: "example.com", firstName: "Ada") { r(self.err($0)) } }),
             ("findEmail company", { r in sdk.findEmail(companyName: "Example", firstName: "Ada") { r(self.err($0)) } }),
             ("findDomain domain", { r in sdk.findDomain(domain: "example.com") { r(self.err($0)) } }),
@@ -3409,11 +3546,31 @@ final class TransportSafetyTests: XCTestCase {
         return "\(value)".contains(key)
     }
 
-    /// The sweep covers every public request method: a method added later
-    /// without an entry here fails this count and has to be added.
-    func testTheSweepCoversEveryPublicRequestMethod() {
+    /// The sweep covers every public request method. The methods are read
+    /// from the SDK's sources, so one added later without an entry in
+    /// `everyCall` (or a new overload of one already there) fails here.
+    /// An entry is named after the method it calls ("warmup " in front for
+    /// `ZeroBounceWarmup`), with a word after it to tell overloads apart.
+    func testTheSweepCoversEveryPublicRequestMethod() throws {
         let (sdk, warmup) = clients("count-key")
-        XCTAssertEqual(everyCall(sdk, warmup).count, 64 + 26)
+        let declared = try publicRequestMethodsInSources()
+        // A scan that finds nothing must not pass: there are 64 + 26 today.
+        XCTAssertGreaterThanOrEqual(declared.values.reduce(0, +), 64 + 26, "\(declared)")
+        var swept: [String: Int] = [:]
+        for (label, _) in everyCall(sdk, warmup) {
+            let words = label.split(separator: " ")
+            let name = words.first == "warmup" && words.count > 1 ? words[1] : words[0]
+            swept[String(name), default: 0] += 1
+        }
+        for (name, overloads) in declared.sorted(by: { $0.key < $1.key }) {
+            XCTAssertGreaterThanOrEqual(
+                swept[name] ?? 0, overloads,
+                "\(name) has \(overloads) public overload(s) and \(swept[name] ?? 0) entries in everyCall"
+            )
+        }
+        for name in swept.keys.sorted() where declared[name] == nil {
+            XCTFail("everyCall entry \(name) is not a public request method")
+        }
     }
 
     /// Plain http to a real host is refused by every method before anything
@@ -3529,7 +3686,9 @@ extension TransportSafetyTests {
     func testSuccessFalseIsAnErrorWithItsStatusOnEveryCall() {
         let (sdk, warmup) = clients("success-false-sweep")
         let calls = everyCall(sdk, warmup).filter { !$0.0.hasPrefix("warmup ") }
-        XCTAssertEqual(calls.count, 64)
+        // That everyCall reaches every public request method is checked
+        // against the sources by testTheSweepCoversEveryPublicRequestMethod.
+        XCTAssertGreaterThanOrEqual(calls.count, 64)
         for (name, call) in calls {
             try? FileManager.default.removeItem(atPath: download)
             let (error, sent) = run(name, call)

@@ -1558,7 +1558,13 @@ public class ZeroBounceSDK {
         sendRequest(request: request, result: result)
     }
     
-    private func sendRequest(request:URLRequest,  result: @escaping (RequestResult) -> ()) {
+    /// `allowEmptyBody` lets a 2xx with no body through as a success, for a
+    /// DELETE; any other call that gets one has lost its answer.
+    private func sendRequest(
+        request:URLRequest,
+        allowEmptyBody: Bool = false,
+        result: @escaping (RequestResult) -> ()
+    ) {
         guard let url = request.url, ZeroBounceSDK.isAllowedURL(url) else {
             result(RequestResult.failure(ZBError.decodeError(messages: ["url must be an https:// URL"])))
             return
@@ -1596,7 +1602,8 @@ public class ZeroBounceSDK {
                 )))
                 return
             }
-            if body.isEmpty || ZBError.message(from: body, statusCode: statusCode).contains("HTML error page") {
+            if (body.isEmpty && !allowEmptyBody)
+                || ZBError.message(from: body, statusCode: statusCode).contains("HTML error page") {
                 result(RequestResult.failure(ZBError.httpError(
                     message: ZBError.message(from: body, statusCode: statusCode),
                     statusCode: statusCode
@@ -1703,12 +1710,17 @@ public class ZeroBounceSDK {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         }
-        sendRequest(request: request) { result in
+        // A DELETE may answer a 2xx with no body. An empty answer to any other
+        // method, or with any other status, is still an error.
+        sendRequest(request: request, allowEmptyBody: method == "DELETE") { result in
             switch result {
-            case .success(_, let data):
-                // DELETE answers with an empty body.
+            case .success(let response, let data):
                 if data.isEmpty {
                     completion(.Success([:]))
+                    return
+                }
+                if let failure = self.errorOnlyFailure(data, statusCode: ZeroBounceSDK.statusCode(of: response)) {
+                    completion(.Failure(failure))
                     return
                 }
                 do {
