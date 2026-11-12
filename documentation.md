@@ -574,6 +574,7 @@ zb.listInboxPlacementTests(
 ) { _ in }
 zb.setInboxPlacementWebhook(webhookUrl: "https://example.com/ipt-webhook") { _ in }
 zb.getInboxPlacementWebhook { _ in }
+// An empty 2xx answer to the delete is a success, with an empty dictionary.
 zb.deleteInboxPlacementTest(testId: "<TEST_ID>") { _ in }
 ```
 
