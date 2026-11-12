@@ -9,7 +9,8 @@
 import Foundation
 
 public struct ZBValidateResponse : Codable, Equatable {
-    ///The email address you are validating.
+    ///The email address you are validating. Empty when the API answered only
+    ///a greylist `message`.
     public let address: String
 
     ///[valid, invalid, catch-all, unknown, spamtrap, abuse, do_not_mail]
@@ -132,7 +133,18 @@ extension ZBValidateResponse {
     /// Declared in an extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        address = try container.decode(String.self, forKey: .address)
+        // LIVE: a repeated greylisted validate answers a bare
+        // {"Message": "Greylist validation still in progress..."} with no
+        // address. That is a result (the text is on `message`), so the address
+        // is then empty. Without a Message, a missing address is still an
+        // error.
+        if let address = try container.decodeIfPresent(String.self, forKey: .address) {
+            self.address = address
+        } else if try container.decodeIfPresent(String.self, forKey: .message) != nil {
+            self.address = ""
+        } else {
+            self.address = try container.decode(String.self, forKey: .address)
+        }
         status = try container.decodeIfPresent(ZBValidateStatus.self, forKey: .status)
         subStatus = try container.decodeIfPresent(ZBValidateSubStatus.self, forKey: .subStatus)
         account = try container.decodeIfPresent(String.self, forKey: .account)

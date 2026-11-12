@@ -399,9 +399,10 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
                 switch error as? ZBError {
-                case .decodeError(let messages):
-                    XCTAssertTrue(messages[0] == "Error test")
-                    
+                case .httpError(let message, let statusCode):
+                    XCTAssertEqual(message, "Error test")
+                    XCTAssertEqual(statusCode, 200)
+
                 default:
                     XCTAssertTrue(false)
                 }
@@ -1205,6 +1206,12 @@ final class OfflineURLProtocol: URLProtocol {
                 body = #"{"Credits":"-1"}"#
             }
             return (200, "application/json", Data(body.utf8))
+        }
+        // LIVE: a repeated greylisted validate answers a bare Message while
+        // the retry runs. It is a result, not an error.
+        if key.hasPrefix("greylist-") && request.path.hasSuffix("/validate") {
+            return (200, "application/json",
+                    Data(#"{"Message":"Greylist validation still in progress, please try again later."}"#.utf8))
         }
         if key.hasPrefix("filter-message-") && request.path.contains("filters") {
             return (200, "application/json", Data(#"{"Message":"Filter has been added."}"#.utf8))
@@ -3510,5 +3517,161 @@ final class TransportSafetyTests: XCTestCase {
         let (warmError, warmSent) = run("getSeeds") { r in warmup.getSeeds { r(self.err($0)) } }
         XCTAssertEqual(warmSent.count, 0, "sent with key \(warmSent.first?.apiKey ?? "")")
         XCTAssertTrue(describe(warmError).contains("not initialized"), describe(warmError))
+    }
+}
+
+/// Parity with the other SDKs (standard §3): API errors carry their HTTP
+/// status, the greylist Message is a result, the key stays out of reflection,
+/// and the guards below each have a test that fails without them.
+extension TransportSafetyTests {
+    /// `"success": false` on an HTTP 200 is an error, with that status, on
+    /// every `ZeroBounceSDK` request method.
+    func testSuccessFalseIsAnErrorWithItsStatusOnEveryCall() {
+        let (sdk, warmup) = clients("success-false-sweep")
+        let calls = everyCall(sdk, warmup).filter { !$0.0.hasPrefix("warmup ") }
+        XCTAssertEqual(calls.count, 64)
+        for (name, call) in calls {
+            try? FileManager.default.removeItem(atPath: download)
+            let (error, sent) = run(name, call)
+            XCTAssertEqual(sent.count, 1, name)
+            XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name): \(describe(error))")
+            XCTAssertTrue(describe(error).contains("File cannot be found."), "\(name): \(describe(error))")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(name) saved the error as a file")
+        }
+    }
+
+    /// A non-2xx answer to a streaming download is an error with its status,
+    /// and nothing is saved, whatever the body looks like.
+    func testStreamingDownloadNon2xxIsAnErrorWithItsStatus() {
+        // A 400 with a plain-text body: neither JSON nor HTML.
+        let (sdk, _) = clients("double-error-streaming")
+        let calls: [(String, (@escaping Report) -> ())] = [
+            ("getFileStreaming", { r in sdk.getFileStreaming(fileId: "f", downloadPath: self.download) { r(self.err($0)) } }),
+            ("scoringGetFileStreaming", { r in
+                sdk.scoringGetFileStreaming(fileId: "f", downloadPath: self.download) { r(self.err($0)) }
+            }),
+        ]
+        for (name, call) in calls {
+            try? FileManager.default.removeItem(atPath: download)
+            let (error, _) = run(name, call)
+            XCTAssertEqual((error as? ZBError)?.statusCode, 400, "\(name): \(describe(error))")
+            XCTAssertTrue(describe(error).contains("api_key is invalid"), "\(name): \(describe(error))")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(name) saved the error as a file")
+        }
+    }
+
+    /// URLSession nests the request URL in the underlying error as well, and
+    /// may list several underlying errors. The key is masked at every depth.
+    func testRedactionReachesNestedUnderlyingErrors() {
+        let key = "nested-secret-key"
+        // NSErrorFailingURLStringKey, which Mac Catalyst does not declare.
+        let failingURLString = "NSErrorFailingURLStringKey"
+        let url = "https://api.zerobounce.net/v2/getcredits?api_key=\(key)"
+        let innermost = NSError(domain: "kCFErrorDomainCFNetwork", code: -1004, userInfo: [
+            failingURLString: url,
+            NSURLErrorFailingURLErrorKey: URL(string: url)!,
+        ])
+        let underlying = NSError(domain: "kCFErrorDomainCFNetwork", code: -1004, userInfo: [
+            failingURLString: url,
+            NSUnderlyingErrorKey: innermost,
+        ])
+        let error = NSError(domain: NSURLErrorDomain, code: URLError.cannotConnectToHost.rawValue, userInfo: [
+            failingURLString: url,
+            NSURLErrorFailingURLErrorKey: URL(string: url)!,
+            NSUnderlyingErrorKey: underlying,
+            "NSMultipleUnderlyingErrorsKey": [underlying],
+        ])
+        let redacted = ZeroBounceSDK.redactingApiKey(key, in: error)
+        XCTAssertFalse(mentionsKey(redacted, key), "\(redacted)")
+        let nested = (redacted as NSError).userInfo[NSUnderlyingErrorKey] as? NSError
+        XCTAssertEqual(nested?.code, -1004)
+        XCTAssertEqual(nested?.userInfo[failingURLString] as? String,
+                       "https://api.zerobounce.net/v2/getcredits?api_key=***")
+        XCTAssertEqual((redacted as? URLError)?.code, .cannotConnectToHost)
+    }
+
+    private func mentionsKey(_ value: Any, _ key: String) -> Bool {
+        if let error = value as? NSError {
+            return "\(error)".contains(key) || error.userInfo.values.contains { mentionsKey($0, key) }
+        }
+        if let list = value as? [Any] { return list.contains { mentionsKey($0, key) } }
+        return "\(value)".contains(key)
+    }
+
+    /// Every error the API reports carries its HTTP status: the dead-key
+    /// bodies on an HTTP 200, and the batch-wide "all" error.
+    func testApiErrorsOnA200CarryTheStatus() {
+        let (sdk, _) = clients("dead-key-status")
+        let start = Date(timeIntervalSince1970: 0)
+        let calls: [(String, (@escaping Report) -> ())] = [
+            ("validate", { r in sdk.validate(email: "a@example.com") { r(self.err($0)) } }),
+            ("getActivityData", { r in sdk.getActivityData(email: "a@example.com") { r(self.err($0)) } }),
+            ("getApiUsage", { r in sdk.getApiUsage(startDate: start, endDate: start) { r(self.err($0)) } }),
+            ("findEmail", { r in sdk.findEmail(domain: "example.com", firstName: "Ada") { r(self.err($0)) } }),
+            ("findDomain", { r in sdk.findDomain(domain: "example.com") { r(self.err($0)) } }),
+            ("guessFormat", { r in sdk.guessFormat(domain: "example.com") { r(self.err($0)) } }),
+            ("addFilter", { r in sdk.addFilter(rule: "allow", target: "email", value: "a@example.com") { r(self.err($0)) } }),
+            ("deleteFilter", { r in sdk.deleteFilter(rule: "allow", target: "email", value: "a@example.com") { r(self.err($0)) } }),
+            ("listFilters GET", { r in sdk.listFilters { r(self.err($0)) } }),
+            ("listFilters POST", { r in sdk.listFilters(usePost: true) { r(self.err($0)) } }),
+        ]
+        for (name, call) in calls {
+            let (error, _) = run(name, call)
+            XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name): \(describe(error))")
+            XCTAssertTrue(describe(error).contains("Invalid API key"), "\(name): \(describe(error))")
+        }
+
+        let (batch, _) = clients("batch-account-status")
+        let (error, _) = run("validateBatch") { r in
+            batch.validateBatch(emails: [["email_address": "a@example.com"]]) { r(self.err($0)) }
+        }
+        XCTAssertEqual((error as? ZBError)?.statusCode, 200, describe(error))
+        XCTAssertTrue(describe(error).contains("ran out of credits"), describe(error))
+    }
+
+    /// LIVE: a repeated greylisted validate answers a bare
+    /// {"Message": "Greylist validation still in progress..."}. That is a
+    /// result whose text is on `message`, not an error.
+    func testValidateGreylistMessageIsAResult() {
+        let (sdk, _) = clients("greylist-key")
+        var post = ZBValidateOptions()
+        post.usePost = true
+        for options in [nil, post] as [ZBValidateOptions?] {
+            var response: ZBValidateResponse?
+            let (error, sent) = run("validate") { r in
+                sdk.validate(email: "grey@example.com", options: options) { result in
+                    if case .Success(let value) = result { response = value }
+                    r(self.err(result))
+                }
+            }
+            XCTAssertEqual(sent.count, 1)
+            XCTAssertNil(error, describe(error))
+            XCTAssertEqual(response?.message, "Greylist validation still in progress, please try again later.")
+            XCTAssertNil(response?.status)
+            XCTAssertNil(response?.processedAt)
+        }
+    }
+
+    /// `dump`, `Mirror` and `String(reflecting:)` must not show the key.
+    func testReflectionNeverShowsTheApiKey() {
+        let key = "reflected-secret-key"
+        let (sdk, warmup) = clients(key)
+        // Reach the lazily created helper too, which holds the client.
+        _ = run("findEmail S3") { r in
+            sdk.emailFinderS3File(options: ZBBulkFileJobOptions(fileName: "f.csv", returnUrl: "https://example.com")) { r(self.err($0)) }
+        }
+        for subject in [sdk as Any, warmup as Any] {
+            var dumped = ""
+            dump(subject, to: &dumped)
+            XCTAssertFalse(dumped.contains(key), dumped)
+            XCTAssertFalse(String(reflecting: subject).contains(key))
+            XCTAssertFalse("\(subject)".contains(key))
+            let children = Mirror(reflecting: subject).children.map { "\($0.label ?? ""): \($0.value)" }
+            XCTAssertFalse(children.joined(separator: "\n").contains(key), "\(children)")
+            XCTAssertTrue(dumped.contains("apiKey"), dumped)
+        }
+        // The key is still in use.
+        let (_, sent) = run("getCredits") { r in sdk.getCredits { r(self.err($0)) } }
+        XCTAssertEqual(sent.first?.apiKey, key)
     }
 }

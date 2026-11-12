@@ -295,17 +295,22 @@ public class ZeroBounceSDK {
         }
 
         let jsonDataParams = try? JSONSerialization.data(withJSONObject: params)
-        sendPostJsonRequest(url: "\(apiBaseUrl)/validatebatch", params: jsonDataParams) { (result: ZBResult<ZBValidateBatchResponse>) in
-            if case .Success(let response) = result,
-               let account = response.errors.first(where: { $0.emailAddress == "all" }) {
+        // An "all" entry is an account-level error for the whole batch, such
+        // as a dead key, reported with the HTTP status it came back with.
+        sendPostJsonRequest(
+            url: "\(apiBaseUrl)/validatebatch",
+            params: jsonDataParams,
+            inspect: { (response: ZBValidateBatchResponse, statusCode: Int) -> ZBError? in
+                guard let account = response.errors.first(where: { $0.emailAddress == "all" }) else {
+                    return nil
+                }
                 let text = account.error.isEmpty
                     ? "Invalid API Key or your account ran out of credits"
                     : account.error
-                completion(.Failure(ZBError.decodeError(messages: [text])))
-                return
-            }
-            completion(result)
-        }
+                return ZBError.httpError(message: text, statusCode: statusCode)
+            },
+            completion: completion
+        )
     }
     
     // MARK: Email Finder
@@ -1453,7 +1458,12 @@ public class ZeroBounceSDK {
         sendJsonRequest(request: r, completion: completion)
     }
     
-    private func sendPostJsonRequest<T: Codable>(url: String, params: Data?, completion: @escaping (ZBResult<T>) -> ()) {
+    private func sendPostJsonRequest<T: Codable>(
+        url: String,
+        params: Data?,
+        inspect: ((T, Int) -> ZBError?)? = nil,
+        completion: @escaping (ZBResult<T>) -> ()
+    ) {
         var r = URLRequest(url: URL(string: url)!)
         r.httpMethod = "POST"
         r.timeoutInterval = ZeroBounceSDK.requestTimeout
@@ -1461,7 +1471,7 @@ public class ZeroBounceSDK {
         guard let data = params else { return }
         r.httpBody = data
         
-        sendJsonRequest(request: r, completion: completion)
+        sendJsonRequest(request: r, inspect: inspect, completion: completion)
     }
 
     private func sendFormPostRequest<T: Codable>(
@@ -1488,23 +1498,47 @@ public class ZeroBounceSDK {
         case failure(Error)
     }
     
-    private func sendJsonRequest<T: Codable>(request:URLRequest, completion: @escaping (ZBResult<T>) -> ()) {
+    /// - parameter inspect: a last check on the decoded value, for an error
+    ///   that only the value shows (validatebatch's "all" entry). It gets the
+    ///   HTTP status, so the error can carry it.
+    private func sendJsonRequest<T: Codable>(
+        request: URLRequest,
+        inspect: ((T, Int) -> ZBError?)? = nil,
+        completion: @escaping (ZBResult<T>) -> ()
+    ) {
         sendRequest(request: request) { result in
             switch result {
-            case .success(_, let data):
+            case .success(let response, let data):
+                let statusCode = ZeroBounceSDK.statusCode(of: response)
                 // A model whose fields are all optional, such as
                 // ZBGetApiUsageResponse, decodes {"error": "Invalid API key"}
                 // as an empty result.
-                if let failure = self.errorOnlyFailure(data) {
+                if let failure = self.errorOnlyFailure(data, statusCode: statusCode) {
                     completion(.Failure(failure))
                     return
                 }
                 do {
                     let value = try JSONDecoder().decode(T.self, from: data)
+                    if let failure = inspect?(value, statusCode) {
+                        completion(.Failure(failure))
+                        return
+                    }
                     completion(.Success(value))
                 } catch {
+                    // LIVE: a dead key answers the finder and the domain
+                    // search with a bare {"Message": ...}. A body made only of
+                    // message keys is the API's error, not a broken response,
+                    // so it carries the status. (Validate's greylist Message
+                    // decodes, and stays a result.)
+                    if ZBError.messageOnlyBody(data) {
+                        completion(.Failure(ZBError.httpError(
+                            message: ZBError.message(from: data, statusCode: statusCode),
+                            statusCode: statusCode
+                        )))
+                        return
+                    }
                     completion(.Failure(ZBError.decodeError(messages: [
-                        ZBError.message(from: data, statusCode: 200)
+                        ZBError.message(from: data, statusCode: statusCode)
                     ])))
                 }
                 
@@ -1703,11 +1737,15 @@ public class ZeroBounceSDK {
     /// LIVE: an invalid or drained key answers getapiusage with
     /// {"error": "Invalid API key"} and the filters with {"Error": ...} on an
     /// HTTP 200, which used to come back as their result. Reported as
-    /// `.decodeError`, the case a typed call already reported when such a
-    /// body failed to decode.
-    private func errorOnlyFailure(_ data: Data) -> ZBError? {
+    /// `.httpError` with that status, like every other error the API reports.
+    private func errorOnlyFailure(_ data: Data, statusCode: Int) -> ZBError? {
         guard ZBError.errorOnlyBody(data) else { return nil }
-        return .decodeError(messages: [ZBError.message(from: data, statusCode: 200)])
+        return .httpError(message: ZBError.message(from: data, statusCode: statusCode), statusCode: statusCode)
+    }
+
+    /// The HTTP status of a response that `sendRequest` passed on, so 2xx.
+    private static func statusCode(of response: URLResponse) -> Int {
+        (response as? HTTPURLResponse)?.statusCode ?? 200
     }
 
     internal func priority3SendJson<T: Codable>(url: String, completion: @escaping (ZBResult<T>) -> ()) {
@@ -1731,8 +1769,8 @@ public class ZeroBounceSDK {
     internal func priority3SendJson(url: String, completion: @escaping (ZBJsonResult) -> ()) {
         sendRequest(url: url) { result in
             switch result {
-            case .success(_, let data):
-                if let failure = self.errorOnlyFailure(data) {
+            case .success(let response, let data):
+                if let failure = self.errorOnlyFailure(data, statusCode: ZeroBounceSDK.statusCode(of: response)) {
                     completion(.Failure(failure))
                     return
                 }
@@ -1765,8 +1803,8 @@ public class ZeroBounceSDK {
     internal func priority3SendDictionary(url: String, completion: @escaping (ZBDictionaryResult) -> ()) {
         sendRequest(url: url) { result in
             switch result {
-            case .success(_, let data):
-                if let failure = self.errorOnlyFailure(data) {
+            case .success(let response, let data):
+                if let failure = self.errorOnlyFailure(data, statusCode: ZeroBounceSDK.statusCode(of: response)) {
                     completion(.Failure(failure))
                     return
                 }
@@ -1804,8 +1842,8 @@ public class ZeroBounceSDK {
         request.httpBody = components.percentEncodedQuery?.data(using: .utf8)
         sendRequest(request: request) { result in
             switch result {
-            case .success(_, let data):
-                if let failure = self.errorOnlyFailure(data) {
+            case .success(let response, let data):
+                if let failure = self.errorOnlyFailure(data, statusCode: ZeroBounceSDK.statusCode(of: response)) {
                     completion(.Failure(failure))
                     return
                 }
@@ -1867,5 +1905,26 @@ private final class ZBRedirectBlocker: NSObject, URLSessionTaskDelegate {
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
         completionHandler(nil)
+    }
+}
+
+/// `dump`, `Mirror(reflecting:)` and debuggers show the client's settings
+/// with the API key masked: the default reflection lists every stored
+/// property, the key included.
+extension ZeroBounceSDK: CustomReflectable {
+    public var customMirror: Mirror {
+        Mirror(self, children: [
+            "apiKey": ZeroBounceSDK.maskedKey(apiKey),
+            "apiBaseUrl": apiBaseUrl,
+            "bulkApiRootUrl": bulkApiRootUrl,
+            "bulkApiBaseUrl": bulkApiBaseUrl,
+            "listEvaluatorBaseUrl": listEvaluatorBaseUrl,
+            "inboxPlacementBaseUrl": inboxPlacementBaseUrl,
+        ], displayStyle: .class)
+    }
+
+    /// "***" for a key that is set, "nil" otherwise.
+    internal static func maskedKey(_ apiKey: String?) -> String {
+        apiKey?.isEmpty == false ? "***" : "nil"
     }
 }
