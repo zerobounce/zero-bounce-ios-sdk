@@ -19,8 +19,10 @@ public enum ZBError: LocalizedError {
     case saveFileError(message: String)
     /// An error the API itself reported, with the HTTP status it came back
     /// with, so a caller can tell 429 from 500 without parsing the message.
-    /// The status is 200 when the API answered a failure on a success code,
-    /// which `getfile` and `deletefile` do for an unknown file id.
+    /// The status is 200 when the API answered a failure on a success code:
+    /// `"success": false` (`getfile` and `deletefile` for an unknown file id),
+    /// a dead key's error-only body, and `validateBatch`'s account-level
+    /// "all" error.
     case httpError(message: String, statusCode: Int)
 
     /// The HTTP status behind this error, when there was one.
@@ -61,6 +63,23 @@ public enum ZBError: LocalizedError {
         }
         return ["error", "error_message", "Error"].contains { key in
             guard let text = object[key] as? String else { return false }
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    /// Whether a JSON object body is made only of message keys ("error",
+    /// "message", "error_message", "Message", "Error", "detail") with at least
+    /// one non-empty text: how the API reports an error with no "success"
+    /// field to gate on.
+    static func messageOnlyBody(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              !object.isEmpty else {
+            return false
+        }
+        let keys: Set<String> = ["error", "message", "error_message", "Message", "Error", "detail"]
+        guard object.keys.allSatisfy({ keys.contains($0) }) else { return false }
+        return object.values.contains { value in
+            guard let text = value as? String else { return false }
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }

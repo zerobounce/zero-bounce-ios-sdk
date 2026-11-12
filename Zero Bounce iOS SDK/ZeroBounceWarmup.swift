@@ -744,3 +744,13 @@ public class ZeroBounceWarmup {
         }.resume()
     }
 }
+
+/// `dump`, `Mirror(reflecting:)` and debuggers show the Warmup key masked.
+extension ZeroBounceWarmup: CustomReflectable {
+    public var customMirror: Mirror {
+        Mirror(self, children: [
+            "apiKey": ZeroBounceSDK.maskedKey(apiKey),
+            "baseUrl": baseUrl,
+        ], displayStyle: .class)
+    }
+}

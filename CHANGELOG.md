@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Breaking
+
+- An error the API reports in the body of a 2xx response now arrives as `ZBError.httpError(message:statusCode:)` carrying the HTTP status (200), instead of `ZBError.decodeError(messages:)`, whose `statusCode` is nil. This covers a dead or invalid key's error-only body (`{"error": ...}`, `{"error_message": ...}`, `{"Error": ...}` with no `success` field) on every JSON call; a body made only of message keys (`error`, `message`, `error_message`, `Message`, `Error`, `detail`) that does not decode as the call's result, which is how `findEmail`, `findDomain` and `guessFormat` report a dead key (`{"Message": ...}`); and `validateBatch`'s account-level `"all"` error. The message text is unchanged. Code that matched `.decodeError` for these should match `.httpError` (or read `statusCode`). `.decodeError` is left for bodies that cannot be decoded and for arguments rejected before sending.
+
+### Fixed
+
+- `validate` reported the bare `{"Message": "Greylist validation still in progress, please try again later."}` that the API answers for a repeated greylisted address as `ZBError.decodeError(messages:)`, although the README said its text lands on `ZBValidateResponse.message`. It is now a result: `message` holds the text, `status` and `processedAt` are nil, and `address` is empty (the API sends none). A body with neither `address` nor `Message` is still a decode error.
+
+### Security
+
+- `dump(_:)` and `Mirror(reflecting:)` of `ZeroBounceSDK` and `ZeroBounceWarmup` listed the API key in clear text. Both types now provide a `customMirror` that shows the key as `***` (`nil` when none is set) next to the base URLs.
+
+### Added
+
+- Offline tests that fail when a guard is removed: `"success": false` on an HTTP 200 is an error with status 200 on all 64 `ZeroBounceSDK` request methods; a non-2xx answer to `getFileStreaming` / `scoringGetFileStreaming` is an error with its status and saves no file; the API key is masked in nested underlying errors and in lists of them.
+
 ## [3.0.1] - 2026-11-11
 
 ### Security
