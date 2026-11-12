@@ -99,18 +99,71 @@ public class ZeroBounceSDK {
     /// `NSErrorFailingURLStringKey`, and again in the underlying error). The
     /// domain and code stay the same, so `error as? URLError` and checks such
     /// as `.code == .timedOut` keep working.
+    ///
+    /// A `ZBError` built from a response body is cleaned the same way: a
+    /// server or proxy may quote the key back (`{"error":"Invalid API key
+    /// <key>"}`, or a plain-text page quoting the request URL), so the
+    /// message of `.httpError`, `.decodeError` and `.saveFileError` is
+    /// redacted too, and the case and status stay the same.
     internal static func redactingApiKey(_ apiKey: String?, in error: Error) -> Error {
-        guard let apiKey = apiKey, !apiKey.isEmpty, !(error is ZBError) else { return error }
-        let forms = Set([apiKey, apiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? apiKey])
+        redacting([apiKey].compactMap { $0 }, in: error)
+    }
+
+    /// The forms a secret can take in an error's text: as sent,
+    /// percent-encoded (a query string or form body, loosely or strictly
+    /// encoded) and JSON-escaped. Longest first, so no form is cut in two
+    /// by a shorter one.
+    internal static func secretForms(_ secrets: [String]) -> [String] {
+        var strict = CharacterSet.alphanumerics
+        strict.insert(charactersIn: "-._~")
+        var forms = Set<String>()
+        for secret in secrets where !secret.isEmpty {
+            forms.insert(secret)
+            forms.insert(secret.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? secret)
+            forms.insert(secret.addingPercentEncoding(withAllowedCharacters: strict) ?? secret)
+            forms.insert(secret.replacingOccurrences(of: "/", with: "\\/"))
+        }
+        return forms.sorted { $0.count > $1.count }
+    }
+
+    /// `text` with every form of every secret replaced by "***".
+    internal static func redacting(_ secrets: [String], in text: String) -> String {
+        secretForms(secrets).reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+    }
+
+    /// `error` with every form of every secret replaced by "***", wherever
+    /// its text or user info carries it. An error that carries none comes
+    /// back as it was.
+    internal static func redacting(_ secrets: [String], in error: Error) -> Error {
+        let forms = secretForms(secrets)
+        guard !forms.isEmpty else { return error }
+        var changed = false
         func clean(_ text: String) -> String {
-            forms.reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+            let cleaned = forms.reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+            if cleaned != text { changed = true }
+            return cleaned
+        }
+        if let zbError = error as? ZBError {
+            switch zbError {
+            case .httpError(let message, let statusCode):
+                return ZBError.httpError(message: clean(message), statusCode: statusCode)
+            case .decodeError(let messages):
+                return ZBError.decodeError(messages: messages.map(clean))
+            case .saveFileError(let message):
+                return ZBError.saveFileError(message: clean(message))
+            default:
+                return zbError
+            }
         }
         func scrub(_ value: Any) -> Any {
             switch value {
             case let text as String:
                 return clean(text)
             case let url as URL:
-                return URL(string: clean(url.absoluteString)) ?? clean(url.absoluteString)
+                let text = url.absoluteString
+                let cleaned = clean(text)
+                if cleaned == text { return url }
+                return URL(string: cleaned) ?? cleaned
             case let nested as NSError:
                 return redact(nested)
             case let list as [Any]:
@@ -123,10 +176,31 @@ public class ZeroBounceSDK {
             NSError(domain: error.domain, code: error.code, userInfo: error.userInfo.mapValues(scrub))
         }
         let redacted = redact(error as NSError)
+        guard changed else { return error }
         if redacted.domain == NSURLErrorDomain {
             return URLError(URLError.Code(rawValue: redacted.code), userInfo: redacted.userInfo)
         }
         return redacted
+    }
+
+    /// A transport error when fewer body bytes arrived than the response's
+    /// Content-Length announced. URLSession checks this itself for some
+    /// requests only: a PUT or DELETE whose 200 was cut short came back as
+    /// complete, with the part that arrived. A body the session decoded
+    /// (Content-Encoding) is not the length the header gave, so it is not
+    /// compared.
+    internal static func cutShortError(_ response: URLResponse?, received: Int64) -> URLError? {
+        guard let http = response as? HTTPURLResponse, http.expectedContentLength >= 0,
+              received < http.expectedContentLength else {
+            return nil
+        }
+        let encoding = (http.value(forHTTPHeaderField: "Content-Encoding") ?? "")
+            .trimmingCharacters(in: .whitespaces).lowercased()
+        guard encoding.isEmpty || encoding == "identity" else { return nil }
+        return URLError(.networkConnectionLost, userInfo: [
+            NSLocalizedDescriptionKey: "The network connection was lost: the response ended after "
+                + "\(received) of the \(http.expectedContentLength) bytes it announced."
+        ])
     }
 
     internal static func isAllowedURL(_ url: URL) -> Bool {
@@ -1256,6 +1330,7 @@ public class ZeroBounceSDK {
         options: ZBGetFileOptions?,
         completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()
     ) {
+        let completion = redacted(completion)
         guard let apiKey = normalizedApiKey else {
             completion(.Failure(ZBError.notInitialized))
             return
@@ -1290,6 +1365,12 @@ public class ZeroBounceSDK {
                 return
             }
             defer { try? FileManager.default.removeItem(at: location) }
+            let size = (try? FileManager.default.attributesOfItem(atPath: location.path)[.size] as? NSNumber)?
+                .int64Value ?? 0
+            if let cut = ZeroBounceSDK.cutShortError(response, received: size) {
+                completion(.Failure(cut))
+                return
+            }
 
             // Enough to tell a file from an error page, without reading the
             // whole download back into memory.
@@ -1365,6 +1446,7 @@ public class ZeroBounceSDK {
     }
     
     private func _getFile(scoring: Bool, fileId: String, options: ZBGetFileOptions?, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
+        let completion = redacted(completion)
         guard let apiKey = normalizedApiKey else {
             completion(ZBResult.Failure(ZBError.notInitialized))
             return
@@ -1506,6 +1588,7 @@ public class ZeroBounceSDK {
         inspect: ((T, Int) -> ZBError?)? = nil,
         completion: @escaping (ZBResult<T>) -> ()
     ) {
+        let completion = redacted(completion)
         sendRequest(request: request) { result in
             switch result {
             case .success(let response, let data):
@@ -1563,20 +1646,32 @@ public class ZeroBounceSDK {
     private func sendRequest(
         request:URLRequest,
         allowEmptyBody: Bool = false,
-        result: @escaping (RequestResult) -> ()
+        result unredacted: @escaping (RequestResult) -> ()
     ) {
+        let apiKey = self.apiKey
+        let result = { (outcome: RequestResult) in
+            if case .failure(let error) = outcome {
+                unredacted(.failure(ZeroBounceSDK.redactingApiKey(apiKey, in: error)))
+            } else {
+                unredacted(outcome)
+            }
+        }
         guard let url = request.url, ZeroBounceSDK.isAllowedURL(url) else {
             result(RequestResult.failure(ZBError.decodeError(messages: ["url must be an https:// URL"])))
             return
         }
         ZeroBounceSDK.urlSession.dataTask(with: request, completionHandler: { data, response, error -> Void in
             if let error = error {
-                result(RequestResult.failure(ZeroBounceSDK.redactingApiKey(self.apiKey, in: error)))
+                result(RequestResult.failure(error))
                 return
             }
             
             guard let response = response else {
                 result(RequestResult.failure(ZBError.noResponse))
+                return
+            }
+            if let cut = ZeroBounceSDK.cutShortError(response, received: Int64(data?.count ?? 0)) {
+                result(RequestResult.failure(cut))
                 return
             }
             
@@ -1695,6 +1790,7 @@ public class ZeroBounceSDK {
         extraHeaders: [String: String] = [:],
         completion: @escaping (ZBDictionaryResult) -> ()
     ) {
+        let completion = redacted(completion)
         guard let urlValue = URL(string: url) else {
             completion(.Failure(ZBError.invalidEndpoint))
             return
@@ -1755,6 +1851,43 @@ public class ZeroBounceSDK {
         return .httpError(message: ZBError.message(from: data, statusCode: statusCode), statusCode: statusCode)
     }
 
+    /// `completion` with the API key redacted from any error it is handed.
+    /// Every request helper wraps the caller's completion this way before
+    /// anything else, so an error built from a response body (a message the
+    /// server quoted the key in) reaches the caller redacted, on every path.
+    private func redacted<T>(_ completion: @escaping (ZBResult<T>) -> ()) -> (ZBResult<T>) -> () {
+        let apiKey = self.apiKey
+        return { result in
+            if case .Failure(let error) = result {
+                completion(.Failure(ZeroBounceSDK.redactingApiKey(apiKey, in: error)))
+            } else {
+                completion(result)
+            }
+        }
+    }
+
+    private func redacted(_ completion: @escaping (ZBDictionaryResult) -> ()) -> (ZBDictionaryResult) -> () {
+        let apiKey = self.apiKey
+        return { result in
+            if case .Failure(let error) = result {
+                completion(.Failure(ZeroBounceSDK.redactingApiKey(apiKey, in: error)))
+            } else {
+                completion(result)
+            }
+        }
+    }
+
+    private func redacted(_ completion: @escaping (ZBJsonResult) -> ()) -> (ZBJsonResult) -> () {
+        let apiKey = self.apiKey
+        return { result in
+            if case .Failure(let error) = result {
+                completion(.Failure(ZeroBounceSDK.redactingApiKey(apiKey, in: error)))
+            } else {
+                completion(result)
+            }
+        }
+    }
+
     /// The HTTP status of a response that `sendRequest` passed on, so 2xx.
     private static func statusCode(of response: URLResponse) -> Int {
         (response as? HTTPURLResponse)?.statusCode ?? 200
@@ -1779,6 +1912,7 @@ public class ZeroBounceSDK {
     /// As priority3SendDictionary, but keeps an array body instead of
     /// rejecting it.
     internal func priority3SendJson(url: String, completion: @escaping (ZBJsonResult) -> ()) {
+        let completion = redacted(completion)
         sendRequest(url: url) { result in
             switch result {
             case .success(let response, let data):
@@ -1813,6 +1947,7 @@ public class ZeroBounceSDK {
     }
 
     internal func priority3SendDictionary(url: String, completion: @escaping (ZBDictionaryResult) -> ()) {
+        let completion = redacted(completion)
         sendRequest(url: url) { result in
             switch result {
             case .success(let response, let data):
@@ -1841,6 +1976,7 @@ public class ZeroBounceSDK {
         formFields: [String: String],
         completion: @escaping (ZBDictionaryResult) -> ()
     ) {
+        let completion = redacted(completion)
         guard let urlValue = URL(string: url) else {
             completion(.Failure(ZBError.invalidEndpoint))
             return
@@ -1880,6 +2016,7 @@ public class ZeroBounceSDK {
         downloadPath: String,
         completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()
     ) {
+        let completion = redacted(completion)
         sendRequest(url: url) { result in
             switch result {
             case .success(let response, let data):
