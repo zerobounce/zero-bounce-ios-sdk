@@ -112,19 +112,24 @@ public class ZeroBounceSDK {
     /// The forms a secret can take in an error's text: as sent and
     /// JSON-escaped, and each of those percent-encoded (a query string or
     /// form body, loosely or strictly encoded, a space as `%20` or `+`), as
-    /// a server echoing a URL-encoded JSON request would write it. Longest
-    /// first, so no form is cut in two by a shorter one.
+    /// a server echoing a URL-encoded JSON request would write it, and
+    /// JSON-escaped twice (a JSON request quoted inside a JSON error).
+    /// Longest first, so no form is cut in two by a shorter one.
     internal static func secretForms(_ secrets: [String]) -> [String] {
         var strict = CharacterSet.alphanumerics
         strict.insert(charactersIn: "-._~")
         var forms = Set<String>()
         for secret in secrets where !secret.isEmpty {
-            for form in [secret] + jsonEscapedForms(secret) {
+            let escaped = jsonEscapedForms(secret)
+            for form in [secret] + escaped {
                 forms.insert(form)
                 forms.insert(form.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? form)
                 let encoded = form.addingPercentEncoding(withAllowedCharacters: strict) ?? form
                 forms.insert(encoded)
                 forms.insert(encoded.replacingOccurrences(of: "%20", with: "+"))
+            }
+            for form in escaped {
+                forms.formUnion(jsonEscapedForms(form))
             }
         }
         return forms.sorted { $0.count > $1.count }
@@ -1675,20 +1680,12 @@ public class ZeroBounceSDK {
                     completion(.Success(value))
                 } catch {
                     // LIVE: a dead key answers the finder and the domain
-                    // search with a bare {"Message": ...}. A body made only of
-                    // message keys is the API's error, not a broken response,
-                    // so it carries the status. (Validate's greylist Message
-                    // decodes, and stays a result.)
-                    if ZBError.messageOnlyBody(data) {
-                        completion(.Failure(ZBError.httpError(
-                            message: ZBError.message(from: data, statusCode: statusCode),
-                            statusCode: statusCode
-                        )))
-                        return
-                    }
-                    completion(.Failure(ZBError.decodeError(messages: [
-                        ZBError.message(from: data, statusCode: statusCode)
-                    ])))
+                    // search with a bare {"Message": ...}, which carries its
+                    // text. (Validate's greylist Message decodes, and stays a
+                    // result.) Any other body that is not the call's answer -
+                    // not JSON, or JSON of another shape - is an API error
+                    // with the status too (standard §3).
+                    completion(.Failure(ZBError.unreadableBody(data, statusCode: statusCode)))
                 }
                 
             case .failure (let error):
@@ -1894,10 +1891,10 @@ public class ZeroBounceSDK {
                     if let dict = object as? [String: Any] {
                         completion(.Success(dict))
                     } else {
-                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                        completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                     }
                 } catch {
-                    completion(.Failure(error))
+                    completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                 }
             case .failure(let error):
                 completion(.Failure(error))
@@ -1993,7 +1990,7 @@ public class ZeroBounceSDK {
                 do {
                     completion(.Success(try JSONSerialization.jsonObject(with: data, options: [])))
                 } catch {
-                    completion(.Failure(error))
+                    completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                 }
             case .failure(let error):
                 completion(.Failure(error))
@@ -2030,10 +2027,10 @@ public class ZeroBounceSDK {
                     if let dict = object as? [String: Any] {
                         completion(.Success(dict))
                     } else {
-                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                        completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                     }
                 } catch {
-                    completion(.Failure(error))
+                    completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                 }
             case .failure(let error):
                 completion(.Failure(error))
@@ -2070,10 +2067,10 @@ public class ZeroBounceSDK {
                     if let dict = object as? [String: Any] {
                         completion(.Success(dict))
                     } else {
-                        completion(.Failure(ZBError.decodeError(jsonData: data)))
+                        completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                     }
                 } catch {
-                    completion(.Failure(error))
+                    completion(.Failure(ZBError.unreadableBody(data, statusCode: ZeroBounceSDK.statusCode(of: response))))
                 }
             case .failure(let error):
                 completion(.Failure(error))

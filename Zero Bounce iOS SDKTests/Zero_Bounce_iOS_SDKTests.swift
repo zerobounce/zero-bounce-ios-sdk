@@ -434,9 +434,12 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
                 
             case .Failure(let error):
                 NSLog("validate failure error=\(String(describing: error))")
+                // JSON of another shape on a 200 is an API error with that
+                // status, not a decode error.
                 switch error as? ZBError {
-                case .decodeError(let messages):
-                    XCTAssertTrue(messages[0] == "Message")
+                case .httpError(let message, let statusCode):
+                    XCTAssertEqual(message, "Message")
+                    XCTAssertEqual(statusCode, 200)
                     
                 default:
                     XCTAssertTrue(false)
@@ -1347,6 +1350,10 @@ final class OfflineURLProtocol: URLProtocol {
         if key.hasPrefix("dl-json-csv-") {
             return (200, "text/csv", Data(#"["File is still processing"]"#.utf8))
         }
+        // A 2xx in plain text, as a proxy or a misrouted request may answer.
+        if key.hasPrefix("plain-200-") {
+            return (200, "text/plain", Data("Your request has been queued.".utf8))
+        }
         if request.path.contains("/api/v1/warmup/") {
             // The Warmup endpoints answer with different shapes: an object, a
             // bare number, and CSV for the two downloads.
@@ -1372,6 +1379,9 @@ final class OfflineURLProtocol: URLProtocol {
                 // An HTML page by content type, and one served as CSV.
                 return (200, key.hasPrefix("warm-echo-htmlcsv-") ? "text/csv" : "text/html", Data(page.utf8))
             }
+            // A CSV download answered with nothing, or only blank lines.
+            if key.hasPrefix("warm-csv-empty") { return (200, "text/csv", Data()) }
+            if key.hasPrefix("warm-csv-blank") { return (200, "text/csv", Data("\n  \r\n".utf8)) }
             if key.hasPrefix("warm-json-download") {
                 return (200, "application/json", Data(#"{"detail":"nothing here"}"#.utf8))
             }
@@ -4375,7 +4385,8 @@ extension TransportSafetyTests {
     /// (by content type, or served as text/csv), a JSON body and an empty
     /// body are all errors with their status 200, never CSV text.
     func testAWarmupCsvDownloadRefusesAnythingButCsv() {
-        let keys = ["html-200-warm", "warm-echo-htmlcsv-key", "warm-json-download", "empty-warm"]
+        let keys = ["html-200-warm", "warm-echo-htmlcsv-key", "warm-json-download", "empty-warm",
+                    "warm-csv-empty", "warm-csv-blank"]
         for key in keys {
             let (sdk, warmup) = clients(key)
             let downloads = everyCall(sdk, warmup).filter { $0.0.hasPrefix("warmup download") }
@@ -4540,8 +4551,8 @@ extension TransportSafetyTests {
     /// included, even when its body is exactly what the call would take for
     /// its result: an error with status 200 and no file. The same bodies
     /// under their own content types succeed (on all but the 11 calls whose
-    /// result has another shape, which fail to decode, with no status), so
-    /// the content type alone is what is refused.
+    /// result has another shape, which fail with status 200), so the content
+    /// type alone is what is refused.
     func testAnHtmlContentTypeIsRefusedWhateverTheBody() {
         let (okSdk, okWarmup) = clients("typed-ok-key")
         let control = everyCall(okSdk, okWarmup)
@@ -4586,6 +4597,77 @@ extension TransportSafetyTests {
             } else {
                 XCTFail("redacting changed the error case")
             }
+        }
+    }
+
+    /// A 2xx body the SDK cannot read as the call's answer is an API error
+    /// with status 200 (standard §3) on every public request method, Warmup
+    /// included: plain text, CSV sent as `application/json`, and a long
+    /// non-JSON body. A JSON array, which no call but the raw-JSON ones
+    /// takes, is either their result or such an error. Never a
+    /// `.decodeError` or a bare `NSCocoaErrorDomain` error without a status.
+    /// The downloads may take plain text for the file; any error they give
+    /// still carries the status.
+    func testAnUnreadable2xxBodyIsAnErrorWithStatus200OnEveryCall() {
+        for key in ["plain-200-key", "dl-json-type-key", "malformed-key", "dl-json-array-key"] {
+            let (sdk, warmup) = clients(key)
+            let calls = everyCall(sdk, warmup)
+            // That everyCall reaches every public request method is checked
+            // against the sources by testTheSweepCoversEveryPublicRequestMethod.
+            XCTAssertGreaterThanOrEqual(calls.count, 64 + 26)
+            for (name, call) in calls {
+                try? FileManager.default.removeItem(atPath: download)
+                let (error, sent) = run("\(key) \(name)", call)
+                XCTAssertEqual(sent.count, 1, "\(key) \(name)")
+                let isDownload = name.lowercased().contains("getfile") || name.hasPrefix("warmup download")
+                guard let error = error else {
+                    if !isDownload && key != "dl-json-array-key" {
+                        XCTFail("\(key) \(name) took an unreadable body for its result")
+                    }
+                    continue
+                }
+                guard case .httpError(_, let status)? = error as? ZBError else {
+                    XCTFail("\(key) \(name): not an httpError: \(error)")
+                    continue
+                }
+                XCTAssertEqual(status, 200, "\(key) \(name): \(describe(error))")
+            }
+        }
+    }
+
+    /// Every spelling of a secret composed from the encodings an echoing
+    /// server can apply, up to two deep, is masked whole: {as sent,
+    /// JSON-escaped, JSON-escaped with `\/`} x {as is, percent-encoded with
+    /// `%20`, form-encoded with `+`}, and JSON-escaped twice with and
+    /// without `\/`. The encoders are Foundation's own, apart from the
+    /// SDK's list, so dropping any one of the SDK's generators fails here.
+    func testEveryComposedSpellingOfASecretIsMasked() {
+        let secret = #"se cr"e/t+k%e&y=v<a>l'u\e"#
+        func json(_ slash: Bool) -> (String) -> String {
+            return { text in
+                let options: JSONSerialization.WritingOptions = slash ? [] : [.withoutEscapingSlashes]
+                let data = try! JSONSerialization.data(withJSONObject: [text], options: options)
+                return String(String(decoding: data, as: UTF8.self).dropFirst(2).dropLast(2))
+            }
+        }
+        var strict = CharacterSet.alphanumerics
+        strict.insert(charactersIn: "-._~")
+        let percent: (String) -> String = { $0.addingPercentEncoding(withAllowedCharacters: strict)! }
+        let plus: (String) -> String = { percent($0).replacingOccurrences(of: "%20", with: "+") }
+        let identity: (String) -> String = { $0 }
+        var forms: [String: String] = [:]
+        for (escapeName, escape) in [("raw", identity), ("json", json(false)), ("json\\/", json(true))] {
+            for (urlName, url) in [("", identity), (" %20", percent), (" +", plus)] {
+                forms[escapeName + urlName] = url(escape(secret))
+            }
+        }
+        forms["json json"] = json(false)(json(false)(secret))
+        forms["json\\/ json\\/"] = json(true)(json(true)(secret))
+        // Each generator changes the secret, so no form stands in for another.
+        XCTAssertEqual(Set(forms.values).count, 11, "\(forms)")
+        for (name, form) in forms.sorted(by: { $0.key < $1.key }) {
+            let text = "Bad request: [\(form)] end"
+            XCTAssertEqual(ZeroBounceSDK.redacting([secret], in: text), "Bad request: [***] end", "\(name): \(form)")
         }
     }
 }

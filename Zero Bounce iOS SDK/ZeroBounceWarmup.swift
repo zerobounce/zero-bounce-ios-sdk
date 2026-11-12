@@ -710,18 +710,19 @@ public class ZeroBounceWarmup {
             switch result {
             case .failure(let error):
                 completion(.Failure(error))
-            case .success(let (data, _)):
+            case .success(let (data, response)):
                 // 204 and an empty 200 are the documented empty successes.
                 if data.isEmpty {
                     completion(.Success(nil))
                     return
                 }
+                // A 2xx that is not JSON (plain text, CSV sent as
+                // application/json) is an API error with its status.
                 guard let object = try? JSONSerialization.jsonObject(
                     with: data, options: [.fragmentsAllowed]
                 ) else {
-                    completion(.Failure(ZBError.decodeError(messages: [
-                        self.redact(ZBError.message(from: data, statusCode: 200), secrets)
-                    ])))
+                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                    completion(.Failure(ZBError.unreadableBody(data, statusCode: statusCode)))
                     return
                 }
                 completion(.Success(object))

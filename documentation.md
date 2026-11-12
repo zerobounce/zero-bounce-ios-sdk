@@ -52,13 +52,13 @@ ZeroBounceSDK.shared.validate(email: email, ipAddress: ipAddress) { result in
             // No API key, or an empty one: nothing was sent.
             break
         case .decodeError(let messages):
-            // A body that could not be decoded, or an argument rejected
-            // before the request was sent.
+            // An argument rejected before the request was sent.
             NSLog("messages=\(messages)")
         case .httpError(let message, let statusCode):
             // An error the API reported, with its HTTP status: a 4xx/5xx, or
             // an HTTP 200 whose body was an error (such as an invalid key),
-            // "success": false, empty or an HTML page.
+            // "success": false, empty, an HTML page, or a body that is not
+            // the call's answer (not JSON, or JSON of another shape).
             NSLog("HTTP \(statusCode): \(message)")
         default:
             break

@@ -21,8 +21,9 @@ public enum ZBError: LocalizedError {
     /// with, so a caller can tell 429 from 500 without parsing the message.
     /// The status is 200 when the API answered a failure on a success code:
     /// `"success": false` (`getfile` and `deletefile` for an unknown file id),
-    /// a dead key's error-only body, and `validateBatch`'s account-level
-    /// "all" error.
+    /// a dead key's error-only body, `validateBatch`'s account-level
+    /// "all" error, and a body that is not the call's answer (not JSON, or
+    /// JSON of another shape).
     case httpError(message: String, statusCode: Int)
 
     /// The HTTP status behind this error, when there was one.
@@ -63,23 +64,6 @@ public enum ZBError: LocalizedError {
         }
         return ["error", "error_message", "Error"].contains { key in
             guard let text = object[key] as? String else { return false }
-            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-    }
-
-    /// Whether a JSON object body is made only of message keys ("error",
-    /// "message", "error_message", "Message", "Error", "detail") with at least
-    /// one non-empty text: how the API reports an error with no "success"
-    /// field to gate on.
-    static func messageOnlyBody(_ data: Data) -> Bool {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              !object.isEmpty else {
-            return false
-        }
-        let keys: Set<String> = ["error", "message", "error_message", "Message", "Error", "detail"]
-        guard object.keys.allSatisfy({ keys.contains($0) }) else { return false }
-        return object.values.contains { value in
-            guard let text = value as? String else { return false }
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
@@ -154,30 +138,23 @@ public enum ZBError: LocalizedError {
         )
     }
 
-    static func decodeError(jsonData: Data) -> ZBError {
-        guard let response = try? JSONSerialization.jsonObject(with: jsonData, options: .mutableLeaves) as? [String: Any] else {
-            return .decodeError(messages: [])
+    /// The error for a 2xx body that is not the call's answer: not JSON
+    /// (plain text, CSV sent as `application/json`), or JSON of another
+    /// shape. The API answered, so it is an API error with the HTTP status
+    /// (standard §3), never `.decodeError`, which is left for arguments
+    /// refused before sending.
+    static func unreadableBody(_ data: Data, statusCode: Int) -> ZBError {
+        let text = message(from: data, statusCode: statusCode)
+        let isJson = (try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])) != nil
+        if isJson || text.hasPrefix("ZeroBounce returned") || text.hasPrefix("Empty response") {
+            return .httpError(message: text, statusCode: statusCode)
         }
-        var messages: [String] = []
-        for key in ["message", "error_message", "error"] {
-            if let s = response[key] as? String {
-                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !t.isEmpty { messages.append(t) }
-            }
-        }
-        if messages.isEmpty {
-            for (key, value) in response where key != "success" {
-                if let s = value as? String {
-                    let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !t.isEmpty { messages.append(t) }
-                } else if let arr = value as? [String] {
-                    messages.append(contentsOf: arr)
-                }
-            }
-        }
-        return .decodeError(messages: messages)
+        return .httpError(
+            message: "ZeroBounce returned a response that is not valid JSON: \(text)",
+            statusCode: statusCode
+        )
     }
-    
+
     static func message(from data: Data, statusCode: Int) -> String {
         let body = String(data: data, encoding: .utf8) ?? ""
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
