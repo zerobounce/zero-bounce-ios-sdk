@@ -121,9 +121,57 @@ public class ZeroBounceSDK {
             forms.insert(secret)
             forms.insert(secret.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? secret)
             forms.insert(secret.addingPercentEncoding(withAllowedCharacters: strict) ?? secret)
-            forms.insert(secret.replacingOccurrences(of: "/", with: "\\/"))
+            forms.formUnion(jsonEscapedForms(secret))
         }
         return forms.sorted { $0.count > $1.count }
+    }
+
+    /// `secret` as a JSON serializer may write it inside a string: `\` and
+    /// `"` escaped, with or without `\/` for "/" (Foundation writes it), and
+    /// also with `"`, `+`, `<`, `>`, `&`, `'`, `` ` `` and non-ASCII as
+    /// `\uXXXX` (.NET's System.Text.Json and HTML-safe encoders), in either
+    /// hex case.
+    internal static func jsonEscapedForms(_ secret: String) -> Set<String> {
+        func escaped(slash: Bool, htmlSafe: Bool, upper: Bool) -> String {
+            let hex = upper ? "\\u%04X" : "\\u%04x"
+            var out = ""
+            for scalar in secret.unicodeScalars {
+                switch scalar.value {
+                case 0x5C: out += "\\\\"
+                case 0x2F where slash: out += "\\/"
+                case 0x08: out += "\\b"
+                case 0x0C: out += "\\f"
+                case 0x0A: out += "\\n"
+                case 0x0D: out += "\\r"
+                case 0x09: out += "\\t"
+                case 0x22, 0x2B, 0x3C, 0x3E, 0x26, 0x27, 0x60:
+                    if htmlSafe {
+                        out += String(format: hex, scalar.value)
+                    } else if scalar.value == 0x22 {
+                        out += "\\\""
+                    } else {
+                        out.unicodeScalars.append(scalar)
+                    }
+                case ..<0x20:
+                    out += String(format: hex, scalar.value)
+                case 0x7F... where htmlSafe:
+                    // Non-ASCII; beyond the BMP as a UTF-16 surrogate pair.
+                    for unit in String(scalar).utf16 { out += String(format: hex, UInt32(unit)) }
+                default:
+                    out.unicodeScalars.append(scalar)
+                }
+            }
+            return out
+        }
+        var forms = Set<String>()
+        for slash in [false, true] {
+            for htmlSafe in [false, true] {
+                for upper in [false, true] {
+                    forms.insert(escaped(slash: slash, htmlSafe: htmlSafe, upper: upper))
+                }
+            }
+        }
+        return forms
     }
 
     /// `text` with every form of every secret replaced by "***".
@@ -1413,10 +1461,8 @@ public class ZeroBounceSDK {
                 )))
                 return
             }
-            let message = ZBError.message(from: probe, statusCode: statusCode)
-            if message.contains("HTML error page") || ZBError.successMeansFailure(probe)
-                || ZBError.looksLikeJsonObject(probe) {
-                completion(.Failure(ZBError.httpError(message: message, statusCode: statusCode)))
+            if let failure = ZBError.downloadFailure(probe, response: response, statusCode: statusCode) {
+                completion(.Failure(failure))
                 return
             }
 
@@ -1478,16 +1524,12 @@ public class ZeroBounceSDK {
         sendRequest(url: requestURL.absoluteString) { result in
             switch result {
             case .success(let response, let data):
-                // getfile answers with the file or not at all. An HTML page,
-                // an empty body or a JSON body - whatever its keys and content
-                // type - is an error that keeps the HTTP status.
+                // getfile answers with the file or not at all. An HTML page
+                // or JSON (by content type or by body) or an empty body is an
+                // error that keeps the HTTP status.
                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
-                if ZBError.message(from: data, statusCode: statusCode).contains("HTML error page")
-                    || data.isEmpty || ZBError.looksLikeJsonObject(data) {
-                    completion(.Failure(ZBError.httpError(
-                        message: ZBError.message(from: data, statusCode: statusCode),
-                        statusCode: statusCode
-                    )))
+                if let failure = ZBError.downloadFailure(data, response: response, statusCode: statusCode) {
+                    completion(.Failure(failure))
                     return
                 }
                 
@@ -2039,13 +2081,11 @@ public class ZeroBounceSDK {
         sendRequest(url: url) { result in
             switch result {
             case .success(let response, let data):
-                // As getfile: a JSON body is an error with the HTTP status.
-                if ZBError.looksLikeJsonObject(data) {
-                    let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
-                    completion(.Failure(ZBError.httpError(
-                        message: ZBError.message(from: data, statusCode: statusCode),
-                        statusCode: statusCode
-                    )))
+                // As getfile: JSON or an HTML page (by content type or by
+                // body) is an error with the HTTP status.
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                if let failure = ZBError.downloadFailure(data, response: response, statusCode: statusCode) {
+                    completion(.Failure(failure))
                     return
                 }
                 do {

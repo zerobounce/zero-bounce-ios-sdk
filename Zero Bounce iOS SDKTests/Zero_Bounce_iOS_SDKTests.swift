@@ -782,9 +782,10 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             string: "\(ZeroBounceSDK.shared.bulkApiBaseUrl)/getfile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
-        // getfile answers with the file itself; a JSON body would be an error.
+        // getfile answers with the file itself; a JSON body or content type
+        // would be an error. Mocker has no text/csv, so a download type.
         let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
-        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        let mock = Mock(url: apiEndpoint, dataType: .zip, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
         let requestExpectation = expectation(description: "Request should finish")
@@ -810,9 +811,10 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             string: "\(ZeroBounceSDK.shared.bulkApiScoringBaseUrl)/getfile?api_key=\(ZeroBounceSDK.shared.apiKey!)&file_id=\(fileId)"
         )!
         
-        // getfile answers with the file itself; a JSON body would be an error.
+        // getfile answers with the file itself; a JSON body or content type
+        // would be an error. Mocker has no text/csv, so a download type.
         let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
-        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        let mock = Mock(url: apiEndpoint, dataType: .zip, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
         let requestExpectation = expectation(description: "Request should finish")
@@ -1003,9 +1005,10 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             URLQueryItem(name: "activity_data", value: "true")
         ]
         let apiEndpoint = comp!.url!
-        // getfile answers with the file itself; a JSON body would be an error.
+        // getfile answers with the file itself; a JSON body or content type
+        // would be an error. Mocker has no text/csv, so a download type.
         let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
-        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        let mock = Mock(url: apiEndpoint, dataType: .zip, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
         let requestExpectation = expectation(description: "Request should finish")
@@ -1032,9 +1035,10 @@ class Zero_Bounce_iOS_SDKTests: XCTestCase {
             URLQueryItem(name: "download_type", value: "phase_2")
         ]
         let apiEndpoint = comp!.url!
-        // getfile answers with the file itself; a JSON body would be an error.
+        // getfile answers with the file itself; a JSON body or content type
+        // would be an error. Mocker has no text/csv, so a download type.
         let mockedData = Data("email,status\nexample@gmail.com,valid\n".utf8)
-        let mock = Mock(url: apiEndpoint, dataType: .json, statusCode: 200, data: [.get: mockedData])
+        let mock = Mock(url: apiEndpoint, dataType: .zip, statusCode: 200, data: [.get: mockedData])
         mock.register()
 
         let requestExpectation = expectation(description: "Request should finish")
@@ -1066,6 +1070,34 @@ struct OfflineRecord {
     let authHeader: String
     /// The timeout the request was built with.
     let timeout: TimeInterval
+}
+
+/// A secret as JSON serializers write it inside a string, worked out
+/// apart from the SDK's own list: Foundation's (`\"` and `\/`), the same
+/// without `\/`, and .NET's System.Text.Json (`"`, `+`, `<`, `>`, `&`, `'`
+/// and non-ASCII as `\uXXXX`) in upper and lower case hex.
+func jsonEscapedEchoes(_ secret: String) -> [String] {
+    var forms: [String] = []
+    if let data = try? JSONSerialization.data(withJSONObject: [secret]),
+       let text = String(data: data, encoding: .utf8) {
+        let inner = String(text.dropFirst(2).dropLast(2))
+        forms.append(inner)
+        forms.append(inner.replacingOccurrences(of: "\\/", with: "/"))
+    }
+    for format in ["\\u%04X", "\\u%04x"] {
+        var dotnet = ""
+        for unit in secret.utf16 {
+            if unit == 0x5C {
+                dotnet += "\\\\"
+            } else if unit < 0x20 || unit > 0x7E || "\"+<>&'`".utf16.contains(unit) {
+                dotnet += String(format: format, UInt32(unit))
+            } else {
+                dotnet += String(UnicodeScalar(UInt8(unit)))
+            }
+        }
+        forms.append(dotnet)
+    }
+    return forms
 }
 
 final class OfflineURLProtocol: URLProtocol {
@@ -1205,6 +1237,18 @@ final class OfflineURLProtocol: URLProtocol {
             if key.hasPrefix("echo-400-json-") {
                 return (400, "application/json", json(["error": "Invalid API key \(key)"]))
             }
+            // A plain-text 400 quoting the key, and any SMTP password sent,
+            // only in their JSON-escaped forms, as a proxy echoing a JSON
+            // request or a serialized error would.
+            if key.hasPrefix("echo-400-escaped-") {
+                var secrets = [key]
+                if let object = try? JSONSerialization.jsonObject(with: Data(request.body.utf8)) as? [String: Any],
+                   let password = object["password"] as? String {
+                    secrets.append(password)
+                }
+                let echoes = secrets.flatMap(jsonEscapedEchoes).joined(separator: " ; ")
+                return (400, "text/plain", Data("Bad request: \(echoes)".utf8))
+            }
         }
         if key.hasPrefix("html-403-") || key.hasPrefix("html-200-") {
             return (key.hasPrefix("html-403-") ? 403 : 200, "text/html", htmlPage())
@@ -1253,6 +1297,25 @@ final class OfflineURLProtocol: URLProtocol {
             let json = #"{"type":"https://developers.cloudflare.com/support/error-1020/","title":"Error 1020: Access denied","status":403,"error_code":1020,"cloudflare_error":true}"#
             return (403, "application/json", Data(json.utf8))
         }
+        // A 200 to a download that is not a file but does not look like the
+        // usual error: an HTML page whose body has no tags a body check
+        // would see, JSON that is not an object, and each kind under the
+        // other's content type.
+        if key.hasPrefix("dl-html-bare-") {
+            return (200, "text/html; charset=UTF-8", Data("<p>Access denied by proxy</p>".utf8))
+        }
+        if key.hasPrefix("dl-html-plain-") {
+            return (200, "text/html", Data("Access denied by proxy".utf8))
+        }
+        if key.hasPrefix("dl-json-array-") {
+            return (200, "application/json", Data(#"["error"]"#.utf8))
+        }
+        if key.hasPrefix("dl-json-type-") {
+            return (200, "application/json; charset=utf-8", Data("email,status\na@example.com,valid\n".utf8))
+        }
+        if key.hasPrefix("dl-json-csv-") {
+            return (200, "text/csv", Data(#"["File is still processing"]"#.utf8))
+        }
         if request.path.contains("/api/v1/warmup/") {
             // The Warmup endpoints answer with different shapes: an object, a
             // bare number, and CSV for the two downloads.
@@ -1269,7 +1332,8 @@ final class OfflineURLProtocol: URLProtocol {
                 }
                 let encoded = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
                 let echo = "key \(key) url https://\(request.host)\(request.rawPath)?api_key=\(encoded) "
-                    + "json \(key.replacingOccurrences(of: "/", with: "\\/")) password \(password) body \(request.body)"
+                    + "json \(jsonEscapedEchoes(key).joined(separator: " ")) password \(password) "
+                    + "\(jsonEscapedEchoes(password).joined(separator: " ")) body \(request.body)"
                 if key.hasPrefix("warm-echo-text-") {
                     return (200, "text/plain", Data("Unexpected request: \(echo)".utf8))
                 }
@@ -3519,9 +3583,9 @@ final class TransportSafetyTests: XCTestCase {
     private var liveSession: URLSession!
     private var csvPath = ""
     private let download = NSTemporaryDirectory() + "zb-transport-download.csv"
-    /// The SMTP password the sweep sends; "|" and "/" give it distinct
-    /// percent-encoded and JSON-escaped forms.
-    static let smtpPassword = "smtp-pa|ss/word"
+    /// The SMTP password the sweep sends; "|", "/", '"', "+" and "%" give
+    /// it distinct percent-encoded and JSON-escaped forms.
+    static let smtpPassword = "smtp-pa|ss/wo\"r%d+"
 
     override func setUp() {
         super.setUp()
@@ -4173,7 +4237,7 @@ extension TransportSafetyTests {
             key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key,
             key.addingPercentEncoding(withAllowedCharacters: strict) ?? key,
             key.replacingOccurrences(of: "/", with: "\\/"),
-        ]))
+        ] + jsonEscapedEchoes(key)))
     }
 
     private func leaks(_ error: Error, _ key: String) -> String? {
@@ -4198,13 +4262,16 @@ extension TransportSafetyTests {
 
     /// A body that quotes the key never hands it back in an error, whatever
     /// the status and shape, on every public request method. The key has a
-    /// "|" (percent-encoded in a URL) and a "/" (escaped in JSON) so each of
-    /// its forms can be told apart.
+    /// "|" and "%" (percent-encoded in a URL) and a "/", '"' and "+" (escaped
+    /// in JSON, "+" by .NET) so each of its forms can be told apart. The
+    /// escaped-only echo quotes the SMTP password of testSmtpConfiguration
+    /// too.
     func testAnErrorBuiltFromTheBodyNeverCarriesTheApiKey() {
-        let modes = ["echo-200-error-", "echo-200-success-false-", "echo-400-text-", "echo-400-json-"]
+        let modes = ["echo-200-error-", "echo-200-success-false-", "echo-400-text-", "echo-400-json-",
+                     "echo-400-escaped-"]
         var failures = 0
         for mode in modes {
-            let key = mode + "se|cr/et-Key"
+            let key = mode + "se|cr/et\"K%e+y"
             let (sdk, warmup) = clients(key)
             for (name, call) in everyCall(sdk, warmup) {
                 try? FileManager.default.removeItem(atPath: download)
@@ -4221,13 +4288,16 @@ extension TransportSafetyTests {
                 if let leak = leaks(error, key) {
                     XCTFail("\(mode) \(name): \(leak)")
                 }
+                if let leak = leaks(error, TransportSafetyTests.smtpPassword) {
+                    XCTFail("\(mode) \(name) leaked the SMTP password: \(leak)")
+                }
                 if mode.hasPrefix("echo-400-") {
                     XCTAssertEqual((error as? ZBError)?.statusCode, 400, "\(mode) \(name): \(describe(error))")
                 }
                 XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(mode) \(name) saved the error as a file")
             }
         }
-        XCTAssertGreaterThanOrEqual(failures, 4 * 64 + 2 * 26 + 2 * 2)
+        XCTAssertGreaterThanOrEqual(failures, 5 * 64 + 3 * 26 + 2 * 2)
     }
 
     /// Warmup answers that are neither its JSON nor a CSV file: a 200 in
@@ -4240,7 +4310,7 @@ extension TransportSafetyTests {
         let modes = ["warm-echo-text-", "warm-echo-html-", "warm-echo-htmlcsv-"]
         var checked = 0
         for mode in modes {
-            let key = mode + "se|cr/et-Key"
+            let key = mode + "se|cr/et\"K%e+y"
             let (sdk, warmup) = clients(key)
             let calls = everyCall(sdk, warmup).filter { $0.0.hasPrefix("warmup ") }
             XCTAssertGreaterThanOrEqual(calls.count, 26)
@@ -4286,6 +4356,33 @@ extension TransportSafetyTests {
                     continue
                 }
                 XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(key) \(name): \(describe(error))")
+            }
+        }
+    }
+
+    /// Every download (getfile and its streaming, scoring, email finder and
+    /// domain search forms, and the Warmup CSV downloads) refuses a 200 that
+    /// is an HTML page by content type alone (no tags in the body), JSON by
+    /// content type alone, and a JSON array by body alone: each is an error
+    /// with status 200, and no file is written.
+    func testEveryDownloadRefusesHtmlOrJsonByContentTypeOrBody() {
+        let keys = ["dl-html-bare-key", "dl-html-plain-key", "dl-json-array-key", "dl-json-type-key", "dl-json-csv-key"]
+        for key in keys {
+            let (sdk, warmup) = clients(key)
+            let downloads = everyCall(sdk, warmup).filter {
+                $0.0.lowercased().contains("getfile") || $0.0.hasPrefix("warmup download")
+            }
+            XCTAssertEqual(downloads.count, 10, downloads.map { $0.0 }.joined(separator: ", "))
+            for (name, call) in downloads {
+                try? FileManager.default.removeItem(atPath: download)
+                let (error, sent) = run("\(key) \(name)", call)
+                XCTAssertEqual(sent.count, 1, "\(key) \(name)")
+                guard let error = error else {
+                    XCTFail("\(key) \(name) took the body for a file")
+                    continue
+                }
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(key) \(name): \(describe(error))")
+                XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(key) \(name) saved the body as a file")
             }
         }
     }

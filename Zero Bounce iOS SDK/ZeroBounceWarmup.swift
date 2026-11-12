@@ -710,7 +710,7 @@ public class ZeroBounceWarmup {
             switch result {
             case .failure(let error):
                 completion(.Failure(error))
-            case .success(let data):
+            case .success(let (data, _)):
                 // 204 and an empty 200 are the documented empty successes.
                 if data.isEmpty {
                     completion(.Success(nil))
@@ -739,15 +739,21 @@ public class ZeroBounceWarmup {
             switch result {
             case .failure(let error):
                 completion(.Failure(error))
-            case .success(let data):
+            case .success(let (data, response)):
                 let text = String(data: data, encoding: .utf8) ?? ""
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 // An error comes back as JSON, and a proxy or block page as
-                // HTML (whatever its content type), so neither is a file.
-                let message = ZBError.message(from: data, statusCode: 200)
-                if trimmed.isEmpty || trimmed.hasPrefix("{") || trimmed.hasPrefix("[")
-                    || message.contains("HTML error page") {
-                    completion(.Failure(ZBError.httpError(message: message, statusCode: 200)))
+                // HTML, by content type or by body, so neither is a file.
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                if let failure = ZBError.downloadFailure(data, response: response, statusCode: statusCode) {
+                    completion(.Failure(failure))
+                    return
+                }
+                if trimmed.isEmpty || trimmed.hasPrefix("[") {
+                    completion(.Failure(ZBError.httpError(
+                        message: ZBError.message(from: data, statusCode: statusCode),
+                        statusCode: statusCode
+                    )))
                     return
                 }
                 completion(.Success(text))
@@ -761,7 +767,7 @@ public class ZeroBounceWarmup {
         query: [URLQueryItem],
         body: [String: Any]?,
         secrets: [String],
-        completion: @escaping (Result<Data, Error>) -> ()
+        completion: @escaping (Result<(Data, URLResponse), Error>) -> ()
     ) {
         guard let request = buildRequest(method: method, path: path, query: query, body: body) else {
             if apiKey == nil || apiKey?.isEmpty == true {
@@ -784,10 +790,11 @@ public class ZeroBounceWarmup {
                 ])))
                 return
             }
-            guard let statusCode = (response as? HTTPURLResponse)?.statusCode else {
+            guard let http = response as? HTTPURLResponse else {
                 completion(.failure(ZBError.noResponse))
                 return
             }
+            let statusCode = http.statusCode
             let payload = data ?? Data()
             if 300..<400 ~= statusCode {
                 completion(.failure(ZBError.httpError(
@@ -803,7 +810,7 @@ public class ZeroBounceWarmup {
                 )))
                 return
             }
-            completion(.success(payload))
+            completion(.success((payload, http)))
         }.resume()
     }
 }

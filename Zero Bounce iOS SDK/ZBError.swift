@@ -92,6 +92,45 @@ public enum ZBError: LocalizedError {
         return head.hasPrefix("{")
     }
 
+    /// Whether a body is JSON rather than a file: an object, or an array
+    /// that parses as JSON (a CSV line can start with "[" too).
+    static func looksLikeJson(_ data: Data) -> Bool {
+        if looksLikeJsonObject(data) { return true }
+        let head = String(decoding: data.prefix(64), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return head.hasPrefix("[") && (try? JSONSerialization.jsonObject(with: data)) != nil
+    }
+
+    /// Why a 2xx answer to a file download is not the file, or nil when it
+    /// is one. An empty body, an HTML page (by content type or by body) and
+    /// JSON (by content type or by body) are errors that keep the status:
+    /// the API answers with JSON only to say why there is no file, and a
+    /// proxy or block page may come as `text/html` with no tags a body check
+    /// would see. `data` may be only the start of a large download.
+    static func downloadFailure(_ data: Data, response: URLResponse?, statusCode: Int) -> ZBError? {
+        let type = (response?.mimeType ?? "").lowercased()
+        let htmlType = type == "text/html" || type == "application/xhtml+xml"
+        let jsonType = type == "application/json" || type == "text/json" || type.hasSuffix("+json")
+        let message = self.message(from: data, statusCode: statusCode)
+        if data.isEmpty || message.contains("HTML error page") || successMeansFailure(data)
+            || looksLikeJsonObject(data) {
+            return .httpError(message: message, statusCode: statusCode)
+        }
+        if htmlType {
+            return .httpError(
+                message: "ZeroBounce returned an HTML page (\(type)) instead of a file: \(message)",
+                statusCode: statusCode
+            )
+        }
+        if jsonType || looksLikeJson(data) {
+            return .httpError(
+                message: "ZeroBounce returned JSON instead of a file: \(message)",
+                statusCode: statusCode
+            )
+        }
+        return nil
+    }
+
     static func decodeError(jsonData: Data) -> ZBError {
         guard let response = try? JSONSerialization.jsonObject(with: jsonData, options: .mutableLeaves) as? [String: Any] else {
             return .decodeError(messages: [])
