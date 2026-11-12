@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `validate` reported the bare `{"Message": "Greylist validation still in progress, please try again later."}` that the API answers for a repeated greylisted address as `ZBError.decodeError(messages:)`, although the README said its text lands on `ZBValidateResponse.message`. It is now a result: `message` holds the text, `status` and `processedAt` are nil, and `address` is empty (the API sends none). A body with neither `address` nor `Message` is still a decode error.
 - `deleteInboxPlacementTest` and `setInboxPlacementWebhook` returned `.Success` with whatever part of the body had arrived when a 200 was cut short (fewer bytes than its `Content-Length`, then the connection closed): URLSession reports that as `URLError(.networkConnectionLost)` for GET and POST requests, but not for these DELETE and PUT requests. Every `ZeroBounceSDK` call now compares the bytes received with the announced `Content-Length` and fails with `URLError(.networkConnectionLost)` when the body is short; the streaming downloads save no file. A compressed (`Content-Encoding`) body is not compared.
 - `ZeroBounceWarmup`'s PUT and DELETE calls (`updateSendingAccount`, `deleteSendingAccount`, `changeFromAddress`, `setEngagementRule`, `updateCustomEngagement`, `deleteCustomEngagement`) had the same gap and returned the partial body as `.Success`. Every Warmup call now fails on a body cut short, with an error whose message says the network connection was lost, as its other transport errors do.
+- `ZeroBounceWarmup.downloadSeeds` and `downloadStatistics` returned an HTML page answered with a 2xx (a proxy or block page, as `text/html` or served as `text/csv`) as `.Success` with the page as CSV text. They now fail with `ZBError.httpError(message:statusCode:)` and status 200, as they already did for a JSON or empty body; the message names the page's title, with the key masked.
+- `ZeroBounceWarmup.addSendingAccount` could not send a fractional `timezone_offset` for a ZB managed account: `ZBWarmupManagedSending.timezoneOffset` was an `Int`, while the API takes -11.0 to 14.0 hours (India is 5.5). The new `timezoneOffsetHours: Double?` (initializer parameter and property) is sent as a number, accepts -11.0 to 14.0 including fractions, and rejects anything outside that range (and NaN or infinity) before sending; a whole number still goes out as an integer (`3`). Existing code keeps compiling: the `Int` initializer label and property remain, deprecated.
 
 ### Security
 
@@ -28,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Offline tests over every public request method (64 + 26): a body quoting the key in four shapes (200 `error`, 200 `success: false`, 400 text quoting the URL, 400 JSON) never puts the key into an error, and a 200 cut short of its `Content-Length` on a real loopback socket is a transport error with no partial result or file.
 - Offline tests that fail when a guard is removed: `"success": false` on an HTTP 200 is an error with status 200 on all 64 `ZeroBounceSDK` request methods; a non-2xx answer to `getFileStreaming` / `scoringGetFileStreaming` is an error with its status and saves no file; the API key is masked in nested underlying errors and in lists of them.
+- `sendFile` and `scoringSendFile` (file path and in-memory data forms) take an optional `removeDuplicate: Bool?`, sent as the documented `remove_duplicate` form field (`true`/`false`) only when set. The API removes duplicates by default and answers HTTP 400 when that would drop more than 50% of the rows; `removeDuplicate: false` turns it off. The parameter has a default, so existing calls are unchanged.
+- Offline tests for the Warmup client over all 26 methods: a 200 in plain text or HTML (as `text/html` and as `text/csv`) that quotes the Warmup key and the request body with the SMTP password never puts either secret into an error, and the CSV downloads refuse an HTML, JSON or empty 200.
+
+### Deprecated
+
+- `ZBWarmupManagedSending.init(weekdaysOnly:timezone:timezoneOffset:warmupStartDate:)` and the `timezoneOffset: Int?` property, in favour of `timezoneOffsetHours: Double?`. The deprecated property reads `nil` when the offset is fractional.
 
 ## [3.0.1] - 2026-11-11
 

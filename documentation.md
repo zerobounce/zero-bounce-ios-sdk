@@ -207,6 +207,9 @@ let genderColumn = 3;               // The index of "gender" column in the file
 let ipAddressColumn = 3;            // The index of "IP address" column in the file
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
 let returnUrl = "https://domain.com/called/after/processing/request";
+// Optional; when nil it is not sent and the API removes duplicates. If more than 50% of the rows are
+// duplicates and this is true, the API answers HTTP 400 instead of accepting the file.
+let removeDuplicate: Bool? = false
 let allowPhase2: Bool? = true // optional; [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file)
 
 ZeroBounceSDK.shared.sendFile(
@@ -218,7 +221,8 @@ ZeroBounceSDK.shared.sendFile(
     genderColumn: genderColumn,
     ipAddressColumn: ipAddressColumn,
     hasHeaderRow: hasHeaderRow,
-    allowPhase2: allowPhase2
+    allowPhase2: allowPhase2,
+    removeDuplicate: removeDuplicate
 ) { result in
     switch result {
     case .Success(let response):
@@ -296,13 +300,17 @@ let filePath = "<FILE_PATH>";       // Path to the local csv or txt file
 let emailAddressColumn = 3;         // The index of "email" column in the file. Index starts at 1
 let hasHeaderRow = true;            // If this is `true` the first row is considered as table headers
 let returnUrl = "https://domain.com/called/after/processing/request";
+// Optional; when nil it is not sent and the API removes duplicates. If more than 50% of the rows are
+// duplicates and this is true, the API answers HTTP 400 instead of accepting the file.
+let removeDuplicate: Bool? = false
 // allowPhase2 is validation bulk only.
 
 ZeroBounceSDK.shared.scoringSendFile(
     filePath: filePath,
     emailAddressColumn: emailAddressColumn,
     returnUrl: returnUrl,
-    hasHeaderRow: hasHeaderRow
+    hasHeaderRow: hasHeaderRow,
+    removeDuplicate: removeDuplicate
 ) { result in
     switch result {
     case .Success(let response):
@@ -619,6 +627,24 @@ warmup.addSendingAccount(
     fromAddress: "sender@example.com",
     onboardingModel: ZeroBounceWarmup.selfManaged,
     options: ZBWarmupAddSendingAccountOptions(engagementRuleId: 0, ignoreConflict: true)
+) { _ in }
+
+// Or let ZeroBounce run it. timezoneOffsetHours is -11.0 to 14.0 and may be
+// fractional (5.5); it replaces the whole-hour `timezoneOffset`, now deprecated.
+warmup.addSendingAccount(
+    fromAddress: "sender@example.com",
+    onboardingModel: ZeroBounceWarmup.zbManaged,
+    options: ZBWarmupAddSendingAccountOptions(
+        emailContent: ZBWarmupEmailContent(
+            companyName: "Example", companyWebsite: "https://example.com",
+            companyDescription: "What the company does", typesOfEmails: ["newsletter"],
+            exampleEmail: "A typical message"
+        ),
+        managedSending: ZBWarmupManagedSending(
+            weekdaysOnly: true, timezone: "Asia/Kolkata", timezoneOffsetHours: 5.5,
+            warmupStartDate: "2026-12-01"
+        )
+    )
 ) { _ in }
 
 // A custom rule: replyPct 5-45, importantPct 5-40, clickPct 0-70 and at most

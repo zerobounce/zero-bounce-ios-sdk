@@ -1087,6 +1087,10 @@ public class ZeroBounceSDK {
     /// - parameter genderColumn: The column index of the gender column
     /// - parameter ipAddressColumn: The IP Address the email signed up from
     /// - parameter hasHeaderRow: If the first row from the submitted file is a header row. true or false
+    /// - parameter allowPhase2: Validate catch-all emails in a second phase (Verify+). Not sent when nil
+    /// - parameter removeDuplicate: Whether the API removes duplicate emails. Not sent when nil, and the API
+    ///   then removes them (default true). When more than 50% of the rows are duplicates and this is true,
+    ///   the API answers HTTP 400 instead of accepting the file. `scoringSendFile` takes it too.
     ///
     public func sendFile(
         filePath: String,
@@ -1098,12 +1102,13 @@ public class ZeroBounceSDK {
         ipAddressColumn: Int? = nil,
         hasHeaderRow: Bool = false,
         allowPhase2: Bool? = nil,
+        removeDuplicate: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         _sendFile(scoring: false, filePath: filePath, emailAddressColumn: emailAddressColumn,
                   returnUrl: returnUrl, firstNameColumn: firstNameColumn, lastNameColumn:lastNameColumn, genderColumn: genderColumn,
                   ipAddressColumn: ipAddressColumn, hasHeaderRow: hasHeaderRow, allowPhase2: allowPhase2,
-                  completion: completion)
+                  removeDuplicate: removeDuplicate, completion: completion)
     }
     
     ///
@@ -1120,12 +1125,13 @@ public class ZeroBounceSDK {
         ipAddressColumn: Int? = nil,
         hasHeaderRow: Bool = false,
         allowPhase2: Bool? = nil,
+        removeDuplicate: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         _sendFileWithData(scoring: false, fileData: fileData, fileName: fileName, emailAddressColumn: emailAddressColumn,
                           returnUrl: returnUrl, firstNameColumn: firstNameColumn, lastNameColumn: lastNameColumn,
                           genderColumn: genderColumn, ipAddressColumn: ipAddressColumn, hasHeaderRow: hasHeaderRow,
-                          allowPhase2: allowPhase2,
+                          allowPhase2: allowPhase2, removeDuplicate: removeDuplicate,
                           completion: completion)
     }
     
@@ -1137,11 +1143,12 @@ public class ZeroBounceSDK {
         emailAddressColumn: Int,
         returnUrl: String? = nil,
         hasHeaderRow: Bool = false,
+        removeDuplicate: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         
         _sendFile(scoring: true, filePath: filePath, emailAddressColumn: emailAddressColumn,
-                  returnUrl: returnUrl, hasHeaderRow: hasHeaderRow,
+                  returnUrl: returnUrl, hasHeaderRow: hasHeaderRow, removeDuplicate: removeDuplicate,
                   completion: completion)
     }
     
@@ -1154,10 +1161,12 @@ public class ZeroBounceSDK {
         emailAddressColumn: Int,
         returnUrl: String? = nil,
         hasHeaderRow: Bool = false,
+        removeDuplicate: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         _sendFileWithData(scoring: true, fileData: fileData, fileName: fileName, emailAddressColumn: emailAddressColumn,
-                          returnUrl: returnUrl, hasHeaderRow: hasHeaderRow, completion: completion)
+                          returnUrl: returnUrl, hasHeaderRow: hasHeaderRow, removeDuplicate: removeDuplicate,
+                          completion: completion)
     }
     
     private func _sendFile(
@@ -1171,6 +1180,7 @@ public class ZeroBounceSDK {
         ipAddressColumn:Int? = nil,
         hasHeaderRow: Bool = false,
         allowPhase2: Bool? = nil,
+        removeDuplicate: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         
@@ -1205,6 +1215,10 @@ public class ZeroBounceSDK {
         }
         if !scoring, let allowPhase2 = allowPhase2 {
             parameters["allow_phase_2"] = allowPhase2 ? "true" : "false"
+        }
+        // Left out when nil, and the API then removes duplicates (default true).
+        if let removeDuplicate = removeDuplicate {
+            parameters["remove_duplicate"] = removeDuplicate ? "true" : "false"
         }
         
         do {
@@ -1231,6 +1245,7 @@ public class ZeroBounceSDK {
         ipAddressColumn: Int? = nil,
         hasHeaderRow: Bool = false,
         allowPhase2: Bool? = nil,
+        removeDuplicate: Bool? = nil,
         completion: @escaping (ZBResult<ZBSendFileResponse>) -> ()
     ) {
         guard let apiKey = normalizedApiKey else {
@@ -1261,6 +1276,10 @@ public class ZeroBounceSDK {
         }
         if !scoring, let allowPhase2 = allowPhase2 {
             parameters["allow_phase_2"] = allowPhase2 ? "true" : "false"
+        }
+        // Left out when nil, and the API then removes duplicates (default true).
+        if let removeDuplicate = removeDuplicate {
+            parameters["remove_duplicate"] = removeDuplicate ? "true" : "false"
         }
         
         do {

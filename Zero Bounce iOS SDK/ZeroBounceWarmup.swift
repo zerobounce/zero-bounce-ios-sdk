@@ -41,21 +41,45 @@ public struct ZBWarmupEmailContent {
 public struct ZBWarmupManagedSending {
     public var weekdaysOnly: Bool?
     public var timezone: String?
-    /// -11 to 14.
-    public var timezoneOffset: Int?
+    /// Sent as `timezone_offset`: hours from UTC, -11.0 to 14.0. Fractional
+    /// offsets such as 5.5 or 5.75 are allowed.
+    public var timezoneOffsetHours: Double?
     /// YYYY-MM-DD.
     public var warmupStartDate: String?
+
+    /// The whole-hour form of `timezoneOffsetHours`, kept for 3.x code. It
+    /// reads `nil` when the offset is fractional.
+    @available(*, deprecated, renamed: "timezoneOffsetHours",
+               message: "timezone_offset accepts fractional hours; use timezoneOffsetHours")
+    public var timezoneOffset: Int? {
+        get { timezoneOffsetHours.flatMap { Int(exactly: $0) } }
+        set { timezoneOffsetHours = newValue.map(Double.init) }
+    }
 
     public init(
         weekdaysOnly: Bool? = nil,
         timezone: String? = nil,
-        timezoneOffset: Int? = nil,
+        timezoneOffsetHours: Double? = nil,
         warmupStartDate: String? = nil
     ) {
         self.weekdaysOnly = weekdaysOnly
         self.timezone = timezone
-        self.timezoneOffset = timezoneOffset
+        self.timezoneOffsetHours = timezoneOffsetHours
         self.warmupStartDate = warmupStartDate
+    }
+
+    /// The 3.x initializer, with a whole-hour offset.
+    @available(*, deprecated, renamed: "init(weekdaysOnly:timezone:timezoneOffsetHours:warmupStartDate:)",
+               message: "timezone_offset accepts fractional hours; use timezoneOffsetHours")
+    public init(
+        weekdaysOnly: Bool? = nil,
+        timezone: String? = nil,
+        timezoneOffset: Int?,
+        warmupStartDate: String? = nil
+    ) {
+        self.init(weekdaysOnly: weekdaysOnly, timezone: timezone,
+                  timezoneOffsetHours: timezoneOffset.map(Double.init),
+                  warmupStartDate: warmupStartDate)
     }
 }
 
@@ -237,9 +261,19 @@ public class ZeroBounceWarmup {
             var node: [String: Any] = [:]
             if let value = sending.weekdaysOnly { node["weekdays_only"] = value }
             if let value = sending.timezone { node["timezone"] = value }
-            if let offset = sending.timezoneOffset {
-                guard inRange(offset, -11, 14, "timezone_offset", completion) else { return }
-                node["timezone_offset"] = offset
+            if let offset = sending.timezoneOffsetHours {
+                guard offset.isFinite, offset >= -11, offset <= 14 else {
+                    completion(.Failure(ZBError.decodeError(messages: [
+                        "Invalid parameter: timezone_offset (must be -11.0 to 14.0)"
+                    ])))
+                    return
+                }
+                // A whole number goes out as an integer (3, not 3.0).
+                if let hours = Int(exactly: offset) {
+                    node["timezone_offset"] = hours
+                } else {
+                    node["timezone_offset"] = offset
+                }
             }
             if let date = sending.warmupStartDate {
                 guard isoDate(date, "warmup_start_date", completion) else { return }
@@ -708,11 +742,12 @@ public class ZeroBounceWarmup {
             case .success(let data):
                 let text = String(data: data, encoding: .utf8) ?? ""
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                // An error comes back as JSON, so it is not a file.
-                if trimmed.isEmpty || trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
-                    completion(.Failure(ZBError.httpError(
-                        message: ZBError.message(from: data, statusCode: 200), statusCode: 200
-                    )))
+                // An error comes back as JSON, and a proxy or block page as
+                // HTML (whatever its content type), so neither is a file.
+                let message = ZBError.message(from: data, statusCode: 200)
+                if trimmed.isEmpty || trimmed.hasPrefix("{") || trimmed.hasPrefix("[")
+                    || message.contains("HTML error page") {
+                    completion(.Failure(ZBError.httpError(message: message, statusCode: 200)))
                     return
                 }
                 completion(.Success(text))

@@ -1257,6 +1257,26 @@ final class OfflineURLProtocol: URLProtocol {
             // The Warmup endpoints answer with different shapes: an object, a
             // bare number, and CSV for the two downloads.
             if key.hasPrefix("warm-empty") { return (204, "application/json", Data()) }
+            // "warm-echo-<shape>-...": a 200 that is not the JSON or CSV the
+            // call expects, quoting the key (as sent, percent-encoded in a
+            // URL, JSON-escaped) and the request body with any SMTP password
+            // in it, both as sent and as it reads in JSON.
+            if key.hasPrefix("warm-echo-") {
+                var password = ""
+                if let object = try? JSONSerialization.jsonObject(with: Data(request.body.utf8)) as? [String: Any],
+                   let value = object["password"] as? String {
+                    password = value
+                }
+                let encoded = key.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? key
+                let echo = "key \(key) url https://\(request.host)\(request.rawPath)?api_key=\(encoded) "
+                    + "json \(key.replacingOccurrences(of: "/", with: "\\/")) password \(password) body \(request.body)"
+                if key.hasPrefix("warm-echo-text-") {
+                    return (200, "text/plain", Data("Unexpected request: \(echo)".utf8))
+                }
+                let page = "<!DOCTYPE html><html><head><title>Denied: \(echo)</title></head><body>\(echo)</body></html>"
+                // An HTML page by content type, and one served as CSV.
+                return (200, key.hasPrefix("warm-echo-htmlcsv-") ? "text/csv" : "text/html", Data(page.utf8))
+            }
             if key.hasPrefix("warm-json-download") {
                 return (200, "application/json", Data(#"{"detail":"nothing here"}"#.utf8))
             }
@@ -1636,6 +1656,72 @@ final class OfflineApiTests: XCTestCase {
             fields[name] = String(parts[1]).removingPercentEncoding ?? String(parts[1])
         }
         return fields
+    }
+
+    /// The plain (non-file) fields of a multipart/form-data request body.
+    private func multipartFields(_ record: OfflineRecord) -> [String: String] {
+        var fields: [String: String] = [:]
+        let marker = "Content-Disposition: form-data; name=\""
+        var rest = Substring(record.body)
+        while let start = rest.range(of: marker) {
+            rest = rest[start.upperBound...]
+            guard let quote = rest.range(of: "\"") else { break }
+            let name = String(rest[..<quote.lowerBound])
+            let after = rest[quote.upperBound...]
+            // A file part goes on with `; filename=...`; a plain field ends
+            // its headers right after the name. Swift reads "\r\n" as one
+            // Character, so the separators are searched for, not scanned.
+            guard after.hasPrefix("\r\n\r\n"),
+                  let blank = after.range(of: "\r\n\r\n"),
+                  let end = after[blank.upperBound...].range(of: "\r\n") else { continue }
+            fields[name] = String(after[blank.upperBound..<end.lowerBound])
+        }
+        return fields
+    }
+
+    /// `remove_duplicate` (API default true; a 400 when more than half the
+    /// rows would be dropped) is sent on all four sendfile entry points only
+    /// when the caller sets it, as "true" or "false".
+    func testOfflineSendFileSendsRemoveDuplicateOnlyWhenSet() {
+        let sdk = ZeroBounceSDK()
+        sdk.initialize(apiKey: "file-key")
+        let csv = FileManager.default.temporaryDirectory.appendingPathComponent("remove-duplicate.csv")
+        try? Data("email\nperson@example.com\n".utf8).write(to: csv)
+        let data = Data("email\nperson@example.com\n".utf8)
+
+        typealias Call = (Bool?, @escaping () -> ()) -> ()
+        let calls: [(String, String, Call)] = [
+            ("sendFile(filePath:)", "/v2/sendfile", { flag, finish in
+                sdk.sendFile(filePath: csv.path, emailAddressColumn: 1, hasHeaderRow: true,
+                             removeDuplicate: flag) { _ in finish() }
+            }),
+            ("sendFile(fileData:)", "/v2/sendfile", { flag, finish in
+                sdk.sendFile(fileData: data, fileName: "list.csv", emailAddressColumn: 1, hasHeaderRow: true,
+                             removeDuplicate: flag) { _ in finish() }
+            }),
+            ("scoringSendFile(filePath:)", "/v2/scoring/sendfile", { flag, finish in
+                sdk.scoringSendFile(filePath: csv.path, emailAddressColumn: 1, hasHeaderRow: true,
+                                    removeDuplicate: flag) { _ in finish() }
+            }),
+            ("scoringSendFile(fileData:)", "/v2/scoring/sendfile", { flag, finish in
+                sdk.scoringSendFile(fileData: data, fileName: "list.csv", emailAddressColumn: 1, hasHeaderRow: true,
+                                    removeDuplicate: flag) { _ in finish() }
+            }),
+        ]
+        for (name, path, call) in calls {
+            for flag in [true, false, nil] as [Bool?] {
+                let sent = send { finish in call(flag, finish) }
+                XCTAssertEqual(sent.path, path, name)
+                let fields = multipartFields(sent)
+                XCTAssertEqual(fields["api_key"], "file-key", name)
+                XCTAssertEqual(fields["email_address_column"], "1", name)
+                XCTAssertEqual(fields["has_header_row"], "true", name)
+                XCTAssertEqual(fields["remove_duplicate"], flag.map { $0 ? "true" : "false" },
+                               "\(name) remove_duplicate=\(String(describing: flag))")
+                // The bulk root's S3/SFTP spelling is not the sendfile one.
+                XCTAssertNil(fields["remove_duplicates"], name)
+            }
+        }
     }
 
     /// Runs one SDK call and returns the error message it failed with.
@@ -2949,7 +3035,7 @@ final class OfflineWarmupTests: XCTestCase {
                     ),
                     managedSending: ZBWarmupManagedSending(
                         weekdaysOnly: true,
-                        timezoneOffset: 3,
+                        timezoneOffsetHours: 3,
                         warmupStartDate: "2026-11-02"
                     )
                 )
@@ -2975,7 +3061,7 @@ final class OfflineWarmupTests: XCTestCase {
                 fromAddress: "sender@example.com",
                 onboardingModel: ZeroBounceWarmup.zbManaged,
                 options: ZBWarmupAddSendingAccountOptions(
-                    managedSending: ZBWarmupManagedSending(timezoneOffset: 15)
+                    managedSending: ZBWarmupManagedSending(timezoneOffsetHours: 15)
                 )
             ) { report(self.failureText($0)) }
         }
@@ -2988,6 +3074,121 @@ final class OfflineWarmupTests: XCTestCase {
                 )
             ) { report(self.failureText($0)) }
         }
+    }
+
+    /// The documented zb_managed payload (warmup-api/adding-a-sending-account),
+    /// with every field set, and a fractional timezone_offset of -11.0 to 14.0.
+    func testAddSendingAccountZbManagedSendsTheDocumentedPayload() {
+        let warmup = client()
+
+        func managed(_ offset: Double?) -> ZBWarmupAddSendingAccountOptions {
+            ZBWarmupAddSendingAccountOptions(
+                emailContent: ZBWarmupEmailContent(
+                    companyName: "Example",
+                    companyWebsite: "https://example.com",
+                    companyDescription: "We make examples.",
+                    typesOfEmails: ["transactional", "newsletter", "marketing"],
+                    exampleEmail: "Hello from Example."
+                ),
+                managedSending: ZBWarmupManagedSending(
+                    weekdaysOnly: false,
+                    timezone: "Asia/Kolkata",
+                    timezoneOffsetHours: offset,
+                    warmupStartDate: "2026-11-02"
+                )
+            )
+        }
+        func body(_ record: OfflineRecord) -> NSDictionary {
+            let object = try? JSONSerialization.jsonObject(with: Data(record.body.utf8))
+            return (object as? NSDictionary) ?? [:]
+        }
+
+        let sent = send { finish in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.zbManaged,
+                options: managed(5.5)
+            ) { _ in finish() }
+        }
+        XCTAssertEqual(sent.method, "POST")
+        XCTAssertEqual(body(sent), [
+            "from_address": "sender@example.com",
+            "onboarding_model": "zb_managed",
+            "email_content": [
+                "company_name": "Example",
+                "company_website": "https://example.com",
+                "company_description": "We make examples.",
+                "types_of_emails": ["transactional", "newsletter", "marketing"],
+                "example_email": "Hello from Example."
+            ],
+            "managed_sending": [
+                "weekdays_only": false,
+                "timezone": "Asia/Kolkata",
+                "timezone_offset": 5.5,
+                "warmup_start_date": "2026-11-02"
+            ]
+        ] as NSDictionary, sent.body)
+        // A strict JSON boolean and number, not strings.
+        XCTAssertTrue(sent.body.contains("\"weekdays_only\":false"), sent.body)
+        XCTAssertTrue(sent.body.contains("\"timezone_offset\":5.5"), sent.body)
+
+        for offset in [3.0, -11.0, 14.0, -3.5, 5.75] {
+            let accepted = send { finish in
+                warmup.addSendingAccount(
+                    fromAddress: "sender@example.com",
+                    onboardingModel: ZeroBounceWarmup.zbManaged,
+                    options: managed(offset)
+                ) { _ in finish() }
+            }
+            let sending = body(accepted)["managed_sending"] as? NSDictionary
+            XCTAssertEqual((sending?["timezone_offset"] as? NSNumber)?.doubleValue, offset, accepted.body)
+        }
+        for offset in [-11.5, 14.5, -12.0, 15.0, .nan, .infinity] {
+            expectRejected("timezone_offset") { report in
+                warmup.addSendingAccount(
+                    fromAddress: "sender@example.com",
+                    onboardingModel: ZeroBounceWarmup.zbManaged,
+                    options: managed(offset)
+                ) { report(self.failureText($0)) }
+            }
+        }
+
+        // Unset fields stay off the request.
+        let bare = send { finish in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.zbManaged,
+                options: managed(nil)
+            ) { _ in finish() }
+        }
+        XCTAssertNil((body(bare)["managed_sending"] as? NSDictionary)?["timezone_offset"], bare.body)
+    }
+
+    /// 3.x code built `ZBWarmupManagedSending` with an `Int` offset and read
+    /// `timezoneOffset` back; both still compile and behave as before.
+    @available(*, deprecated)
+    func testAddSendingAccountKeepsTheIntTimezoneOffset() {
+        let warmup = client()
+        let hours: Int = -5
+        var sending = ZBWarmupManagedSending(weekdaysOnly: true, timezoneOffset: hours)
+        XCTAssertEqual(sending.timezoneOffset, -5)
+        XCTAssertEqual(sending.timezoneOffsetHours, -5.0)
+        sending.timezoneOffset = 14
+        XCTAssertEqual(sending.timezoneOffsetHours, 14.0)
+        sending.timezoneOffsetHours = 5.5
+        // A fractional offset has no Int form.
+        XCTAssertNil(sending.timezoneOffset)
+        sending.timezoneOffset = 7
+
+        let sent = send { finish in
+            warmup.addSendingAccount(
+                fromAddress: "sender@example.com",
+                onboardingModel: ZeroBounceWarmup.zbManaged,
+                options: ZBWarmupAddSendingAccountOptions(managedSending: sending)
+            ) { _ in finish() }
+        }
+        XCTAssertTrue(sent.body.contains("\"timezone_offset\":7"), sent.body)
+        XCTAssertTrue(sent.body.contains("\"weekdays_only\":true"), sent.body)
     }
 
     func testUpdateAndDeleteSendingAccount() {
@@ -3318,6 +3519,9 @@ final class TransportSafetyTests: XCTestCase {
     private var liveSession: URLSession!
     private var csvPath = ""
     private let download = NSTemporaryDirectory() + "zb-transport-download.csv"
+    /// The SMTP password the sweep sends; "|" and "/" give it distinct
+    /// percent-encoded and JSON-escaped forms.
+    static let smtpPassword = "smtp-pa|ss/word"
 
     override func setUp() {
         super.setUp()
@@ -3491,7 +3695,7 @@ final class TransportSafetyTests: XCTestCase {
             ("warmup getFromAddressStatistics", { r in warmup.getFromAddressStatistics(fromAddress: "s@example.com") { r(self.err($0)) } }),
             ("warmup checkDomainDmarc", { r in warmup.checkDomainDmarc(fromAddress: "s@example.com") { r(self.err($0)) } }),
             ("warmup testSmtpConfiguration", { r in
-                warmup.testSmtpConfiguration(fromAddress: "s@example.com", username: "s@example.com", password: "pw", server: "smtp.example.com", port: 587) { r(self.err($0)) }
+                warmup.testSmtpConfiguration(fromAddress: "s@example.com", username: "s@example.com", password: TransportSafetyTests.smtpPassword, server: "smtp.example.com", port: 587) { r(self.err($0)) }
             }),
         ]
     }
@@ -4024,6 +4228,66 @@ extension TransportSafetyTests {
             }
         }
         XCTAssertGreaterThanOrEqual(failures, 4 * 64 + 2 * 26 + 2 * 2)
+    }
+
+    /// Warmup answers that are neither its JSON nor a CSV file: a 200 in
+    /// plain text and a 200 HTML page (as text/html, and served as text/csv),
+    /// each quoting the Warmup key and the request with the SMTP password.
+    /// Every Warmup call fails on them, the CSV downloads included, with
+    /// neither secret in any part of the error. A plain-text 200 to a CSV
+    /// download is the file itself, so it is the one success.
+    func testAWarmupErrorNeverCarriesTheKeyOrTheSmtpPassword() {
+        let modes = ["warm-echo-text-", "warm-echo-html-", "warm-echo-htmlcsv-"]
+        var checked = 0
+        for mode in modes {
+            let key = mode + "se|cr/et-Key"
+            let (sdk, warmup) = clients(key)
+            let calls = everyCall(sdk, warmup).filter { $0.0.hasPrefix("warmup ") }
+            XCTAssertGreaterThanOrEqual(calls.count, 26)
+            for (name, call) in calls {
+                let (error, sent) = run("\(mode)\(name)", call)
+                XCTAssertEqual(sent.count, 1, "\(mode) \(name)")
+                if name.contains("download") && mode == "warm-echo-text-" {
+                    XCTAssertNil(error, "\(mode) \(name): \(describe(error))")
+                    continue
+                }
+                guard let error = error else {
+                    XCTFail("\(mode) \(name) succeeded")
+                    continue
+                }
+                checked += 1
+                if let leak = leaks(error, key) {
+                    XCTFail("\(mode) \(name): \(leak)")
+                }
+                if let leak = leaks(error, TransportSafetyTests.smtpPassword) {
+                    XCTFail("\(mode) \(name) leaked the SMTP password: \(leak)")
+                }
+                if name.contains("download") {
+                    XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(mode) \(name): \(describe(error))")
+                }
+            }
+        }
+        XCTAssertGreaterThanOrEqual(checked, 3 * 26 - 2)
+    }
+
+    /// The Warmup CSV downloads hand back a file or an error: an HTML page
+    /// (by content type, or served as text/csv), a JSON body and an empty
+    /// body are all errors with their status 200, never CSV text.
+    func testAWarmupCsvDownloadRefusesAnythingButCsv() {
+        let keys = ["html-200-warm", "warm-echo-htmlcsv-key", "warm-json-download", "empty-warm"]
+        for key in keys {
+            let (sdk, warmup) = clients(key)
+            let downloads = everyCall(sdk, warmup).filter { $0.0.hasPrefix("warmup download") }
+            XCTAssertEqual(downloads.count, 2)
+            for (name, call) in downloads {
+                let (error, _) = run("\(key) \(name)", call)
+                guard let error = error else {
+                    XCTFail("\(key) \(name) returned the body as CSV")
+                    continue
+                }
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(key) \(name): \(describe(error))")
+            }
+        }
     }
 
     /// A 200 whose body stops short of its Content-Length is a transport
