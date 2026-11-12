@@ -187,18 +187,23 @@ public class ZeroBounceSDK {
     /// masking.
     internal static let secretOmittedMessage = "The response body was omitted because it contained a credential."
 
+    /// How many times `revealsSecret` decodes: the SDK's own request encoding
+    /// plus three layers a server or proxy may add when it echoes the request
+    /// back.
+    internal static let secretDecodeLayers = 4
+
     /// `text` with every form of every secret replaced by "***". Redaction is
-    /// closed under encoding: when a view of the result decoded up to three
-    /// times (URL-decoding, "+" as a space, JSON-unescaping, in any order)
-    /// still holds a secret, the whole text is replaced by
-    /// `secretOmittedMessage`.
+    /// closed under encoding: when a view of the result decoded up to
+    /// `secretDecodeLayers` times (URL-decoding, "+" as a space,
+    /// JSON-unescaping, in any order) still holds a secret, the whole text is
+    /// replaced by `secretOmittedMessage`.
     internal static func redacting(_ secrets: [String], in text: String) -> String {
         let masked = secretForms(secrets).reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
         return revealsSecret(masked, secrets) ? secretOmittedMessage : masked
     }
 
     /// Whether a secret can be read in `text` or in any view of it decoded
-    /// up to three times: URL-decoded, form-decoded ("+" as a space too) and
+    /// up to `secretDecodeLayers` times: URL-decoded, form-decoded ("+" as a space too) and
     /// JSON-unescaped (`\/` and `\uXXXX` included), in any order.
     internal static func revealsSecret(_ text: String, _ secrets: [String]) -> Bool {
         let needles = secrets.filter { !$0.isEmpty }.map { Array($0.utf8) }
@@ -212,7 +217,7 @@ public class ZeroBounceSDK {
             }
             return false
         }
-        return search(Array(text.utf8), 3)
+        return search(Array(text.utf8), secretDecodeLayers)
     }
 
     private static func containsBytes(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {

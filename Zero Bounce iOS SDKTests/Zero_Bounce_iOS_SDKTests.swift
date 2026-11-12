@@ -3660,19 +3660,27 @@ final class TransportSafetyTests: XCTestCase {
 
     private typealias Report = (Error?) -> ()
 
+    /// Set when a call completes with a raw-JSON result (a dictionary, JSON or
+    /// a Warmup result) rather than a typed one; the overload the compiler
+    /// picks for each call in everyCall decides it, so no list is kept by hand.
+    static var rawResultSeen = false
+
     private func err<T>(_ r: ZeroBounceSDK.ZBResult<T>) -> Error? {
         if case .Failure(let e) = r { return e }
         return nil
     }
     private func err(_ r: ZeroBounceSDK.ZBDictionaryResult) -> Error? {
+        TransportSafetyTests.rawResultSeen = true
         if case .Failure(let e) = r { return e }
         return nil
     }
     private func err(_ r: ZeroBounceSDK.ZBJsonResult) -> Error? {
+        TransportSafetyTests.rawResultSeen = true
         if case .Failure(let e) = r { return e }
         return nil
     }
     private func err(_ r: ZeroBounceWarmup.ZBWarmupResult) -> Error? {
+        TransportSafetyTests.rawResultSeen = true
         if case .Failure(let e) = r { return e }
         return nil
     }
@@ -4933,5 +4941,119 @@ extension TransportSafetyTests {
         let error = ZeroBounceSDK.redacting([key], in: ZBError.httpError(message: "echo [\(thrice)] end", statusCode: 400))
         XCTAssertEqual((error as? ZBError)?.errorDescription, ZeroBounceSDK.secretOmittedMessage)
         XCTAssertEqual(ZeroBounceSDK.redacting([key], in: #"nothing secret %41 A"#), #"nothing secret %41 A"#)
+    }
+
+    private func script(_ status: Int, _ contentType: String, _ body: String) {
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.scripted = (status, contentType, Data(body.utf8))
+        OfflineURLProtocol.lock.unlock()
+    }
+
+    /// E7: JSON of a shape no typed call reads (a number, a string, true,
+    /// null, an array where an object is read) is an API error with status
+    /// 200 on every typed call, never a result filled with defaults. A
+    /// raw-JSON call may hand it over.
+    func testTypedCallsRejectJsonOfTheWrongShape() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("shape-key")
+        var typed = 0
+        for body in ["0", "1.5", "true", "false", "null", "\"x\"", "[]", "[{}]", " [ ] ", "{}"] {
+            script(200, "application/json", body)
+            for (name, call) in everyCall(sdk, warmup) {
+                let isDownload = name.lowercased().contains("getfile") || name.hasPrefix("warmup download")
+                if isDownload { continue }
+                let label = "\(name) with \(body)"
+                TransportSafetyTests.rawResultSeen = false
+                let (error, _) = run(label, call)
+                let raw = TransportSafetyTests.rawResultSeen
+                // A typed call that errors never reaches a raw overload, so
+                // only a success tells which kind it was.
+                if let error = error {
+                    XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(label): \(describe(error))")
+                    if !raw { typed += 1 }
+                    continue
+                }
+                let array = body.trimmingCharacters(in: .whitespaces).hasPrefix("[")
+                let object = body == "{}"
+                // listS3files reads an array; the other typed calls an object
+                // ({} decodes when every field is optional).
+                if !raw && !(name == "listS3files" && array) && !object {
+                    XCTFail("\(label): a typed call succeeded")
+                }
+            }
+        }
+        XCTAssertGreaterThan(typed, 300)
+    }
+
+    /// Nested deeper than the strict-JSON scanner's limit: an error with
+    /// status 200 on every call, not a crash.
+    func testADeeplyNestedBodyIsAnErrorOnEveryCall() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("depth-key")
+        script(200, "application/json", String(repeating: "[", count: 200000))
+        for (name, call) in everyCall(sdk, warmup) {
+            let (error, _) = run(name, call)
+            guard let error = error else {
+                XCTFail("\(name): succeeded")
+                continue
+            }
+            XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name): \(describe(error))")
+        }
+    }
+
+    /// Every spelling below is one the SDK does not generate, and one decode
+    /// step (or layer) alone makes the key readable again: removing that step
+    /// lets the text through. A NUL (%00, \u0000) does not end the search.
+    func testEachDecodeStepOfTheRedactionCheckIsNeeded() {
+        let key = #"fz a"b/c\d+e%f&g=h<i>j'k"#
+        func percent(_ text: String, lower: Bool) -> String {
+            text.utf8.map { String(format: lower ? "%%%02x" : "%%%02X", $0) }.joined()
+        }
+        func unicode(_ text: String) -> String {
+            text.utf8.map { String(format: "\\u%04x", $0) }.joined()
+        }
+        var url4 = key
+        for _ in 0..<4 { url4 = fuzzEncode(url4, 0) }
+        let cases: [(String, String, String)] = [
+            ("percent, upper-case hex", percent(key, lower: false), key),
+            ("percent, lower-case hex", percent(key, lower: true), key),
+            ("after invalid UTF-8", "%ff%fe%c3%28 [" + percent(key, lower: true), key),
+            ("plus as space", fuzzEncode(fuzzEncode(key, 1), 0), key),
+            ("\\u escapes", unicode(key), key),
+            ("surrogate pair", #"k🔑y"#, "k\u{1F511}y"),
+            ("four URL layers", url4, key),
+            ("after %00", "bad %00 then " + percent(key, lower: false), key),
+            ("after \\u0000", #"bad \u0000 then "# + unicode(key), key),
+        ]
+        for (what, spelling, secret) in cases {
+            // Masked by a generated form or dropped whole: either way no
+            // decoded view holds the secret.
+            let result = ZeroBounceSDK.redacting([secret], in: "echo [\(spelling)] end")
+            XCTAssertFalse(fuzzReadable(result, secret, 4), "\(what): \(result)")
+        }
+        // The control: a NUL and escapes with no key behind them stay.
+        let control = #"nothing secret %00 here \u0000 %41"#
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: control), control)
+    }
+
+    /// A %00 before the key, fully percent-encoded, at 400: every call drops
+    /// the body.
+    func testANulInTheBodyDoesNotEndTheRedactionCheck() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let key = #"fz a"b/c\d+e%f&g=h<i>j'k"#
+        let encoded = key.utf8.map { String(format: "%%%02X", $0) }.joined()
+        let (sdk, warmup) = clients(key)
+        script(400, "text/plain", "bad %00 then " + encoded)
+        for (name, call) in everyCall(sdk, warmup) {
+            let (error, _) = run(name, call)
+            guard let error = error else {
+                XCTFail("\(name): succeeded")
+                continue
+            }
+            XCTAssertEqual((error as? ZBError)?.statusCode, 400, "\(name): \(describe(error))")
+            if let text = readableTexts(error).first(where: { fuzzReadable($0, key, 4) }) {
+                XCTFail("\(name): \(text)")
+            }
+        }
     }
 }
