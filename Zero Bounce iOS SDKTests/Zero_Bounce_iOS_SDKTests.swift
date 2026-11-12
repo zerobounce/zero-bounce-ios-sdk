@@ -1100,6 +1100,22 @@ func jsonEscapedEchoes(_ secret: String) -> [String] {
     return forms
 }
 
+/// Each form of `secret` (as sent, and each JSON-escaped form) as a server
+/// that echoes a URL-encoded request may write it: loosely encoded (a query
+/// string), strictly encoded, and form-encoded with "+" for a space.
+func urlEncodedEchoes(_ secret: String) -> [String] {
+    var strict = CharacterSet.alphanumerics
+    strict.insert(charactersIn: "-._~")
+    var forms: [String] = []
+    for base in [secret] + jsonEscapedEchoes(secret) {
+        forms.append(base.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? base)
+        let encoded = base.addingPercentEncoding(withAllowedCharacters: strict) ?? base
+        forms.append(encoded)
+        forms.append(encoded.replacingOccurrences(of: "%20", with: "+"))
+    }
+    return forms
+}
+
 final class OfflineURLProtocol: URLProtocol {
     static var enabled = false
     static var records: [OfflineRecord] = []
@@ -1246,7 +1262,8 @@ final class OfflineURLProtocol: URLProtocol {
                    let password = object["password"] as? String {
                     secrets.append(password)
                 }
-                let echoes = secrets.flatMap(jsonEscapedEchoes).joined(separator: " ; ")
+                let echoes = (secrets.flatMap(jsonEscapedEchoes) + secrets.flatMap(urlEncodedEchoes))
+                    .joined(separator: " ; ")
                 return (400, "text/plain", Data("Bad request: \(echoes)".utf8))
             }
         }
@@ -1293,6 +1310,17 @@ final class OfflineURLProtocol: URLProtocol {
         if key.hasPrefix("success-false") {
             return (200, "application/json", Data(#"{"success":false,"message":"File cannot be found."}"#.utf8))
         }
+        // What each call would take for its result, under its own content
+        // type, and the same bodies sent as text/html.
+        if key.hasPrefix("typed-ok-") || key.hasPrefix("html-type-ok-") {
+            let (type, body) = CutShortServer.answer(request.path)
+            return (200, key.hasPrefix("typed-ok-") ? type : "text/html", body)
+        }
+        // A file bigger than the write limit the D4 test sets.
+        if key.hasPrefix("big-file-") && request.path.contains("getfile") {
+            let rows = (0..<400).map { "row\($0)@example.com,valid" }.joined(separator: "\n")
+            return (200, "application/octet-stream", Data("email,status\n\(rows)\n".utf8))
+        }
         if key.hasPrefix("cf-json-") {
             let json = #"{"type":"https://developers.cloudflare.com/support/error-1020/","title":"Error 1020: Access denied","status":403,"error_code":1020,"cloudflare_error":true}"#
             return (403, "application/json", Data(json.utf8))
@@ -1303,6 +1331,9 @@ final class OfflineURLProtocol: URLProtocol {
         // other's content type.
         if key.hasPrefix("dl-html-bare-") {
             return (200, "text/html; charset=UTF-8", Data("<p>Access denied by proxy</p>".utf8))
+        }
+        if key.hasPrefix("dl-html-json-") {
+            return (200, "text/html", Data(#"{"a":1}"#.utf8))
         }
         if key.hasPrefix("dl-html-plain-") {
             return (200, "text/html", Data("Access denied by proxy".utf8))
@@ -4211,7 +4242,7 @@ final class CutShortServer {
     }
 
     /// What each call would accept as a success, had it all arrived.
-    private static func answer(_ path: String) -> (String, Data) {
+    static func answer(_ path: String) -> (String, Data) {
         if path.contains("getfile") || path.contains("download") {
             return ("text/csv", Data("email\na@example.com\n".utf8))
         }
@@ -4237,7 +4268,7 @@ extension TransportSafetyTests {
             key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key,
             key.addingPercentEncoding(withAllowedCharacters: strict) ?? key,
             key.replacingOccurrences(of: "/", with: "\\/"),
-        ] + jsonEscapedEchoes(key)))
+        ] + jsonEscapedEchoes(key) + urlEncodedEchoes(key)))
     }
 
     private func leaks(_ error: Error, _ key: String) -> String? {
@@ -4366,7 +4397,8 @@ extension TransportSafetyTests {
     /// content type alone, and a JSON array by body alone: each is an error
     /// with status 200, and no file is written.
     func testEveryDownloadRefusesHtmlOrJsonByContentTypeOrBody() {
-        let keys = ["dl-html-bare-key", "dl-html-plain-key", "dl-json-array-key", "dl-json-type-key", "dl-json-csv-key"]
+        let keys = ["dl-html-bare-key", "dl-html-plain-key", "dl-html-json-key", "dl-json-array-key", "dl-json-type-key",
+                    "dl-json-csv-key"]
         for key in keys {
             let (sdk, warmup) = clients(key)
             let downloads = everyCall(sdk, warmup).filter {
@@ -4422,6 +4454,138 @@ extension TransportSafetyTests {
             }
             XCTAssertNil(leaks(error, "cut-short-key"), "\(name): \(error)")
             XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(name) kept a partial file")
+        }
+    }
+}
+
+/// Round 10 (2026-11-12 audit): a failed download write, an HTML content
+/// type on a JSON call, and the URL-encoded forms of a secret.
+extension TransportSafetyTests {
+    /// Runs `body` with regular-file writes limited to `bytes` (RLIMIT_FSIZE),
+    /// SIGXFSZ ignored so a write past the limit fails with EFBIG instead of
+    /// ending the process.
+    private func withFileSizeLimit(_ bytes: rlim_t, _ body: () -> Void) {
+        var previous = rlimit()
+        getrlimit(RLIMIT_FSIZE, &previous)
+        let handler = signal(SIGXFSZ, SIG_IGN)
+        var limited = previous
+        limited.rlim_cur = bytes
+        setrlimit(RLIMIT_FSIZE, &limited)
+        defer {
+            setrlimit(RLIMIT_FSIZE, &previous)
+            signal(SIGXFSZ, handler)
+        }
+        body()
+    }
+
+    /// A download whose write to disk fails (the file is larger than the
+    /// process may write) leaves the file already at the target as it was,
+    /// and no partial or temporary file beside it, on every download that
+    /// saves to a path: getFile and scoringGetFile (under their saved-files
+    /// folder), the streaming downloads, and the email finder and domain
+    /// search downloads. Without the limit, the same download replaces the
+    /// old file.
+    func testAFailedDownloadWriteKeepsTheExistingFile() throws {
+        let (sdk, _) = clients("big-file-key")
+        let dir = NSTemporaryDirectory() + "zb-d4-\(UUID().uuidString)/"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let target = dir + "out.csv"
+
+        // getFile saves under the name the server gives; learn where.
+        var saved: String?
+        let (probeError, _) = run("getFile probe") { r in
+            sdk.getFile(fileId: "f") { result in
+                if case .Success(let response) = result { saved = response.localFilePath }
+                r(self.err(result))
+            }
+        }
+        XCTAssertNil(probeError)
+        let savedPath = try XCTUnwrap(saved)
+        defer { try? FileManager.default.removeItem(atPath: savedPath) }
+
+        let calls: [(String, String, (@escaping Report) -> ())] = [
+            ("getFile", savedPath, { r in sdk.getFile(fileId: "f") { r(self.err($0)) } }),
+            ("scoringGetFile", savedPath, { r in sdk.scoringGetFile(fileId: "f") { r(self.err($0)) } }),
+            ("getFileStreaming", target, { r in sdk.getFileStreaming(fileId: "f", downloadPath: target) { r(self.err($0)) } }),
+            ("scoringGetFileStreaming", target, { r in
+                sdk.scoringGetFileStreaming(fileId: "f", downloadPath: target) { r(self.err($0)) }
+            }),
+            ("emailFinderGetFile", target, { r in sdk.emailFinderGetFile(fileId: "f", downloadPath: target) { r(self.err($0)) } }),
+            ("domainSearchGetFile", target, { r in sdk.domainSearchGetFile(fileId: "f", downloadPath: target) { r(self.err($0)) } }),
+        ]
+        func listing(_ path: String) -> [String] {
+            ((try? FileManager.default.contentsOfDirectory(atPath: (path as NSString).deletingLastPathComponent)) ?? [])
+                .sorted()
+        }
+        for (name, path, call) in calls {
+            try "OLD".write(toFile: path, atomically: true, encoding: .utf8)
+            let before = listing(path)
+            var error: Error?
+            withFileSizeLimit(1024) { error = run("\(name) limited", call).0 }
+            XCTAssertNotNil(error, "\(name) reported success for a file it could not write")
+            XCTAssertEqual(try? String(contentsOfFile: path, encoding: .utf8), "OLD", "\(name) did not keep the old file")
+            XCTAssertEqual(listing(path), before, "\(name) left a partial or temporary file")
+
+            let (unlimited, _) = run("\(name) unlimited", call)
+            XCTAssertNil(unlimited, "\(name): \(describe(unlimited))")
+            let written = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            XCTAssertTrue(written.hasPrefix("email,status\nrow0@example.com") && written.count > 4096,
+                          "\(name) did not replace the old file: \(written.prefix(40))")
+            XCTAssertEqual(listing(path), before, "\(name) left a temporary file")
+        }
+    }
+
+    /// A 2xx sent as text/html is refused on every call, JSON calls
+    /// included, even when its body is exactly what the call would take for
+    /// its result: an error with status 200 and no file. The same bodies
+    /// under their own content types succeed (on all but the 11 calls whose
+    /// result has another shape, which fail to decode, with no status), so
+    /// the content type alone is what is refused.
+    func testAnHtmlContentTypeIsRefusedWhateverTheBody() {
+        let (okSdk, okWarmup) = clients("typed-ok-key")
+        let control = everyCall(okSdk, okWarmup)
+        XCTAssertGreaterThanOrEqual(control.count, 64 + 26)
+        var accepted = 0
+        for (name, call) in control {
+            let (error, _) = run("typed-ok \(name)", call)
+            if error == nil { accepted += 1 }
+        }
+        XCTAssertGreaterThanOrEqual(accepted, control.count - 11)
+        let (sdk, warmup) = clients("html-type-ok-key")
+        for (name, call) in everyCall(sdk, warmup) {
+            try? FileManager.default.removeItem(atPath: download)
+            let (error, sent) = run("html-type \(name)", call)
+            XCTAssertEqual(sent.count, 1, name)
+            guard let error = error else {
+                XCTFail("html-type \(name) took a text/html answer for its result")
+                continue
+            }
+            XCTAssertEqual((error as? ZBError)?.statusCode, 200, "html-type \(name): \(describe(error))")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: download), "html-type \(name) saved a file")
+        }
+    }
+
+    /// Each form a secret can take when a server echoes a URL-encoded
+    /// request, of the secret as sent and of each of its JSON-escaped forms
+    /// (loosely, strictly and form-encoded), is masked whole. The secret has
+    /// a space, '"', "/", "+", "%", "&", "=", "<", ">", "'" and "\" so the
+    /// forms differ; dropping any one form leaves part of the secret behind.
+    func testEveryUrlEncodedFormOfASecretIsMasked() {
+        let secret = #"se cr"e/t+k%e&y=v<a>l'u\e"#
+        let echoes = [secret] + jsonEscapedEchoes(secret) + urlEncodedEchoes(secret)
+        let unique = Array(Set(echoes)).sorted()
+        // As sent, 4 JSON-escaped, 15 URL-encoded (some coincide).
+        XCTAssertGreaterThanOrEqual(unique.count, 16)
+        for echo in unique {
+            let text = "Bad request: [\(echo)] end"
+            XCTAssertEqual(ZeroBounceSDK.redacting([secret], in: text), "Bad request: [***] end", echo)
+            let error = ZBError.httpError(message: text, statusCode: 400)
+            if case .httpError(let message, _) = ZeroBounceSDK.redacting([secret], in: error) as? ZBError {
+                XCTAssertEqual(message, "Bad request: [***] end", echo)
+            } else {
+                XCTFail("redacting changed the error case")
+            }
         }
     }
 }

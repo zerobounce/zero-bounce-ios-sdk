@@ -109,19 +109,23 @@ public class ZeroBounceSDK {
         redacting([apiKey].compactMap { $0 }, in: error)
     }
 
-    /// The forms a secret can take in an error's text: as sent,
-    /// percent-encoded (a query string or form body, loosely or strictly
-    /// encoded) and JSON-escaped. Longest first, so no form is cut in two
-    /// by a shorter one.
+    /// The forms a secret can take in an error's text: as sent and
+    /// JSON-escaped, and each of those percent-encoded (a query string or
+    /// form body, loosely or strictly encoded, a space as `%20` or `+`), as
+    /// a server echoing a URL-encoded JSON request would write it. Longest
+    /// first, so no form is cut in two by a shorter one.
     internal static func secretForms(_ secrets: [String]) -> [String] {
         var strict = CharacterSet.alphanumerics
         strict.insert(charactersIn: "-._~")
         var forms = Set<String>()
         for secret in secrets where !secret.isEmpty {
-            forms.insert(secret)
-            forms.insert(secret.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? secret)
-            forms.insert(secret.addingPercentEncoding(withAllowedCharacters: strict) ?? secret)
-            forms.formUnion(jsonEscapedForms(secret))
+            for form in [secret] + jsonEscapedForms(secret) {
+                forms.insert(form)
+                forms.insert(form.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? form)
+                let encoded = form.addingPercentEncoding(withAllowedCharacters: strict) ?? form
+                forms.insert(encoded)
+                forms.insert(encoded.replacingOccurrences(of: "%20", with: "+"))
+            }
         }
         return forms.sorted { $0.count > $1.count }
     }
@@ -1471,8 +1475,9 @@ public class ZeroBounceSDK {
                 try FileManager.default.createDirectory(
                     at: outURL.deletingLastPathComponent(), withIntermediateDirectories: true
                 )
-                try? FileManager.default.removeItem(at: outURL)
-                try FileManager.default.moveItem(at: location, to: outURL)
+                // Never removes the old file first: it stays until the new
+                // one is complete beside it.
+                try ZBFileManager.replaceFile(at: outURL, withContentsOf: location)
                 completion(.Success(ZBGetFileResponse(localFilePath: downloadPath)))
             } catch {
                 completion(.Failure(ZBError.saveFileError(message: "\(error)")))
@@ -1756,6 +1761,10 @@ public class ZeroBounceSDK {
                     message: ZBError.message(from: body, statusCode: statusCode),
                     statusCode: statusCode
                 )))
+                return
+            }
+            if let page = ZBError.htmlPageError(body, response: response, statusCode: statusCode) {
+                result(RequestResult.failure(page))
                 return
             }
             if (body.isEmpty && !allowEmptyBody)
@@ -2091,7 +2100,7 @@ public class ZeroBounceSDK {
                 do {
                     let outURL = URL(fileURLWithPath: downloadPath)
                     try FileManager.default.createDirectory(at: outURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try data.write(to: outURL)
+                    try ZBFileManager.replaceFile(at: outURL, with: data)
                     completion(.Success(ZBGetFileResponse(localFilePath: downloadPath)))
                 } catch {
                     completion(.Failure(error))

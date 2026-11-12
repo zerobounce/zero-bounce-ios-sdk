@@ -810,6 +810,12 @@ public class ZeroBounceWarmup {
                 )))
                 return
             }
+            // A page sent as HTML is never the JSON or CSV a call expects,
+            // whatever its body looks like.
+            if let page = ZBError.htmlPageError(payload, response: http, statusCode: statusCode) {
+                completion(.failure(page))
+                return
+            }
             completion(.success((payload, http)))
         }.resume()
     }

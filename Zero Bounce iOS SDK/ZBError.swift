@@ -109,7 +109,7 @@ public enum ZBError: LocalizedError {
     /// would see. `data` may be only the start of a large download.
     static func downloadFailure(_ data: Data, response: URLResponse?, statusCode: Int) -> ZBError? {
         let type = (response?.mimeType ?? "").lowercased()
-        let htmlType = type == "text/html" || type == "application/xhtml+xml"
+        let htmlType = isHtmlType(response)
         let jsonType = type == "application/json" || type == "text/json" || type.hasSuffix("+json")
         let message = self.message(from: data, statusCode: statusCode)
         if data.isEmpty || message.contains("HTML error page") || successMeansFailure(data)
@@ -129,6 +129,29 @@ public enum ZBError: LocalizedError {
             )
         }
         return nil
+    }
+
+    /// Whether a response is sent as an HTML page (`text/html`,
+    /// `application/xhtml+xml`).
+    static func isHtmlType(_ response: URLResponse?) -> Bool {
+        let type = (response?.mimeType ?? "").lowercased()
+        return type == "text/html" || type == "application/xhtml+xml"
+    }
+
+    /// The error for a 2xx with a body sent as an HTML page, or nil. A proxy
+    /// or block page is not an API answer even when its body would decode
+    /// (`{"a":1}`), so the content type alone decides; the status is kept.
+    static func htmlPageError(_ data: Data, response: URLResponse?, statusCode: Int) -> ZBError? {
+        guard !data.isEmpty, isHtmlType(response) else { return nil }
+        let type = (response?.mimeType ?? "").lowercased()
+        let message = self.message(from: data, statusCode: statusCode)
+        if message.contains("HTML error page") {
+            return .httpError(message: message, statusCode: statusCode)
+        }
+        return .httpError(
+            message: "ZeroBounce returned an HTML page (\(type)) instead of an API response.",
+            statusCode: statusCode
+        )
     }
 
     static func decodeError(jsonData: Data) -> ZBError {
