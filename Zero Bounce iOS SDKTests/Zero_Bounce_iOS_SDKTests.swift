@@ -1184,6 +1184,28 @@ final class OfflineURLProtocol: URLProtocol {
 
     private static func answer(_ request: OfflineRecord) -> (Int, String, Data) {
         let key = request.apiKey
+        // A server or proxy that quotes the key back in its error body: as
+        // JSON on a 200, as "success": false on a 200, as plain text quoting
+        // the request URL (key percent-encoded) on a 400, and as JSON on a 400.
+        if key.hasPrefix("echo-") {
+            let quotedUrl = "https://\(request.host)\(request.rawPath)?api_key="
+                + (key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key)
+            func json(_ object: [String: Any]) -> Data {
+                (try? JSONSerialization.data(withJSONObject: object)) ?? Data()
+            }
+            if key.hasPrefix("echo-200-error-") {
+                return (200, "application/json", json(["error": "Invalid API key \(key)"]))
+            }
+            if key.hasPrefix("echo-200-success-false-") {
+                return (200, "application/json", json(["success": false, "message": "No file for key \(key)"]))
+            }
+            if key.hasPrefix("echo-400-text-") {
+                return (400, "text/plain", Data("Bad request: \(quotedUrl)".utf8))
+            }
+            if key.hasPrefix("echo-400-json-") {
+                return (400, "application/json", json(["error": "Invalid API key \(key)"]))
+            }
+        }
         if key.hasPrefix("html-403-") || key.hasPrefix("html-200-") {
             return (key.hasPrefix("html-403-") ? 403 : 200, "text/html", htmlPage())
         }
@@ -3832,5 +3854,213 @@ extension TransportSafetyTests {
         // The key is still in use.
         let (_, sent) = run("getCredits") { r in sdk.getCredits { r(self.err($0)) } }
         XCTAssertEqual(sent.first?.apiKey, key)
+    }
+}
+
+/// A loopback HTTP/1.1 server on a real socket. Every request gets a 200 whose
+/// Content-Length promises 1000 bytes more than the body it sends, and then
+/// the connection closes: a body cut short, the way a dropped connection
+/// looks to the client.
+final class CutShortServer {
+    let port: UInt16
+    private let listener: Int32
+
+    init() throws {
+        listener = socket(AF_INET, SOCK_STREAM, 0)
+        var yes: Int32 = 1
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = 0
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let fd = listener
+        let bound = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard listener >= 0, bound == 0, listen(listener, 64) == 0 else {
+            close(listener)
+            throw NSError(domain: "CutShortServer", code: Int(errno))
+        }
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        _ = withUnsafeMutablePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(fd, $0, &length) }
+        }
+        port = UInt16(bigEndian: address.sin_port)
+        Thread.detachNewThread {
+            while true {
+                let client = accept(fd, nil, nil)
+                if client < 0 { return }
+                Thread.detachNewThread { CutShortServer.serve(client) }
+            }
+        }
+    }
+
+    func stop() {
+        shutdown(listener, SHUT_RDWR)
+        close(listener)
+    }
+
+    private static func serve(_ client: Int32) {
+        defer { close(client) }
+        var noSigPipe: Int32 = 1
+        setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+        let separator = Data("\r\n\r\n".utf8)
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 65536)
+        while data.range(of: separator) == nil {
+            let count = recv(client, &buffer, buffer.count, 0)
+            if count <= 0 { return }
+            data.append(buffer, count: count)
+        }
+        let end = data.range(of: separator)!
+        let head = String(decoding: data[..<end.lowerBound], as: UTF8.self)
+        var expected = 0
+        for line in head.components(separatedBy: "\r\n").dropFirst()
+        where line.lowercased().hasPrefix("content-length:") {
+            expected = Int(line.dropFirst(15).trimmingCharacters(in: .whitespaces)) ?? 0
+        }
+        // Read the whole request body before answering.
+        var received = data.count - end.upperBound
+        while received < expected {
+            let count = recv(client, &buffer, buffer.count, 0)
+            if count <= 0 { break }
+            received += count
+        }
+        let path = head.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+        let (type, body) = answer(path)
+        var out = Data(("HTTP/1.1 200 OK\r\nContent-Type: \(type)\r\n"
+            + "Content-Length: \(body.count + 1000)\r\nConnection: close\r\n\r\n").utf8)
+        out.append(body)
+        var sent = 0
+        while sent < out.count {
+            let count = out.withUnsafeBytes { Darwin.send(client, $0.baseAddress! + sent, out.count - sent, 0) }
+            if count <= 0 { return }
+            sent += count
+        }
+    }
+
+    /// What each call would accept as a success, had it all arrived.
+    private static func answer(_ path: String) -> (String, Data) {
+        if path.contains("getfile") || path.contains("download") {
+            return ("text/csv", Data("email\na@example.com\n".utf8))
+        }
+        if path.contains("getcredits") { return ("application/json", Data(#"{"Credits":"7"}"#.utf8)) }
+        if path.contains("seed-count") { return ("application/json", Data("42".utf8)) }
+        let json = #"{"success":true,"ok":true,"message":"ok","file_id":"f","file_name":"f.csv","#
+            + #""address":"a@example.com","email":"a@example.com","domain":"example.com","status":"valid","#
+            + #""processed_at":"2010-01-01","email_batch":[],"errors":[]}"#
+        return ("application/json", Data(json.utf8))
+    }
+}
+
+/// Round 6 (2026-11-12 audit): the key quoted back in an error body, and a
+/// body cut short on a 200, over the complete sweep.
+extension TransportSafetyTests {
+    /// The forms a key can take in a body: as sent, percent-encoded in a
+    /// URL, and JSON-escaped.
+    private func keyForms(_ key: String) -> [String] {
+        var strict = CharacterSet.alphanumerics
+        strict.insert(charactersIn: "-._~")
+        return Array(Set([
+            key,
+            key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key,
+            key.addingPercentEncoding(withAllowedCharacters: strict) ?? key,
+            key.replacingOccurrences(of: "/", with: "\\/"),
+        ]))
+    }
+
+    private func leaks(_ error: Error, _ key: String) -> String? {
+        var texts = ["\(error)", String(reflecting: error), error.localizedDescription, describe(error)]
+        var dumped = ""
+        dump(error, to: &dumped)
+        texts.append(dumped)
+        if let zb = error as? ZBError {
+            switch zb {
+            case .httpError(let message, _): texts.append(message)
+            case .decodeError(let messages): texts.append(contentsOf: messages)
+            case .saveFileError(let message): texts.append(message)
+            default: break
+            }
+        }
+        for form in keyForms(key) {
+            if let text = texts.first(where: { $0.contains(form) }) { return "\(form) in \(text)" }
+            if mentions(error, form) { return "\(form) in the user info of \(error as NSError)" }
+        }
+        return nil
+    }
+
+    /// A body that quotes the key never hands it back in an error, whatever
+    /// the status and shape, on every public request method. The key has a
+    /// "|" (percent-encoded in a URL) and a "/" (escaped in JSON) so each of
+    /// its forms can be told apart.
+    func testAnErrorBuiltFromTheBodyNeverCarriesTheApiKey() {
+        let modes = ["echo-200-error-", "echo-200-success-false-", "echo-400-text-", "echo-400-json-"]
+        var failures = 0
+        for mode in modes {
+            let key = mode + "se|cr/et-Key"
+            let (sdk, warmup) = clients(key)
+            for (name, call) in everyCall(sdk, warmup) {
+                try? FileManager.default.removeItem(atPath: download)
+                let (error, sent) = run("\(mode)\(name)", call)
+                XCTAssertEqual(sent.count, 1, "\(mode) \(name)")
+                // The Warmup API reports its errors by status only, so a 200
+                // body is its result there; only its CSV downloads refuse JSON.
+                let mustFail = mode.hasPrefix("echo-400-") || !name.hasPrefix("warmup ") || name.contains("download")
+                guard let error = error else {
+                    if mustFail { XCTFail("\(mode) \(name) succeeded") }
+                    continue
+                }
+                failures += 1
+                if let leak = leaks(error, key) {
+                    XCTFail("\(mode) \(name): \(leak)")
+                }
+                if mode.hasPrefix("echo-400-") {
+                    XCTAssertEqual((error as? ZBError)?.statusCode, 400, "\(mode) \(name): \(describe(error))")
+                }
+                XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(mode) \(name) saved the error as a file")
+            }
+        }
+        XCTAssertGreaterThanOrEqual(failures, 4 * 64 + 2 * 26 + 2 * 2)
+    }
+
+    /// A 200 whose body stops short of its Content-Length is a transport
+    /// error on every public request method (GET, POST, PUT, DELETE, uploads,
+    /// downloads, Warmup), never a success with the part that arrived, and no
+    /// file is left behind. A real socket, since URLSession's own length check
+    /// is what differs between methods.
+    func testABodyCutShortIsATransportErrorOnEveryCall() throws {
+        let server = try CutShortServer()
+        defer { server.stop() }
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession()
+        let (sdk, warmup) = clients("cut-short-key")
+        let base = "http://127.0.0.1:\(server.port)"
+        sdk.apiBaseUrl = base + "/v2"
+        sdk.bulkApiRootUrl = base
+        sdk.bulkApiBaseUrl = base + "/v2"
+        sdk.setListEvaluatorBaseUrl(base + "/v2/listevaluator")
+        sdk.setInboxPlacementBaseUrl(base + "/api/ipt")
+        warmup.baseUrl = base
+        let calls = everyCall(sdk, warmup)
+        XCTAssertGreaterThanOrEqual(calls.count, 64 + 26)
+        for (name, call) in calls {
+            try? FileManager.default.removeItem(atPath: download)
+            let (error, _) = run(name, call)
+            guard let error = error else {
+                XCTFail("\(name) succeeded with a body cut short")
+                continue
+            }
+            // The transport error a caller can switch on; Warmup reports its
+            // transport errors by their description.
+            if name.hasPrefix("warmup ") {
+                XCTAssertTrue(describe(error).lowercased().contains("network connection was lost"), "\(name): \(error)")
+            } else {
+                XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost, "\(name): \(error)")
+            }
+            XCTAssertNil(leaks(error, "cut-short-key"), "\(name): \(error)")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(name) kept a partial file")
+        }
     }
 }

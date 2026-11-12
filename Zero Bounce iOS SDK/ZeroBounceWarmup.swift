@@ -603,14 +603,40 @@ public class ZeroBounceWarmup {
     // MARK: Request handling
 
     /// The Warmup key never travels in a URL, but a transport error may quote
-    /// the header, and test-smtp-configuration carries SMTP credentials in its
-    /// body.
+    /// the header, an error body may quote the key or the request back, and
+    /// test-smtp-configuration carries SMTP credentials in its body. Every
+    /// form of each (as sent, percent-encoded, JSON-escaped) is masked.
     private func redact(_ text: String, _ secrets: [String]) -> String {
-        var value = text
-        for secret in ([apiKey].compactMap { $0 } + secrets) where !secret.isEmpty {
-            value = value.replacingOccurrences(of: secret, with: "***")
+        ZeroBounceSDK.redacting([apiKey].compactMap { $0 } + secrets, in: text)
+    }
+
+    /// `completion` with the key and `secrets` redacted from any error it is
+    /// handed. `send` and `sendCsv`, which every public method goes through,
+    /// wrap the caller's completion this way, so an error built from a body
+    /// is redacted on every path.
+    private func redacted(
+        _ secrets: [String],
+        _ completion: @escaping (ZBWarmupResult) -> ()
+    ) -> (ZBWarmupResult) -> () {
+        let all = [apiKey].compactMap { $0 } + secrets
+        return { result in
+            if case .Failure(let error) = result {
+                completion(.Failure(ZeroBounceSDK.redacting(all, in: error)))
+            } else {
+                completion(result)
+            }
         }
-        return value
+    }
+
+    private func redacted(_ completion: @escaping (ZBWarmupCsvResult) -> ()) -> (ZBWarmupCsvResult) -> () {
+        let all = [apiKey].compactMap { $0 }
+        return { result in
+            if case .Failure(let error) = result {
+                completion(.Failure(ZeroBounceSDK.redacting(all, in: error)))
+            } else {
+                completion(result)
+            }
+        }
     }
 
     private func buildRequest(
@@ -645,6 +671,7 @@ public class ZeroBounceWarmup {
         secrets: [String] = [],
         completion: @escaping (ZBWarmupResult) -> ()
     ) {
+        let completion = redacted(secrets, completion)
         perform(method: method, path: path, query: query, body: body, secrets: secrets) { result in
             switch result {
             case .failure(let error):
@@ -673,6 +700,7 @@ public class ZeroBounceWarmup {
         query: [URLQueryItem],
         completion: @escaping (ZBWarmupCsvResult) -> ()
     ) {
+        let completion = redacted(completion)
         perform(method: "GET", path: path, query: query, body: nil, secrets: []) { result in
             switch result {
             case .failure(let error):
@@ -715,7 +743,7 @@ public class ZeroBounceWarmup {
             return
         }
         ZeroBounceSDK.urlSession.dataTask(with: request) { data, response, error in
-            if let error = error {
+            if let error = error ?? ZeroBounceSDK.cutShortError(response, received: Int64(data?.count ?? 0)) {
                 completion(.failure(ZBError.decodeError(messages: [
                     self.redact(error.localizedDescription, secrets)
                 ])))
