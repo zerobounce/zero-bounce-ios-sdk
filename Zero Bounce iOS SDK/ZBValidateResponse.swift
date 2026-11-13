@@ -136,16 +136,22 @@ extension ZBValidateResponse {
         // LIVE: a repeated greylisted validate answers a bare
         // {"Message": "Greylist validation still in progress..."} with no
         // address. That is a result (the text is on `message`), so the address
-        // is then empty. Without a Message, a missing address is still an
+        // is then empty. Without a Message, a result names its address and
+        // status (E7: present, not null, strings); a missing or null one is an
         // error.
+        let greylistAnswer = !(try container.decodeIfPresent(String.self, forKey: .message) ?? "").isEmpty
         if let address = try container.decodeIfPresent(String.self, forKey: .address) {
             self.address = address
-        } else if try container.decodeIfPresent(String.self, forKey: .message) != nil {
+        } else if greylistAnswer {
             self.address = ""
         } else {
             self.address = try container.decode(String.self, forKey: .address)
         }
-        status = try container.decodeIfPresent(ZBValidateStatus.self, forKey: .status)
+        if greylistAnswer {
+            status = try container.decodeIfPresent(ZBValidateStatus.self, forKey: .status)
+        } else {
+            status = try container.decode(ZBValidateStatus.self, forKey: .status)
+        }
         subStatus = try container.decodeIfPresent(ZBValidateSubStatus.self, forKey: .subStatus)
         account = try container.decodeIfPresent(String.self, forKey: .account)
         domain = try container.decodeIfPresent(String.self, forKey: .domain)

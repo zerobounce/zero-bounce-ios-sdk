@@ -4985,6 +4985,90 @@ extension TransportSafetyTests {
         XCTAssertGreaterThan(typed, 300)
     }
 
+    /// checks.md E7: getCredits, validate and each validateBatch row with a
+    /// missing, null or wrong-typed required field fail with status 200;
+    /// nothing is coerced or defaulted. A greylist answer that carries its
+    /// text in Message is still a result.
+    func testTypedCallsRejectFieldsOfTheWrongType() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("field-types")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        func expectError(_ name: String, _ body: String) {
+            script(200, "application/json", body)
+            let (error, _) = run("\(name) with \(body)", calls[name]!)
+            XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name) with \(body): \(describe(error))")
+        }
+        for body in [#"{}"#, #"{"Credits":null}"#, #"{"Credits":true}"#, #"{"Credits":5}"#, #"{"Credits":5.5}"#,
+                     #"{"Credits":"abc"}"#, #"{"Credits":"5.0"}"#, #"{"Credits":""}"#, #"{"Credits":" 5"}"#,
+                     #"{"Credits":"5abc"}"#, #"{"Credits":"99999999999999999999"}"#, #"{"Credits":[1]}"#,
+                     #"{"Credits":{}}"#] {
+            expectError("getCredits", body)
+        }
+        let rows = [#"{}"#, #"{"address":true,"status":"valid"}"#, #"{"address":"a@b.c","status":5}"#,
+                    #"{"status":"valid"}"#, #"{"address":"a@b.c"}"#, #"{"address":null,"status":"valid"}"#,
+                    #"{"address":"a@b.c","status":null}"#, #"{"address":"a@b.c","status":"valid","Message":7}"#]
+        for body in rows {
+            expectError("validate", body)
+            expectError("validate POST", body)
+            expectError("validateBatch", #"{"email_batch":["# + body + #"],"errors":[]}"#)
+            expectError("validateBatch options", #"{"email_batch":["# + body + #"],"errors":[]}"#)
+        }
+    }
+
+    /// E7 ACCEPT: the documented example responses (zerobounce.net/docs, as
+    /// the SDKs' fixtures carry them) still parse, nulls included.
+    func testDocumentedExamplesStillParse() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("documented")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        let row = #"{"address":"valid@example.com","status":"valid","sub_status":"","free_email":false,"did_you_mean":null,"account":null,"domain":null,"domain_age_days":"9692","smtp_provider":"example","catchall_domain":false,"mx_found":"true","mx_record":"mx.example.com","firstname":"zero","lastname":"bounce","gender":"male","country":"United States","region":"Florida","city":"West Palm Beach","zipcode":"33401","processed_at":"2023-03-23 13:30:28.105"}"#
+        let nullRow = #"{"address":"invalid@example.com","status":"invalid","sub_status":"failed_syntax_check","free_email":false,"did_you_mean":null,"account":"","domain":null,"domain_age_days":"","smtp_provider":"","mx_found":"false","mx_record":null,"firstname":"","lastname":"","gender":"","country":null,"region":null,"city":null,"zipcode":null,"processed_at":"2023-04-05 08:55:40.661"}"#
+        let examples: [(String, String)] = [
+            ("getCredits", #"{"Credits":"123456"}"#),
+            ("getCredits", #"{"Credits":"-1"}"#),
+            ("getActivityData", #"{"found":true,"active_in_days":"180"}"#),
+            ("getActivityData", #"{"found":false,"active_in_days":null}"#),
+            ("validate", row),
+            ("validate", nullRow),
+            ("validate", #"{"Message":"Greylist validation still in progress. Please try again later."}"#),
+            ("validate", #"{"address":"a@example.com","Message":"Greylisted email, we will retry"}"#),
+            ("validateBatch", #"{"email_batch":["# + row + #"],"errors":[{"error":"Mock error message","email_address":"invalid@example.com"}]}"#),
+            ("validateBatch", #"{"email_batch":[],"errors":[{"error":"Mock error message","email_address":"invalid@example.com"}]}"#),
+            ("validateBatch", #"{"email_batch":["# + row + #"],"errors":[]}"#),
+            ("sendFile data", #"{"success":true,"message":"File Accepted","file_name":"emails2.txt","file_id":"e90e9b1d-8dc7-40eb-a7d9-999d52086a56"}"#),
+            ("fileStatus", #"{"success":true,"file_id":"e90e9b1d-8dc7-40eb-a7d9-999d52086a56","file_name":"emails2.txt","upload_date":"2023-04-26T17:52:23Z","file_status":"Processing","complete_percentage":"100%","error_reason":null,"return_url":"https://mock.value.com/"}"#),
+            ("deleteFile", #"{"success":true,"message":"File Deleted","file_name":"emails2.txt","file_id":"e90e9b1d-8dc7-40eb-a7d9-999d52086a56"}"#),
+            ("findEmail domain", #"{"email":"john.doe@example.com","email_confidence":"high","domain":"","company_name":"Internet Assigned Numbers Authority","did_you_mean":"","failure_reason":""}"#),
+            ("findDomain domain", #"{"domain":"example.com","company_name":"","format":"first.last","confidence":"high","did_you_mean":"","failure_reason":"","other_domain_formats":[{"format":"first_last","confidence":"high"},{"format":"first","confidence":"medium"}]}"#),
+        ]
+        for (name, body) in examples {
+            script(200, "application/json", body)
+            let (error, _) = run("\(name) with \(body)", calls[name]!)
+            XCTAssertNil(error, "\(name) with \(body): \(describe(error))")
+        }
+    }
+
+    /// E2: the three dead-key spellings the API answers with on an HTTP 200,
+    /// over every ZeroBounceSDK request method (the sendFile family of
+    /// uploads included). Warmup is left out: its JSON calls take a 200 body
+    /// as their result (open decision "Warmup errors by status only").
+    func testADeadKeyOn200IsAnErrorOnEveryCall() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("dead-key-sweep")
+        var swept = 0
+        for body in [#"{"error":"Invalid API key or your account ran out of credits"}"#,
+                     #"{"error_message":"Invalid API key or your account ran out of credits"}"#,
+                     #"{"Error":"Invalid API key or your account ran out of credits"}"#] {
+            script(200, "application/json", body)
+            for (name, call) in everyCall(sdk, warmup) where !name.hasPrefix("warmup") {
+                swept += 1
+                let (error, _) = run("\(name) with \(body)", call)
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name) with \(body): \(describe(error))")
+            }
+        }
+        XCTAssertGreaterThan(swept, 150)
+    }
+
     /// Nested deeper than the strict-JSON scanner's limit: an error with
     /// status 200 on every call, not a crash.
     func testADeeplyNestedBodyIsAnErrorOnEveryCall() {
@@ -5030,6 +5114,19 @@ extension TransportSafetyTests {
             // decoded view holds the secret.
             let result = ZeroBounceSDK.redacting([secret], in: "echo [\(spelling)] end")
             XCTAssertFalse(fuzzReadable(result, secret, 4), "\(what): \(result)")
+        }
+        // A \uXXXX escape for each UTF-8 sequence length: 2 bytes (U+00EA),
+        // 3 bytes (U+20AC), and 4 bytes from a surrogate pair. The SDK
+        // generates these escapes in all-lower and all-upper hex, so
+        // mixed-case hex reaches only the decode check, and the body is
+        // dropped whole.
+        for (what, spelling, secret) in [
+            ("\\u escape, 2-byte UTF-8", #"k\u00eAy"#, "k\u{EA}y"),
+            ("\\u escape, 3-byte UTF-8", #"k\u20Acy"#, "k\u{20AC}y"),
+            ("\\u surrogate pair, 4-byte UTF-8", #"k\uD83d\udD11y"#, "k\u{1F511}y"),
+        ] {
+            XCTAssertEqual(ZeroBounceSDK.redacting([secret], in: "echo [\(spelling)] end"),
+                           ZeroBounceSDK.secretOmittedMessage, what)
         }
         // The control: a NUL and escapes with no key behind them stay.
         let control = #"nothing secret %00 here \u0000 %41"#
