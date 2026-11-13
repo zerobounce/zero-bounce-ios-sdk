@@ -3638,6 +3638,56 @@ func publicRequestMethodsInSources(testFile: String = #filePath) throws -> [Stri
     return methods
 }
 
+/// One typed model with a fixture that carries every stored property of it
+/// (checked by reflection in the null sweep). `required` names the fields a
+/// null must fail on; every other field reads null as its empty value.
+private struct TypedModelFixture {
+    let name: String
+    let json: String
+    let required: Set<String>
+    let decode: (Data) throws -> any Encodable
+}
+
+/// Fixtures written to carry every stored property of each model; the
+/// documented examples above are kept as they are.
+private let completeValidateJson = #"{"address":"john.doe@zerobounce.net","status":"valid","sub_status":"","account":"johndoe","domain":"zerobounce.net","did_you_mean":null,"domain_age_days":"3431","active_in_days":"30","active_first_seen":"2026-02-25","free_email":false,"mx_found":"true","mx_record":"aspmx.l.google.com","smtp_provider":"g-suite","catchall_domain":true,"firstname":"dan","lastname":"cotet","gender":"male","city":"Bucharest","region":"Bucharest","zipcode":"010000","country":"Romania","processed_at":"2026-06-18 07:05:00.033","domain_website_exists":"true","domain_registrant_company_name":"ZeroBounce","Message":null}"#
+private let completeFileStatusJson = #"{"success":true,"message":null,"file_id":"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff","file_name":"Your file name.csv","upload_date":"2023-04-28T15:25:41Z","file_status":"Complete","file_phase_2_status":"Complete","complete_percentage":"100%","error_reason":null,"return_url":"Your return URL if provided when calling sendfile API"}"#
+
+private func typedModelFixtures() -> [TypedModelFixture] {
+    let decoder = JSONDecoder()
+    return [
+        TypedModelFixture(name: "ZBValidateResponse", json: completeValidateJson, required: ["address", "status"],
+                          decode: { try decoder.decode(ZBValidateResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBValidateBatchResponse",
+                          json: #"{"email_batch":[],"errors":[{"error":"Mock error message","email_address":"invalid@example.com"}]}"#,
+                          required: [], decode: { try decoder.decode(ZBValidateBatchResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBValidateBatchErrorResponse", json: #"{"error":"Mock error message","email_address":"invalid@example.com"}"#,
+                          required: [], decode: { try decoder.decode(ZBValidateBatchErrorResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBCreditsResponse", json: #"{"Credits":"-1"}"#, required: ["Credits"],
+                          decode: { try decoder.decode(ZBCreditsResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBSendFileResponse", json: #"{"success":true,"message":"File Accepted","file_name":"Your file name.csv","file_id":"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff"}"#,
+                          required: [], decode: { try decoder.decode(ZBSendFileResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBDeleteFileResponse", json: #"{"success":true,"message":"File Deleted","file_name":"test2","file_id":"b222a0fd-90d5-416c-8f1a-9cc3851fc823"}"#,
+                          required: [], decode: { try decoder.decode(ZBDeleteFileResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBFileStatusResponse", json: completeFileStatusJson, required: [],
+                          decode: { try decoder.decode(ZBFileStatusResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBEmailFinderResponse",
+                          json: #"{"email":"john.doe@example.com","email_confidence":"high","domain":"example.com","company_name":"Example","did_you_mean":"","failure_reason":""}"#,
+                          required: [], decode: { try decoder.decode(ZBEmailFinderResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBDomainSearchResponse",
+                          json: #"{"domain":"example.com","company_name":"Example","format":"first.last","confidence":"high","did_you_mean":"","failure_reason":"","other_domain_formats":[{"format":"first_last","confidence":"high"}]}"#,
+                          required: [], decode: { try decoder.decode(ZBDomainSearchResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBDomainFormat", json: #"{"format":"first_last","confidence":"high"}"#, required: [],
+                          decode: { try decoder.decode(ZBDomainFormat.self, from: $0) }),
+        TypedModelFixture(name: "ZBActivityDataResponse", json: #"{"found":true,"active_in_days":"180"}"#, required: [],
+                          decode: { try decoder.decode(ZBActivityDataResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBScoreEmailResponse", json: #"{"email":"a@example.com","score":10}"#, required: [],
+                          decode: { try decoder.decode(ZBScoreEmailResponse.self, from: $0) }),
+        TypedModelFixture(name: "ZBS3ListFileEntry", json: #"{"name":"emails.csv","size":1024,"last_modified":"2026-01-01T00:00:00Z"}"#, required: [],
+                          decode: { try decoder.decode(ZBS3ListFileEntry.self, from: $0) }),
+    ]
+}
+
 final class TransportSafetyTests: XCTestCase {
     private var liveSession: URLSession!
     private var csvPath = ""
@@ -5194,19 +5244,13 @@ extension TransportSafetyTests {
             ("getApiUsage", "{\n      \"total\": 120,\n      \"status_valid\": 17,\n      \"status_invalid\": 69,\n      \"status_catch_all\": 9,\n      \"status_do_not_mail\": 16,\n      \"status_spamtrap\": 0,\n      \"status_unknown\": 6,\n      \"sub_status_toxic\": 0,\n      \"sub_status_disposable\": 1,\n      \"sub_status_role_based\": 1,\n      \"sub_status_possible_trap\": 0,\n      \"sub_status_global_suppression\": 14,\n      \"sub_status_timeout_exceeded\": 0,\n      \"sub_status_mail_server_temporary_error\": 0,\n      \"sub_status_mail_server_did_not_respond\": 0,\n      \"sub_status_greylisted\": 6,\n      \"sub_status_antispam_system\": 0,\n      \"sub_status_does_not_accept_mail\": 27,\n      \"sub_status_exception_occurred\": 0,\n      \"sub_status_failed_syntax_check\": 20,\n      \"sub_status_mailbox_not_found\": 12,\n      \"sub_status_unroutable_ip_address\": 0,\n      \"sub_status_possible_typo\": 0,\n      \"sub_status_no_dns_entries\": 10,\n      \"sub_status_role_based_catch_all\": 0,\n      \"sub_status_mailbox_quota_exceeded\": 0,\n      \"sub_status_forcible_disconnect\": 0,\n      \"sub_status_failed_smtp_connection\": 0,\n      \"sub_status_leading_period_removed\": 0,\n      \"sub_status_alias_address\": 2,\n      \"sub_status_mx_forward\": 0,\n      \"sub_status_alternate\": 0,\n      \"sub_status_blocked\": 0,\n      \"sub_status_allowed\": 0,\n      \"start_date\": \"1/1/2023\",\n      \"end_date\": \"1/30/2024\"\n    }"),
             ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"N/A\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
             ("listS3files", #"[{"name":"emails.csv","size":1024,"last_modified":"2026-01-01T00:00:00Z"}]"#),
+            // Every stored property of the model (the documented examples above
+            // leave some out), so the sweep reaches each field.
+            ("validate", completeValidateJson),
+            ("fileStatus", completeFileStatusJson),
+            ("scoringFileStatus", completeFileStatusJson),
         ]
         let replacements: [Any] = [NSNull(), true, 5, 5.5, "x", [Any](), [String: Any]()]
-        // Fields this SDK's released types make non-optional, so null is not
-        // taken there (3.0.1 alike).
-        let nonOptional: [String: Set<String>] = [
-            "sendFile data": ["file_name"], "scoringSendFile data": ["file_name"],
-            "deleteFile": ["file_id", "file_name"], "scoringDeleteFile": ["file_id", "file_name"],
-            "fileStatus": ["success", "file_id", "file_status"], "scoringFileStatus": ["success", "file_id", "file_status"],
-            "findEmail domain": ["email", "email_confidence", "domain", "company_name"],
-            "findDomain domain": ["domain", "company_name", "format", "confidence"],
-            "getActivityData": ["found"], "listS3files": ["name", "size", "last_modified"],
-            "validateBatch": ["error", "email_address"],
-        ]
         // The other spelling a validate field takes: mx_found and free_email
         // as a boolean or the string "true"/"false", the activity fields as a
         // string or a whole number.
@@ -5219,7 +5263,8 @@ extension TransportSafetyTests {
             let (error, _) = run("\(name) with \(body)", calls[name]!)
             XCTAssertNil(error, "\(name) with \(body): \(describe(error))")
             let root = try! JSONSerialization.jsonObject(with: Data(body.utf8), options: [.fragmentsAllowed])
-            let greylist = (root as? [String: Any])?["Message"] != nil
+            // A greylist answer carries a text Message; a null Message is a result.
+            let greylist = ((root as? [String: Any])?["Message"] as? String) != nil
             for path in nestedPaths(root) {
                 let original = nestedValue(root, path)
                 // A null in the example does not show the field's type.
@@ -5227,12 +5272,14 @@ extension TransportSafetyTests {
                 var key: String? = nil
                 if case .key(let k)? = path.last { key = k }
                 for value in replacements where nestedKind(value) != nestedKind(original) {
-                    let required = (greylist ? key == "Message" : ["Credits", "address", "status"].contains(key ?? "")) ||
-                        (nonOptional[name] ?? []).contains(key ?? "")
+                    // Standard section 3: only these fields are required, so a
+                    // null anywhere else reads as the empty value. A file-job
+                    // message takes a list of strings on every file-job answer.
+                    let required = greylist ? key == "Message" : ["Credits", "address", "status"].contains(key ?? "")
                     let ok = (value is NSNull && key != nil && !required) ||
                         (key == "Credits" && nestedKind(value) == "int") ||
                         (name.hasPrefix("validate") && alsoTakes[key ?? ""] == nestedKind(value)) ||
-                        (key == "message" && (name == "sendFile data" || name == "scoringSendFile data") && value is [Any])
+                        (key == "message" && value is [Any])
                     let changed = String(decoding: try! JSONSerialization.data(
                         withJSONObject: nestedReplacing(root, path, with: value), options: [.fragmentsAllowed]), as: UTF8.self)
                     script(200, "application/json", changed)
@@ -5249,6 +5296,140 @@ extension TransportSafetyTests {
         }
         // 21 examples, about 580 substitutions when this was written.
         XCTAssertGreaterThanOrEqual(checked, 500)
+    }
+
+    /// Standard section 3, per model: every stored property of each typed model
+    /// is in its fixture (a reflection count), and a null in any field other
+    /// than the required ones decodes and re-encodes as that field's empty
+    /// value (or is absent, for an optional field). The required fields fail.
+    func testNullReadsAsTheEmptyValueInEveryNonRequiredFieldOfEveryTypedModel() throws {
+        let encoder = JSONEncoder()
+        func isEmpty(_ value: Any) -> Bool {
+            switch value {
+            case let text as String: return text.isEmpty
+            case let array as [Any]: return array.isEmpty
+            case let object as [String: Any]: return object.isEmpty
+            case let number as NSNumber:
+                if CFGetTypeID(number) == CFBooleanGetTypeID() { return !number.boolValue }
+                return number.doubleValue == 0
+            default: return false
+            }
+        }
+        for model in typedModelFixtures() {
+            let original = try JSONSerialization.jsonObject(with: Data(model.json.utf8)) as! [String: Any]
+            let decoded = try model.decode(Data(model.json.utf8))
+            XCTAssertEqual(Mirror(reflecting: decoded).children.count, original.count,
+                           "\(model.name): the fixture must carry every stored property")
+            for key in original.keys.sorted() {
+                var changed = original
+                changed[key] = NSNull()
+                let data = try JSONSerialization.data(withJSONObject: changed)
+                if model.required.contains(key) {
+                    XCTAssertThrowsError(try model.decode(data), "\(model.name).\(key) is required")
+                    continue
+                }
+                let read: any Encodable
+                do {
+                    read = try model.decode(data)
+                } catch {
+                    XCTFail("\(model.name).\(key) = null must read as its empty value: \(error)")
+                    continue
+                }
+                let encoded = try JSONSerialization.jsonObject(
+                    with: encoder.encode(read), options: [.fragmentsAllowed]) as! [String: Any]
+                if let value = encoded[key] {
+                    XCTAssertTrue(isEmpty(value), "\(model.name).\(key) = null read \(value), not its empty value")
+                }
+            }
+        }
+    }
+
+    /// Standard section 3 and the file-job message: a `message` that is a list
+    /// of strings is joined with a line feed on every file-job answer (send,
+    /// delete and file status, scoring alike); a string, null or missing
+    /// message reads as before. Decoded per model, so each one fails alone.
+    func testFileJobMessageListIsJoinedOnEveryFileJob() throws {
+        let decoder = JSONDecoder()
+        let list = #"["First error","Second error"]"#
+        let sent = try decoder.decode(ZBSendFileResponse.self,
+                                      from: Data(#"{"success":true,"message":\#(list),"file_name":"f.csv","file_id":"fid"}"#.utf8))
+        XCTAssertEqual(sent.message, "First error\nSecond error")
+        let deleted = try decoder.decode(ZBDeleteFileResponse.self,
+                                         from: Data(#"{"success":true,"message":\#(list),"file_name":"f.csv","file_id":"fid"}"#.utf8))
+        XCTAssertEqual(deleted.message, "First error\nSecond error")
+        let status = try decoder.decode(ZBFileStatusResponse.self,
+                                        from: Data(#"{"success":true,"message":\#(list),"file_id":"fid","file_status":"Complete"}"#.utf8))
+        XCTAssertEqual(status.message, "First error\nSecond error")
+        let text = try decoder.decode(ZBDeleteFileResponse.self,
+                                      from: Data(#"{"success":true,"message":"File Deleted","file_name":"f.csv","file_id":"fid"}"#.utf8))
+        XCTAssertEqual(text.message, "File Deleted")
+        let nullMessage = try decoder.decode(ZBFileStatusResponse.self,
+                                             from: Data(#"{"success":true,"message":null,"file_id":"fid","file_status":"Complete"}"#.utf8))
+        XCTAssertNil(nullMessage.message)
+        let missing = try decoder.decode(ZBDeleteFileResponse.self,
+                                         from: Data(#"{"success":true,"file_name":"f.csv","file_id":"fid"}"#.utf8))
+        XCTAssertNil(missing.message)
+        XCTAssertThrowsError(try decoder.decode(ZBFileStatusResponse.self,
+                                                from: Data(#"{"success":true,"message":["a",5],"file_id":"fid","file_status":"Complete"}"#.utf8)))
+        XCTAssertThrowsError(try decoder.decode(ZBDeleteFileResponse.self,
+                                                from: Data(#"{"success":true,"message":{"a":"b"},"file_name":"f.csv","file_id":"fid"}"#.utf8)))
+
+        // Through each call: the list answer is a result, not a decode error.
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("file-message-key")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        let body = #"{"success":true,"message":["Queued","Second line"],"file_name":"f.csv","file_id":"fid","file_status":"Complete"}"#
+        for name in ["deleteFile", "scoringDeleteFile", "fileStatus", "scoringFileStatus"] {
+            script(200, "application/json", body)
+            let (error, _) = run("\(name) with a list message", calls[name]!)
+            XCTAssertNil(error, "\(name): \(describe(error))")
+        }
+    }
+
+    /// Standard E3, message-only: a finder or domain-search body whose only
+    /// keys are message keys is an error with status 200, whatever the message
+    /// value (text, blank, null, a list). A body with a finder field is an answer.
+    func testAMessageOnlyFinderOrDomainBodyIsAnErrorWhateverItsValue() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("message-only-key")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        let names = ["findEmail domain", "findEmail company", "findDomain domain", "findDomain company", "guessFormat"]
+        let bodies = [#"{"message":"Invalid API key"}"#, #"{"message":""}"#, #"{"message":null}"#,
+                      #"{"message":["First","Second"]}"#, #"{"Message":"Dead key"}"#, #"{"detail":"  "}"#]
+        var checked = 0
+        for body in bodies {
+            for name in names {
+                script(200, "application/json", body)
+                let (error, _) = run("\(name) with \(body)", calls[name]!)
+                checked += 1
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name) with \(body): \(describe(error))")
+            }
+        }
+        XCTAssertEqual(checked, names.count * bodies.count)
+    }
+
+    /// Standard section 3, download sniff: each marker of the HTML check
+    /// (`<!DOCTYPE html`, `<html`, `<head`, `<body`) on its own, in a body
+    /// served as text/csv, is an HTML page: every download refuses it with its
+    /// status and writes no file.
+    func testEveryHtmlSniffMarkerRefusesADownloadServedAsCsv() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("html-marker-key")
+        let downloads = everyCall(sdk, warmup).filter { $0.0.lowercased().contains("getfile") || $0.0.contains("download") }
+        XCTAssertGreaterThanOrEqual(downloads.count, 10)
+        var checked = 0
+        for marker in ["<!DOCTYPE html>", "<html>", "<head>", "<body>"] {
+            script(200, "text/csv", "email\nAccess denied by proxy \(marker)\n")
+            for (name, call) in downloads {
+                try? FileManager.default.removeItem(atPath: download)
+                let (error, _) = run("\(marker) \(name)", call)
+                checked += 1
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(marker) \(name): \(describe(error))")
+                XCTAssertFalse(FileManager.default.fileExists(atPath: download), "\(marker) \(name) wrote a file")
+            }
+        }
+        XCTAssertEqual(checked, 4 * downloads.count)
+        try? FileManager.default.removeItem(atPath: download)
     }
 
     /// E2: the three dead-key spellings the API answers with on an HTTP 200,

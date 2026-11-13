@@ -39,3 +39,13 @@ public struct ZBValidateBatchErrorResponse: Codable, Equatable {
         case emailAddress = "email_address"
     }
 }
+
+extension ZBValidateBatchErrorResponse {
+    /// A null `error` or `email_address` reads as "" (standard section 3).
+    /// Declared in an extension so the memberwise initializer is kept.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        error = try container.decodeNullAsEmpty(String.self, forKey: .error, empty: "")
+        emailAddress = try container.decodeNullAsEmpty(String.self, forKey: .emailAddress, empty: "")
+    }
+}

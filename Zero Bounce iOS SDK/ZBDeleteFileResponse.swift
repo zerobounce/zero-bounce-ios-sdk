@@ -21,3 +21,16 @@ public struct ZBDeleteFileResponse: Codable, Equatable {
         case fileId = "file_id"
     }
 }
+
+extension ZBDeleteFileResponse {
+    /// `message` is a string or a list of strings (joined with a line feed);
+    /// a null `file_name` or `file_id` reads as "" (standard section 3).
+    /// Declared in an extension so the memberwise initializer is kept.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decodeIfPresent(Bool.self, forKey: .success)
+        message = try container.decodeFileMessage(forKey: .message)
+        fileName = try container.decodeNullAsEmpty(String.self, forKey: .fileName, empty: "")
+        fileId = try container.decodeNullAsEmpty(String.self, forKey: .fileId, empty: "")
+    }
+}

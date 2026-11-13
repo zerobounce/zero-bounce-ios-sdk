@@ -34,3 +34,22 @@ public struct ZBFileStatusResponse : Codable, Equatable {
         case returnUrl = "return_url"
     }
 }
+
+extension ZBFileStatusResponse {
+    /// `message` is a string or a list of strings (joined with a line feed). A
+    /// null `success`, `file_id` or `file_status` reads as false or "" (standard
+    /// section 3). Declared in an extension so the memberwise initializer is kept.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decodeNullAsEmpty(Bool.self, forKey: .success, empty: false)
+        message = try container.decodeFileMessage(forKey: .message)
+        fileId = try container.decodeNullAsEmpty(String.self, forKey: .fileId, empty: "")
+        fileName = try container.decodeIfPresent(String.self, forKey: .fileName)
+        uploadDate = try container.decodeIfPresent(String.self, forKey: .uploadDate)
+        fileStatus = try container.decodeNullAsEmpty(String.self, forKey: .fileStatus, empty: "")
+        filePhase2Status = try container.decodeIfPresent(String.self, forKey: .filePhase2Status)
+        completePercentage = try container.decodeIfPresent(String.self, forKey: .completePercentage)
+        errorReason = try container.decodeIfPresent(String.self, forKey: .errorReason)
+        returnUrl = try container.decodeIfPresent(String.self, forKey: .returnUrl)
+    }
+}

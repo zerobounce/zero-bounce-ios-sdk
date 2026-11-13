@@ -68,3 +68,15 @@ public struct ZBS3ListFileEntry: Codable {
         case lastModified = "last_modified"
     }
 }
+
+extension ZBS3ListFileEntry {
+    /// A null `name`, `size` or `last_modified` reads as the empty value
+    /// (standard section 3). Declared in an extension so the memberwise
+    /// initializer is kept.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decodeNullAsEmpty(String.self, forKey: .name, empty: "")
+        size = try container.decodeNullAsEmpty(Int.self, forKey: .size, empty: 0)
+        lastModified = try container.decodeNullAsEmpty(String.self, forKey: .lastModified, empty: "")
+    }
+}
