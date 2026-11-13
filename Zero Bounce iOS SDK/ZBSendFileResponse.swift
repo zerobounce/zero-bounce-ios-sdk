@@ -36,11 +36,15 @@ extension ZBSendFileResponse {
 }
 
 extension KeyedDecodingContainer {
-    /// A field the typed model does not make optional: a present null reads as
-    /// `empty` (standard section 3, never an error). A missing key still fails
-    /// the decode, so a message-only body is not read as an empty answer.
+    /// A field the typed model does not make optional: a null or a missing key
+    /// reads as `empty` (standard section 3 and B, never an error). A message-only
+    /// body is recognised by its keys before decoding (ZBError.messageOnlyFailure),
+    /// not by a failed decode.
     func decodeNullAsEmpty<T: Decodable>(_ type: T.Type, forKey key: Key, empty: T) throws -> T {
-        if contains(key), try decodeNil(forKey: key) {
+        if !contains(key) {
+            return empty
+        }
+        if try decodeNil(forKey: key) {
             return empty
         }
         return try decode(T.self, forKey: key)

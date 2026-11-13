@@ -3653,6 +3653,39 @@ private struct TypedModelFixture {
 private let completeValidateJson = #"{"address":"john.doe@zerobounce.net","status":"valid","sub_status":"","account":"johndoe","domain":"zerobounce.net","did_you_mean":null,"domain_age_days":"3431","active_in_days":"30","active_first_seen":"2026-02-25","free_email":false,"mx_found":"true","mx_record":"aspmx.l.google.com","smtp_provider":"g-suite","catchall_domain":true,"firstname":"dan","lastname":"cotet","gender":"male","city":"Bucharest","region":"Bucharest","zipcode":"010000","country":"Romania","processed_at":"2026-06-18 07:05:00.033","domain_website_exists":"true","domain_registrant_company_name":"ZeroBounce","Message":null}"#
 private let completeFileStatusJson = #"{"success":true,"message":null,"file_id":"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff","file_name":"Your file name.csv","upload_date":"2023-04-28T15:25:41Z","file_status":"Complete","file_phase_2_status":"Complete","complete_percentage":"100%","error_reason":null,"return_url":"Your return URL if provided when calling sendfile API"}"#
 
+/// The documented example responses (zerobounce.net/docs, and the repo's fixtures for the
+/// other typed calls), each with the call that reads it. The sweeps below run over all of them.
+private func documentedExamples() -> [(String, String)] {
+    return [
+        ("getCredits", #"{"Credits":2375323}"#),
+        ("getCredits", #"{"Credits":"-1"}"#),
+        ("validate", "{\n      \"address\": \"john.doe@zerobounce.net\",\n      \"status\": \"valid\",\n      \"sub_status\": \"\",\n      \"free_email\": false,\n      \"catchall_domain\": true,\n      \"did_you_mean\": null,\n      \"account\": \"johndoe\",\n      \"domain\": \"zerobounce.net\",\n      \"domain_age_days\": \"3431\",\n      \"active_in_days\": \"30\",\n      \"active_first_seen\": \"2026-02-25\",\n      \"smtp_provider\": \"g-suite\",\n      \"mx_found\": \"true\",\n      \"mx_record\": \"aspmx.l.google.com\",\n      \"firstname\": \"dan\",\n      \"lastname\": \"cotet\",\n      \"gender\": \"male\",\n      \"country\": null,\n      \"region\": null,\n      \"city\": null,\n      \"zipcode\": null,\n      \"processed_at\": \"2026-06-18 07:05:00.033\"\n  }"),
+        ("validate", #"{"address":"a@example.com","Message":"Greylisted email, we will retry"}"#),
+        ("validate POST", #"{"address":"a@example.com","status":"valid","sub_status":"","free_email":false,"catchall_domain":false,"domain_age_days":"9692","mx_found":"true","firstname":"zero"}"#),
+        ("validateBatch", #"{"email_batch":[{"address":"valid@example.com","status":"valid","sub_status":"","free_email":false,"did_you_mean":null,"account":null,"domain":null,"domain_age_days":"9692","smtp_provider":"example","catchall_domain":false,"mx_found":"true","mx_record":"mx.example.com","firstname":"zero","lastname":"bounce","gender":"male","country":"United States","region":"Florida","city":"West Palm Beach","zipcode":"33401","processed_at":"2023-03-23 13:30:28.105"}],"errors":[{"error":"Mock error message","email_address":"invalid@example.com"}]}"#),
+        ("sendFile data", "{\n      \"success\": true,\n      \"message\": \"File Accepted\",\n      \"file_name\": \"Your file name.csv\",\n      \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\"\n    }"),
+        ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"Complete\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
+        ("deleteFile", "{\n    \"success\": true,\n    \"message\": \"File Deleted\",\n    \"file_name\": \"test2\",\n    \"file_id\": \"b222a0fd-90d5-416c-8f1a-9cc3851fc823\"\n  }"),
+        ("scoringSendFile data", "{\n          \"success\": true,\n          \"message\": \"File Accepted\",\n          \"file_name\": \"Your file name.csv\",\n          \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\"\n      }"),
+        ("scoringFileStatus", "{\n          \"success\": true,\n          \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n          \"file_name\": \"Your file name.csv\",\n          \"upload_date\": \"2023-04-28T15:25:41Z\",\n          \"file_status\": \"Complete\",\n          \"complete_percentage\": \"100%\",\n          \"return_url\": \"Your return URL if provided when calling sendfile API\"\n      }"),
+        ("scoringDeleteFile", "{\n        \"success\": true,\n        \"message\": \"File Deleted\",\n        \"file_name\": \"test2\",\n        \"file_id\": \"b222a0fd-90d5-416c-8f1a-9cc3851fc823\"\n    }"),
+        ("getApiUsage", #"{"total":10,"status_valid":10,"status_invalid":0,"sub_status_toxic":0,"start_date":"1/12/2010","end_date":"12/1/2030"}"#),
+        ("getActivityData", #"{"found":true,"active_in_days":"180"}"#),
+        ("scoreEmail", #"{"email":"a@example.com","score":10}"#),
+        ("findEmail domain", #"{"email":"john.doe@example.com","email_confidence":"high","domain":"","company_name":"Internet Assigned Numbers Authority","did_you_mean":"","failure_reason":""}"#),
+        ("findDomain domain", #"{"domain":"example.com","company_name":"","format":"first.last","confidence":"high","did_you_mean":"","failure_reason":"","other_domain_formats":[{"format":"first_last","confidence":"high"},{"format":"first","confidence":"medium"}]}"#),
+        ("validateBatch", "{\n      \"email_batch\": [\n          {\n              \"address\": \"john.doe@zerobounce.net\",\n              \"status\": \"valid\",\n              \"sub_status\": \"\",\n              \"free_email\": false,\n              \"catchall_domain\": true,\n              \"did_you_mean\": null,\n              \"account\": \"johndoe\",\n              \"domain\": \"zerobounce.net\",\n              \"domain_age_days\": \"3431\",\n              \"active_in_days\": \"30\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"g-suite\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"aspmx.l.google.com\",\n              \"firstname\": \"dan\",\n              \"lastname\": \"cotet\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2026-06-18 07:05:00.033\"\n          },\n          {\n              \"address\": \"invalid@example.com\",\n              \"status\": \"invalid\",\n              \"sub_status\": \"mailbox_not_found\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          },\n          {\n              \"address\": \"disposable@example.com\",\n              \"status\": \"do_not_mail\",\n              \"sub_status\": \"disposable\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          }\n      ],\n      \"errors\": []\n  }"),
+        ("getApiUsage", "{\n      \"total\": 120,\n      \"status_valid\": 17,\n      \"status_invalid\": 69,\n      \"status_catch_all\": 9,\n      \"status_do_not_mail\": 16,\n      \"status_spamtrap\": 0,\n      \"status_unknown\": 6,\n      \"sub_status_toxic\": 0,\n      \"sub_status_disposable\": 1,\n      \"sub_status_role_based\": 1,\n      \"sub_status_possible_trap\": 0,\n      \"sub_status_global_suppression\": 14,\n      \"sub_status_timeout_exceeded\": 0,\n      \"sub_status_mail_server_temporary_error\": 0,\n      \"sub_status_mail_server_did_not_respond\": 0,\n      \"sub_status_greylisted\": 6,\n      \"sub_status_antispam_system\": 0,\n      \"sub_status_does_not_accept_mail\": 27,\n      \"sub_status_exception_occurred\": 0,\n      \"sub_status_failed_syntax_check\": 20,\n      \"sub_status_mailbox_not_found\": 12,\n      \"sub_status_unroutable_ip_address\": 0,\n      \"sub_status_possible_typo\": 0,\n      \"sub_status_no_dns_entries\": 10,\n      \"sub_status_role_based_catch_all\": 0,\n      \"sub_status_mailbox_quota_exceeded\": 0,\n      \"sub_status_forcible_disconnect\": 0,\n      \"sub_status_failed_smtp_connection\": 0,\n      \"sub_status_leading_period_removed\": 0,\n      \"sub_status_alias_address\": 2,\n      \"sub_status_mx_forward\": 0,\n      \"sub_status_alternate\": 0,\n      \"sub_status_blocked\": 0,\n      \"sub_status_allowed\": 0,\n      \"start_date\": \"1/1/2023\",\n      \"end_date\": \"1/30/2024\"\n    }"),
+        ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"N/A\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
+        ("listS3files", #"[{"name":"emails.csv","size":1024,"last_modified":"2026-01-01T00:00:00Z"}]"#),
+        // Every stored property of the model (the documented examples above
+        // leave some out), so the sweep reaches each field.
+        ("validate", completeValidateJson),
+        ("fileStatus", completeFileStatusJson),
+        ("scoringFileStatus", completeFileStatusJson),
+    ]
+}
+
 private func typedModelFixtures() -> [TypedModelFixture] {
     let decoder = JSONDecoder()
     return [
@@ -5198,6 +5231,27 @@ extension TransportSafetyTests {
         }
     }
 
+    /// The same value with the object member at `path` removed (an item of an
+    /// array is never removed: only its members are).
+    private func nestedRemoving(_ root: Any, _ path: [NestedStep]) -> Any {
+        guard let first = path.first else { return root }
+        let rest = Array(path.dropFirst())
+        switch first {
+        case .key(let key):
+            var object = root as! [String: Any]
+            if rest.isEmpty {
+                object.removeValue(forKey: key)
+            } else {
+                object[key] = nestedRemoving(object[key]!, rest)
+            }
+            return object
+        case .index(let i):
+            var array = root as! [Any]
+            array[i] = nestedRemoving(array[i], rest)
+            return array
+        }
+    }
+
     /// The JSON type of a value JSONSerialization read: null, bool, int,
     /// float, string, array or object.
     private func nestedKind(_ value: Any) -> String {
@@ -5222,34 +5276,7 @@ extension TransportSafetyTests {
         defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
         let (sdk, warmup) = clients("nested-sweep")
         let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
-        let examples: [(String, String)] = [
-            ("getCredits", #"{"Credits":2375323}"#),
-            ("getCredits", #"{"Credits":"-1"}"#),
-            ("validate", "{\n      \"address\": \"john.doe@zerobounce.net\",\n      \"status\": \"valid\",\n      \"sub_status\": \"\",\n      \"free_email\": false,\n      \"catchall_domain\": true,\n      \"did_you_mean\": null,\n      \"account\": \"johndoe\",\n      \"domain\": \"zerobounce.net\",\n      \"domain_age_days\": \"3431\",\n      \"active_in_days\": \"30\",\n      \"active_first_seen\": \"2026-02-25\",\n      \"smtp_provider\": \"g-suite\",\n      \"mx_found\": \"true\",\n      \"mx_record\": \"aspmx.l.google.com\",\n      \"firstname\": \"dan\",\n      \"lastname\": \"cotet\",\n      \"gender\": \"male\",\n      \"country\": null,\n      \"region\": null,\n      \"city\": null,\n      \"zipcode\": null,\n      \"processed_at\": \"2026-06-18 07:05:00.033\"\n  }"),
-            ("validate", #"{"address":"a@example.com","Message":"Greylisted email, we will retry"}"#),
-            ("validate POST", #"{"address":"a@example.com","status":"valid","sub_status":"","free_email":false,"catchall_domain":false,"domain_age_days":"9692","mx_found":"true","firstname":"zero"}"#),
-            ("validateBatch", #"{"email_batch":[{"address":"valid@example.com","status":"valid","sub_status":"","free_email":false,"did_you_mean":null,"account":null,"domain":null,"domain_age_days":"9692","smtp_provider":"example","catchall_domain":false,"mx_found":"true","mx_record":"mx.example.com","firstname":"zero","lastname":"bounce","gender":"male","country":"United States","region":"Florida","city":"West Palm Beach","zipcode":"33401","processed_at":"2023-03-23 13:30:28.105"}],"errors":[{"error":"Mock error message","email_address":"invalid@example.com"}]}"#),
-            ("sendFile data", "{\n      \"success\": true,\n      \"message\": \"File Accepted\",\n      \"file_name\": \"Your file name.csv\",\n      \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\"\n    }"),
-            ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"Complete\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
-            ("deleteFile", "{\n    \"success\": true,\n    \"message\": \"File Deleted\",\n    \"file_name\": \"test2\",\n    \"file_id\": \"b222a0fd-90d5-416c-8f1a-9cc3851fc823\"\n  }"),
-            ("scoringSendFile data", "{\n          \"success\": true,\n          \"message\": \"File Accepted\",\n          \"file_name\": \"Your file name.csv\",\n          \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\"\n      }"),
-            ("scoringFileStatus", "{\n          \"success\": true,\n          \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n          \"file_name\": \"Your file name.csv\",\n          \"upload_date\": \"2023-04-28T15:25:41Z\",\n          \"file_status\": \"Complete\",\n          \"complete_percentage\": \"100%\",\n          \"return_url\": \"Your return URL if provided when calling sendfile API\"\n      }"),
-            ("scoringDeleteFile", "{\n        \"success\": true,\n        \"message\": \"File Deleted\",\n        \"file_name\": \"test2\",\n        \"file_id\": \"b222a0fd-90d5-416c-8f1a-9cc3851fc823\"\n    }"),
-            ("getApiUsage", #"{"total":10,"status_valid":10,"status_invalid":0,"sub_status_toxic":0,"start_date":"1/12/2010","end_date":"12/1/2030"}"#),
-            ("getActivityData", #"{"found":true,"active_in_days":"180"}"#),
-            ("scoreEmail", #"{"email":"a@example.com","score":10}"#),
-            ("findEmail domain", #"{"email":"john.doe@example.com","email_confidence":"high","domain":"","company_name":"Internet Assigned Numbers Authority","did_you_mean":"","failure_reason":""}"#),
-            ("findDomain domain", #"{"domain":"example.com","company_name":"","format":"first.last","confidence":"high","did_you_mean":"","failure_reason":"","other_domain_formats":[{"format":"first_last","confidence":"high"},{"format":"first","confidence":"medium"}]}"#),
-            ("validateBatch", "{\n      \"email_batch\": [\n          {\n              \"address\": \"john.doe@zerobounce.net\",\n              \"status\": \"valid\",\n              \"sub_status\": \"\",\n              \"free_email\": false,\n              \"catchall_domain\": true,\n              \"did_you_mean\": null,\n              \"account\": \"johndoe\",\n              \"domain\": \"zerobounce.net\",\n              \"domain_age_days\": \"3431\",\n              \"active_in_days\": \"30\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"g-suite\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"aspmx.l.google.com\",\n              \"firstname\": \"dan\",\n              \"lastname\": \"cotet\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2026-06-18 07:05:00.033\"\n          },\n          {\n              \"address\": \"invalid@example.com\",\n              \"status\": \"invalid\",\n              \"sub_status\": \"mailbox_not_found\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          },\n          {\n              \"address\": \"disposable@example.com\",\n              \"status\": \"do_not_mail\",\n              \"sub_status\": \"disposable\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          }\n      ],\n      \"errors\": []\n  }"),
-            ("getApiUsage", "{\n      \"total\": 120,\n      \"status_valid\": 17,\n      \"status_invalid\": 69,\n      \"status_catch_all\": 9,\n      \"status_do_not_mail\": 16,\n      \"status_spamtrap\": 0,\n      \"status_unknown\": 6,\n      \"sub_status_toxic\": 0,\n      \"sub_status_disposable\": 1,\n      \"sub_status_role_based\": 1,\n      \"sub_status_possible_trap\": 0,\n      \"sub_status_global_suppression\": 14,\n      \"sub_status_timeout_exceeded\": 0,\n      \"sub_status_mail_server_temporary_error\": 0,\n      \"sub_status_mail_server_did_not_respond\": 0,\n      \"sub_status_greylisted\": 6,\n      \"sub_status_antispam_system\": 0,\n      \"sub_status_does_not_accept_mail\": 27,\n      \"sub_status_exception_occurred\": 0,\n      \"sub_status_failed_syntax_check\": 20,\n      \"sub_status_mailbox_not_found\": 12,\n      \"sub_status_unroutable_ip_address\": 0,\n      \"sub_status_possible_typo\": 0,\n      \"sub_status_no_dns_entries\": 10,\n      \"sub_status_role_based_catch_all\": 0,\n      \"sub_status_mailbox_quota_exceeded\": 0,\n      \"sub_status_forcible_disconnect\": 0,\n      \"sub_status_failed_smtp_connection\": 0,\n      \"sub_status_leading_period_removed\": 0,\n      \"sub_status_alias_address\": 2,\n      \"sub_status_mx_forward\": 0,\n      \"sub_status_alternate\": 0,\n      \"sub_status_blocked\": 0,\n      \"sub_status_allowed\": 0,\n      \"start_date\": \"1/1/2023\",\n      \"end_date\": \"1/30/2024\"\n    }"),
-            ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"N/A\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
-            ("listS3files", #"[{"name":"emails.csv","size":1024,"last_modified":"2026-01-01T00:00:00Z"}]"#),
-            // Every stored property of the model (the documented examples above
-            // leave some out), so the sweep reaches each field.
-            ("validate", completeValidateJson),
-            ("fileStatus", completeFileStatusJson),
-            ("scoringFileStatus", completeFileStatusJson),
-        ]
+        let examples = documentedExamples()
         let replacements: [Any] = [NSNull(), true, 5, 5.5, "x", [Any](), [String: Any]()]
         // The other spelling a validate field takes: mx_found and free_email
         // as a boolean or the string "true"/"false", the activity fields as a
@@ -5298,6 +5325,38 @@ extension TransportSafetyTests {
         XCTAssertGreaterThanOrEqual(checked, 500)
     }
 
+    /// Standard B: a missing optional field reads exactly like a null one.
+    /// Every member of every documented example is removed in turn (top level,
+    /// nested objects and batch rows); each call without it must still return
+    /// its result. Required: Credits, address and status, and Message on a
+    /// greylist answer.
+    func testEveryNonRequiredKeyOfAnExampleMayBeMissing() throws {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("missing-key-sweep")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        var checked = 0
+        var refused: [String] = []
+        for (name, body) in documentedExamples() {
+            let root = try JSONSerialization.jsonObject(with: Data(body.utf8), options: [.fragmentsAllowed])
+            let greylist = ((root as? [String: Any])?["Message"] as? String) != nil
+            for path in nestedPaths(root) {
+                guard case .key(let key)? = path.last else { continue }
+                let required = greylist ? key == "Message" : ["Credits", "address", "status"].contains(key)
+                if required { continue }
+                let without = String(decoding: try JSONSerialization.data(
+                    withJSONObject: nestedRemoving(root, path), options: [.fragmentsAllowed]), as: UTF8.self)
+                script(200, "application/json", without)
+                let (error, _) = run("\(name) without \(path)", calls[name]!)
+                checked += 1
+                if let error = error {
+                    refused.append("\(name) without \(key): \(describe(error))")
+                }
+            }
+        }
+        XCTAssertEqual(refused, [], "a missing optional field was refused")
+        XCTAssertGreaterThanOrEqual(checked, 150)
+    }
+
     /// Standard section 3, per model: every stored property of each typed model
     /// is in its fixture (a reflection count), and a null in any field other
     /// than the required ones decodes and re-encodes as that field's empty
@@ -5323,9 +5382,13 @@ extension TransportSafetyTests {
             for key in original.keys.sorted() {
                 var changed = original
                 changed[key] = NSNull()
+                var absent = original
+                absent.removeValue(forKey: key)
                 let data = try JSONSerialization.data(withJSONObject: changed)
+                let missingData = try JSONSerialization.data(withJSONObject: absent)
                 if model.required.contains(key) {
                     XCTAssertThrowsError(try model.decode(data), "\(model.name).\(key) is required")
+                    XCTAssertThrowsError(try model.decode(missingData), "\(model.name).\(key) is required, and missing")
                     continue
                 }
                 let read: any Encodable
@@ -5340,6 +5403,18 @@ extension TransportSafetyTests {
                 if let value = encoded[key] {
                     XCTAssertTrue(isEmpty(value), "\(model.name).\(key) = null read \(value), not its empty value")
                 }
+                // Standard B: a missing optional field reads exactly like a null one.
+                let readMissing: any Encodable
+                do {
+                    readMissing = try model.decode(missingData)
+                } catch {
+                    XCTFail("\(model.name) without \(key) must read as null does: \(error)")
+                    continue
+                }
+                let encodedMissing = try JSONSerialization.jsonObject(
+                    with: encoder.encode(readMissing), options: [.fragmentsAllowed]) as! [String: Any]
+                XCTAssertTrue(NSDictionary(dictionary: encodedMissing).isEqual(to: encoded),
+                              "\(model.name) without \(key) reads \(encodedMissing), null reads \(encoded)")
             }
         }
     }
@@ -5395,7 +5470,9 @@ extension TransportSafetyTests {
         let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
         let names = ["findEmail domain", "findEmail company", "findDomain domain", "findDomain company", "guessFormat"]
         let bodies = [#"{"message":"Invalid API key"}"#, #"{"message":""}"#, #"{"message":null}"#,
-                      #"{"message":["First","Second"]}"#, #"{"Message":"Dead key"}"#, #"{"detail":"  "}"#]
+                      #"{"message":["First","Second"]}"#, #"{"Message":"Dead key"}"#, #"{"detail":"  "}"#,
+                      #"{"Message":5}"#, #"{"error":""}"#, #"{"Error":["x"]}"#, #"{"message":[]}"#,
+                      #"{"error_message":null}"#, #"{"Message":true,"detail":null}"#]
         var checked = 0
         for body in bodies {
             for name in names {
@@ -5406,6 +5483,31 @@ extension TransportSafetyTests {
             }
         }
         XCTAssertEqual(checked, names.count * bodies.count)
+    }
+
+    /// Standard E3: the message-only error carries the message text: the first
+    /// non-blank message, a list joined with a line feed, or the generic text.
+    /// Removing the join or the fallback fails this test.
+    func testAMessageOnlyFinderErrorCarriesItsText() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("message-text-key")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        let cases: [(String, String)] = [
+            (#"{"message":["First","Second"]}"#, "First\nSecond"),
+            (#"{"Message":"Dead key"}"#, "Dead key"),
+            (#"{"message":"  ","detail":"Quota exceeded"}"#, "Quota exceeded"),
+            (#"{"message":null}"#, "ZeroBounce returned an error with no message text (HTTP 200)."),
+        ]
+        for (body, text) in cases {
+            script(200, "application/json", body)
+            let (error, _) = run("findEmail with \(body)", calls["findEmail domain"]!)
+            guard case .httpError(let message, let status)? = error as? ZBError else {
+                XCTFail("\(body): not an httpError: \(describe(error))")
+                continue
+            }
+            XCTAssertEqual(status, 200, body)
+            XCTAssertEqual(message, text, body)
+        }
     }
 
     /// Standard section 3, download sniff: each marker of the HTML check

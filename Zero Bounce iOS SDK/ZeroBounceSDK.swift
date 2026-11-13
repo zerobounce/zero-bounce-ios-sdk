@@ -661,7 +661,7 @@ public class ZeroBounceSDK {
         if let lastName = names[2] {
             items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), messageOnly: true, completion: completion)
     }
     
     // MARK: Domain Search
@@ -710,7 +710,7 @@ public class ZeroBounceSDK {
         if let companyName {
             items.append(URLQueryItem(name: "company_name", value: companyName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), messageOnly: true, completion: completion)
     }
     
     @available(*, deprecated, message: "Use findEmail() for Email Finder API, or findDomain() for Domain Search API")
@@ -739,7 +739,7 @@ public class ZeroBounceSDK {
         if let lastName {
             items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), messageOnly: true, completion: completion)
     }
     
     // MARK: Get Credits
@@ -1724,7 +1724,7 @@ public class ZeroBounceSDK {
         return components.url!.absoluteString
     }
 
-    private func sendJsonRequest<T: Codable>(url: String, completion: @escaping (ZBResult<T>) -> ()) {
+    private func sendJsonRequest<T: Codable>(url: String, messageOnly: Bool = false, completion: @escaping (ZBResult<T>) -> ()) {
         guard let urlValue = URL(string: url) else {
             completion(.Failure(ZBError.invalidEndpoint))
             return
@@ -1732,7 +1732,7 @@ public class ZeroBounceSDK {
         var r = URLRequest(url: urlValue)
         r.httpMethod = "GET"
         r.timeoutInterval = ZeroBounceSDK.requestTimeout
-        sendJsonRequest(request: r, completion: completion)
+        sendJsonRequest(request: r, messageOnly: messageOnly, completion: completion)
     }
     
     private func sendPostJsonRequest<T: Codable>(
@@ -1781,6 +1781,7 @@ public class ZeroBounceSDK {
     private func sendJsonRequest<T: Codable>(
         request: URLRequest,
         inspect: ((T, Int) -> ZBError?)? = nil,
+        messageOnly: Bool = false,
         completion: @escaping (ZBResult<T>) -> ()
     ) {
         let completion = redacted(completion)
@@ -1792,6 +1793,12 @@ public class ZeroBounceSDK {
                 // ZBGetApiUsageResponse, decodes {"error": "Invalid API key"}
                 // as an empty result.
                 if let failure = self.errorOnlyFailure(data, statusCode: statusCode) {
+                    completion(.Failure(failure))
+                    return
+                }
+                // The email-finder and domain-search answers: a message-only body
+                // is an error whatever its value (standard E3), by its keys.
+                if messageOnly, let failure = ZBError.messageOnlyFailure(data, statusCode: statusCode) {
                     completion(.Failure(failure))
                     return
                 }

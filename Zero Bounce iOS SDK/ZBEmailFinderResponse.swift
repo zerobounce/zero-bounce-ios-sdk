@@ -27,9 +27,10 @@ public struct ZBEmailFinderResponse: Codable, Equatable {
 }
 
 extension ZBEmailFinderResponse {
-    /// A null `email`, `email_confidence`, `domain` or `company_name` reads as
-    /// the type's empty value (standard section 3). A missing key still fails,
-    /// so a message-only body is an error, not an empty answer (standard E3).
+    /// A null or missing `email`, `email_confidence`, `domain` or `company_name`
+    /// reads as the type's empty value (standard sections 3 and B). A message-only
+    /// body is an error on the finder calls (standard E3); those check its keys
+    /// first (ZBError.messageOnlyFailure), so it never reaches this decoder.
     /// Declared in an extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)

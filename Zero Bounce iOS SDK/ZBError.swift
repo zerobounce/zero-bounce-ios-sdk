@@ -68,6 +68,34 @@ public enum ZBError: LocalizedError {
         }
     }
 
+    /// The keys of a message-only answer (standard section 3, E3).
+    private static let messageOnlyKeys: Set<String> = ["error", "message", "error_message", "Message", "Error", "detail"]
+
+    /// The failure for a message-only body on the email-finder and domain-search
+    /// calls, or nil. Decided by the keys alone: an object with at least one key,
+    /// every key a message key, and no "success", whatever the message is (text,
+    /// blank, null, a list). The text is the first non-blank message (a list is
+    /// joined with a line feed), or a generic text when there is none.
+    static func messageOnlyFailure(_ data: Data, statusCode: Int) -> ZBError? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              !object.isEmpty, object["success"] == nil,
+              object.keys.allSatisfy({ messageOnlyKeys.contains($0) }) else {
+            return nil
+        }
+        var text = ""
+        for key in ["Message", "message", "error", "error_message", "Error", "detail"] where text.isEmpty {
+            if let value = object[key] as? String {
+                text = stripErrorPrefix(value)
+            } else if let lines = object[key] as? [String] {
+                text = lines.map { stripErrorPrefix($0) }.filter { !$0.isEmpty }.joined(separator: "\n")
+            }
+        }
+        if text.isEmpty {
+            text = "ZeroBounce returned an error with no message text (HTTP \(statusCode))."
+        }
+        return .httpError(message: text, statusCode: statusCode)
+    }
+
     /// Whether a body is a JSON object. A file download never is: getfile
     /// answers with JSON only to say why there is no file.
     static func looksLikeJsonObject(_ data: Data) -> Bool {
