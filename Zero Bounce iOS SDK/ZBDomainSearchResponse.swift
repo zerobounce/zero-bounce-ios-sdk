@@ -37,3 +37,18 @@ public struct ZBDomainSearchResponse: Codable, Equatable {
         case otherDomainFormats = "other_domain_formats"
     }
 }
+
+extension ZBDomainSearchResponse {
+    /// A null or missing `other_domain_formats` is an empty list (standard
+    /// section 3). Declared in an extension so the memberwise initializer is kept.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        domain = try container.decode(String.self, forKey: .domain)
+        companyName = try container.decode(String.self, forKey: .companyName)
+        format = try container.decode(String.self, forKey: .format)
+        confidence = try container.decode(ZBConfidence.self, forKey: .confidence)
+        didYouMean = try container.decodeIfPresent(String.self, forKey: .didYouMean)
+        failureReason = try container.decodeIfPresent(String.self, forKey: .failureReason)
+        otherDomainFormats = try container.decodeIfPresent([ZBDomainFormat].self, forKey: .otherDomainFormats) ?? []
+    }
+}

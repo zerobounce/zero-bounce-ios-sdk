@@ -21,6 +21,15 @@ public struct ZBValidateBatchResponse: Codable, Equatable {
     }
 }
 
+extension ZBValidateBatchResponse {
+    /// A null or missing list is empty (standard section 3), not a decode error.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        emailBatch = try container.decodeIfPresent([ZBValidateResponse].self, forKey: .emailBatch) ?? []
+        errors = try container.decodeIfPresent([ZBValidateBatchErrorResponse].self, forKey: .errors) ?? []
+    }
+}
+
 public struct ZBValidateBatchErrorResponse: Codable, Equatable {
     public let error: String
     public let emailAddress: String

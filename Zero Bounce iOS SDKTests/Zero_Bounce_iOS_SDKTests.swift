@@ -5012,6 +5012,7 @@ extension TransportSafetyTests {
                      #"{"Credits":"abc"}"#, #"{"Credits":"5.0"}"#, #"{"Credits":""}"#, #"{"Credits":" 5"}"#,
                      #"{"Credits":"5abc"}"#, #"{"Credits":"99999999999999999999"}"#, #"{"Credits":[1]}"#,
                      #"{"Credits":{}}"#, #"{"Credits":2147483648}"#, #"{"Credits":-2147483649}"#,
+                     #"{"Credits":"2147483648"}"#, #"{"Credits":"-2147483649"}"#,
                      #"{"Credits":9223372036854775808}"#, #"{"Credits":99999999999999999999}"#] {
             expectError("getCredits", body)
         }
@@ -5024,6 +5025,28 @@ extension TransportSafetyTests {
             expectError("validateBatch", #"{"email_batch":["# + body + #"],"errors":[]}"#)
             expectError("validateBatch options", #"{"email_batch":["# + body + #"],"errors":[]}"#)
         }
+    }
+
+    /// Standard section 3: a null or missing optional list reads as empty, a
+    /// null file_id as "", and a sendfile message that is a list of strings is
+    /// joined with a line feed. Decoded directly, so each case fails on its own.
+    func testNullAndMissingOptionalFieldsDecodeAsEmpty() throws {
+        let decoder = JSONDecoder()
+        let nullLists = try decoder.decode(ZBValidateBatchResponse.self,
+                                           from: Data(#"{"email_batch":null,"errors":null}"#.utf8))
+        XCTAssertEqual(nullLists.emailBatch.count, 0)
+        XCTAssertEqual(nullLists.errors.count, 0)
+        let missingLists = try decoder.decode(ZBValidateBatchResponse.self, from: Data(#"{"errors":[]}"#.utf8))
+        XCTAssertEqual(missingLists.emailBatch.count, 0)
+        let domain = try decoder.decode(ZBDomainSearchResponse.self, from: Data(#"{"domain":"example.com","company_name":"","format":"first.last","confidence":"high","did_you_mean":"","failure_reason":"","other_domain_formats":null}"#.utf8))
+        XCTAssertEqual(domain.otherDomainFormats.count, 0)
+        let list = try decoder.decode(ZBSendFileResponse.self, from: Data(#"{"success":false,"message":["First error","Second error"],"file_name":"f.csv","file_id":null}"#.utf8))
+        XCTAssertEqual(list.message, "First error\nSecond error")
+        XCTAssertEqual(list.fileId, "")
+        let text = try decoder.decode(ZBSendFileResponse.self, from: Data(#"{"success":true,"message":"File Accepted","file_name":"f.csv","file_id":"fid"}"#.utf8))
+        XCTAssertEqual(text.message, "File Accepted")
+        let none = try decoder.decode(ZBSendFileResponse.self, from: Data(#"{"success":true,"message":null,"file_name":"f.csv","file_id":"fid"}"#.utf8))
+        XCTAssertNil(none.message)
     }
 
     /// E7 ACCEPT: the documented example responses (zerobounce.net/docs, as
@@ -5043,6 +5066,10 @@ extension TransportSafetyTests {
             ("getCredits", #"{"Credits":-1}"#),
             ("getCredits", #"{"Credits":2147483647}"#),
             ("getCredits", #"{"Credits":-2147483648}"#),
+            // zerobounce.net, verbatim: batch validate (three rows), get-api-usage, file status with "N/A".
+            ("validateBatch", "{\n      \"email_batch\": [\n          {\n              \"address\": \"john.doe@zerobounce.net\",\n              \"status\": \"valid\",\n              \"sub_status\": \"\",\n              \"free_email\": false,\n              \"catchall_domain\": true,\n              \"did_you_mean\": null,\n              \"account\": \"johndoe\",\n              \"domain\": \"zerobounce.net\",\n              \"domain_age_days\": \"3431\",\n              \"active_in_days\": \"30\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"g-suite\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"aspmx.l.google.com\",\n              \"firstname\": \"dan\",\n              \"lastname\": \"cotet\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2026-06-18 07:05:00.033\"\n          },\n          {\n              \"address\": \"invalid@example.com\",\n              \"status\": \"invalid\",\n              \"sub_status\": \"mailbox_not_found\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          },\n          {\n              \"address\": \"disposable@example.com\",\n              \"status\": \"do_not_mail\",\n              \"sub_status\": \"disposable\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          }\n      ],\n      \"errors\": []\n  }"),
+            ("getApiUsage", "{\n      \"total\": 120,\n      \"status_valid\": 17,\n      \"status_invalid\": 69,\n      \"status_catch_all\": 9,\n      \"status_do_not_mail\": 16,\n      \"status_spamtrap\": 0,\n      \"status_unknown\": 6,\n      \"sub_status_toxic\": 0,\n      \"sub_status_disposable\": 1,\n      \"sub_status_role_based\": 1,\n      \"sub_status_possible_trap\": 0,\n      \"sub_status_global_suppression\": 14,\n      \"sub_status_timeout_exceeded\": 0,\n      \"sub_status_mail_server_temporary_error\": 0,\n      \"sub_status_mail_server_did_not_respond\": 0,\n      \"sub_status_greylisted\": 6,\n      \"sub_status_antispam_system\": 0,\n      \"sub_status_does_not_accept_mail\": 27,\n      \"sub_status_exception_occurred\": 0,\n      \"sub_status_failed_syntax_check\": 20,\n      \"sub_status_mailbox_not_found\": 12,\n      \"sub_status_unroutable_ip_address\": 0,\n      \"sub_status_possible_typo\": 0,\n      \"sub_status_no_dns_entries\": 10,\n      \"sub_status_role_based_catch_all\": 0,\n      \"sub_status_mailbox_quota_exceeded\": 0,\n      \"sub_status_forcible_disconnect\": 0,\n      \"sub_status_failed_smtp_connection\": 0,\n      \"sub_status_leading_period_removed\": 0,\n      \"sub_status_alias_address\": 2,\n      \"sub_status_mx_forward\": 0,\n      \"sub_status_alternate\": 0,\n      \"sub_status_blocked\": 0,\n      \"sub_status_allowed\": 0,\n      \"start_date\": \"1/1/2023\",\n      \"end_date\": \"1/30/2024\"\n    }"),
+            ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"N/A\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
             ("getActivityData", #"{"found":true,"active_in_days":"180"}"#),
             ("getActivityData", #"{"found":false,"active_in_days":null}"#),
             ("validate", row),
@@ -5163,19 +5190,22 @@ extension TransportSafetyTests {
             ("scoreEmail", #"{"email":"a@example.com","score":10}"#),
             ("findEmail domain", #"{"email":"john.doe@example.com","email_confidence":"high","domain":"","company_name":"Internet Assigned Numbers Authority","did_you_mean":"","failure_reason":""}"#),
             ("findDomain domain", #"{"domain":"example.com","company_name":"","format":"first.last","confidence":"high","did_you_mean":"","failure_reason":"","other_domain_formats":[{"format":"first_last","confidence":"high"},{"format":"first","confidence":"medium"}]}"#),
+            ("validateBatch", "{\n      \"email_batch\": [\n          {\n              \"address\": \"john.doe@zerobounce.net\",\n              \"status\": \"valid\",\n              \"sub_status\": \"\",\n              \"free_email\": false,\n              \"catchall_domain\": true,\n              \"did_you_mean\": null,\n              \"account\": \"johndoe\",\n              \"domain\": \"zerobounce.net\",\n              \"domain_age_days\": \"3431\",\n              \"active_in_days\": \"30\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"g-suite\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"aspmx.l.google.com\",\n              \"firstname\": \"dan\",\n              \"lastname\": \"cotet\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2026-06-18 07:05:00.033\"\n          },\n          {\n              \"address\": \"invalid@example.com\",\n              \"status\": \"invalid\",\n              \"sub_status\": \"mailbox_not_found\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          },\n          {\n              \"address\": \"disposable@example.com\",\n              \"status\": \"do_not_mail\",\n              \"sub_status\": \"disposable\",\n              \"free_email\": false,\n              \"did_you_mean\": null,\n              \"account\": null,\n              \"domain\": null,\n              \"domain_age_days\": \"9692\",\n              \"active_in_days\": \"365\",\n              \"active_first_seen\": \"2026-02-25\",\n              \"smtp_provider\": \"example\",\n              \"mx_found\": \"true\",\n              \"mx_record\": \"mx.example.com\",\n              \"catchall_domain\": false,\n              \"firstname\": \"zero\",\n              \"lastname\": \"bounce\",\n              \"gender\": \"male\",\n              \"country\": null,\n              \"region\": null,\n              \"city\": null,\n              \"zipcode\": null,\n              \"processed_at\": \"2020-09-17 17:43:11.830\"\n          }\n      ],\n      \"errors\": []\n  }"),
+            ("getApiUsage", "{\n      \"total\": 120,\n      \"status_valid\": 17,\n      \"status_invalid\": 69,\n      \"status_catch_all\": 9,\n      \"status_do_not_mail\": 16,\n      \"status_spamtrap\": 0,\n      \"status_unknown\": 6,\n      \"sub_status_toxic\": 0,\n      \"sub_status_disposable\": 1,\n      \"sub_status_role_based\": 1,\n      \"sub_status_possible_trap\": 0,\n      \"sub_status_global_suppression\": 14,\n      \"sub_status_timeout_exceeded\": 0,\n      \"sub_status_mail_server_temporary_error\": 0,\n      \"sub_status_mail_server_did_not_respond\": 0,\n      \"sub_status_greylisted\": 6,\n      \"sub_status_antispam_system\": 0,\n      \"sub_status_does_not_accept_mail\": 27,\n      \"sub_status_exception_occurred\": 0,\n      \"sub_status_failed_syntax_check\": 20,\n      \"sub_status_mailbox_not_found\": 12,\n      \"sub_status_unroutable_ip_address\": 0,\n      \"sub_status_possible_typo\": 0,\n      \"sub_status_no_dns_entries\": 10,\n      \"sub_status_role_based_catch_all\": 0,\n      \"sub_status_mailbox_quota_exceeded\": 0,\n      \"sub_status_forcible_disconnect\": 0,\n      \"sub_status_failed_smtp_connection\": 0,\n      \"sub_status_leading_period_removed\": 0,\n      \"sub_status_alias_address\": 2,\n      \"sub_status_mx_forward\": 0,\n      \"sub_status_alternate\": 0,\n      \"sub_status_blocked\": 0,\n      \"sub_status_allowed\": 0,\n      \"start_date\": \"1/1/2023\",\n      \"end_date\": \"1/30/2024\"\n    }"),
+            ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"N/A\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
             ("listS3files", #"[{"name":"emails.csv","size":1024,"last_modified":"2026-01-01T00:00:00Z"}]"#),
         ]
         let replacements: [Any] = [NSNull(), true, 5, 5.5, "x", [Any](), [String: Any]()]
         // Fields this SDK's released types make non-optional, so null is not
         // taken there (3.0.1 alike).
         let nonOptional: [String: Set<String>] = [
-            "sendFile data": ["file_id", "file_name"], "scoringSendFile data": ["file_id", "file_name"],
+            "sendFile data": ["file_name"], "scoringSendFile data": ["file_name"],
             "deleteFile": ["file_id", "file_name"], "scoringDeleteFile": ["file_id", "file_name"],
             "fileStatus": ["success", "file_id", "file_status"], "scoringFileStatus": ["success", "file_id", "file_status"],
             "findEmail domain": ["email", "email_confidence", "domain", "company_name"],
-            "findDomain domain": ["domain", "company_name", "format", "confidence", "other_domain_formats"],
+            "findDomain domain": ["domain", "company_name", "format", "confidence"],
             "getActivityData": ["found"], "listS3files": ["name", "size", "last_modified"],
-            "validateBatch": ["email_batch", "errors", "error", "email_address"],
+            "validateBatch": ["error", "email_address"],
         ]
         // The other spelling a validate field takes: mx_found and free_email
         // as a boolean or the string "true"/"false", the activity fields as a
@@ -5201,7 +5231,8 @@ extension TransportSafetyTests {
                         (nonOptional[name] ?? []).contains(key ?? "")
                     let ok = (value is NSNull && key != nil && !required) ||
                         (key == "Credits" && nestedKind(value) == "int") ||
-                        (name.hasPrefix("validate") && alsoTakes[key ?? ""] == nestedKind(value))
+                        (name.hasPrefix("validate") && alsoTakes[key ?? ""] == nestedKind(value)) ||
+                        (key == "message" && (name == "sendFile data" || name == "scoringSendFile data") && value is [Any])
                     let changed = String(decoding: try! JSONSerialization.data(
                         withJSONObject: nestedReplacing(root, path, with: value), options: [.fragmentsAllowed]), as: UTF8.self)
                     script(200, "application/json", changed)
@@ -5216,7 +5247,7 @@ extension TransportSafetyTests {
                 }
             }
         }
-        // 18 examples, about 580 substitutions when this was written.
+        // 21 examples, about 580 substitutions when this was written.
         XCTAssertGreaterThanOrEqual(checked, 500)
     }
 
