@@ -17,13 +17,21 @@ public struct ZBCreditsResponse : Codable {
 }
 
 extension ZBCreditsResponse {
-    /// E7: `Credits` is a JSON string holding an integer ("-1" for a dead
-    /// key, "12345"). Missing, null, another JSON type, or text that is not an
-    /// integer ("abc", "5.0", " 5") fails the decode, so the call reports an
-    /// error with the HTTP status instead of a credit count nobody can read.
+    /// E7: `Credits` is an integer, sent as a JSON string ("-1" for a dead
+    /// key, "12345") or as a JSON integer (`{"Credits":2375323}`,
+    /// zerobounce.net's own example), kept here as its decimal text. Missing,
+    /// null, another JSON type (a fraction, a boolean), text that is not an
+    /// integer ("abc", "5.0", " 5") or a value outside Int32 fails the
+    /// decode, so the call reports an error with the HTTP status instead of a
+    /// credit count nobody can read. JSONDecoder reads a JSON number by value,
+    /// so a whole number written `5.0` or `1e3` is read as 5 or 1000.
     /// Declared in an extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        if let number = try? container.decode(Int32.self, forKey: .credits) {
+            credits = String(number)
+            return
+        }
         let text = try container.decode(String.self, forKey: .credits)
         let digits = text.hasPrefix("-") ? text.dropFirst() : Substring(text)
         guard !digits.isEmpty, digits.allSatisfy({ ("0"..."9").contains($0) }), Int32(text) != nil else {

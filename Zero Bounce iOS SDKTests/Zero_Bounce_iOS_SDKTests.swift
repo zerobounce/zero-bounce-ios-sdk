@@ -2813,20 +2813,25 @@ final class OfflineApiTests: XCTestCase {
         XCTAssertEqual(strings.catchallDomain, false)
         XCTAssertEqual(strings.activeInDays, "180")
 
-        // Absent, null or of an unexpected type: the default, and the rest of
-        // the response still decodes.
+        // Absent or null: the default, and the rest of the response still
+        // decodes.
         let absent = try decode("")
         XCTAssertNil(absent.activeInDays)
         XCTAssertNil(absent.activeFirstSeen)
         XCTAssertFalse(absent.freeEmail)
         XCTAssertFalse(absent.mxFound)
         XCTAssertNil(absent.catchallDomain)
-        let odd = try decode(#","free_email":null,"mx_found":"maybe","catchall_domain":[],"active_in_days":{}"#)
-        XCTAssertFalse(odd.freeEmail)
-        XCTAssertFalse(odd.mxFound)
-        XCTAssertNil(odd.catchallDomain)
-        XCTAssertNil(odd.activeInDays)
-        XCTAssertEqual(odd.status, .valid)
+        let nulls = try decode(#","free_email":null,"mx_found":null,"catchall_domain":null,"active_in_days":null,"active_first_seen":null"#)
+        XCTAssertFalse(nulls.freeEmail)
+        XCTAssertFalse(nulls.mxFound)
+        XCTAssertNil(nulls.catchallDomain)
+        XCTAssertNil(nulls.activeInDays)
+        XCTAssertEqual(nulls.status, .valid)
+        // E7: any other value is a wrong type, not a silent default.
+        for odd in [#","mx_found":"maybe""#, #","free_email":1"#, #","catchall_domain":[]"#,
+                    #","active_in_days":{}"#, #","active_first_seen":5.5"#, #","free_email":"yes""#] {
+            XCTAssertThrowsError(try decode(odd), odd)
+        }
 
         // Through validate, and through a batch.
         let encoded = try JSONEncoder().encode(full)
@@ -4957,7 +4962,9 @@ extension TransportSafetyTests {
         defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
         let (sdk, warmup) = clients("shape-key")
         var typed = 0
-        for body in ["0", "1.5", "true", "false", "null", "\"x\"", "[]", "[{}]", " [ ] ", "{}"] {
+        // Arrays a decoder could read by position too.
+        for body in ["0", "1.5", "true", "false", "null", "\"x\"", "[]", "[{}]", " [ ] ", "{}",
+                     #"["x"]"#, #"["a@example.com",10]"#, #"[true,"3"]"#, #"["7"]"#, #"["a@b.c","valid"]"#] {
             script(200, "application/json", body)
             for (name, call) in everyCall(sdk, warmup) {
                 let isDownload = name.lowercased().contains("getfile") || name.hasPrefix("warmup download")
@@ -4977,7 +4984,9 @@ extension TransportSafetyTests {
                 let object = body == "{}"
                 // listS3files reads an array; the other typed calls an object
                 // ({} decodes when every field is optional).
-                if !raw && !(name == "listS3files" && array) && !object {
+                // listS3files takes an array of objects only.
+                let listOfObjects = array && !body.contains("\"")
+                if !raw && !(name == "listS3files" && listOfObjects) && !object {
                     XCTFail("\(label): a typed call succeeded")
                 }
             }
@@ -4998,10 +5007,12 @@ extension TransportSafetyTests {
             let (error, _) = run("\(name) with \(body)", calls[name]!)
             XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name) with \(body): \(describe(error))")
         }
-        for body in [#"{}"#, #"{"Credits":null}"#, #"{"Credits":true}"#, #"{"Credits":5}"#, #"{"Credits":5.5}"#,
+        // A JSON integer is an answer only in the range of Int32.
+        for body in [#"{}"#, #"{"Credits":null}"#, #"{"Credits":true}"#, #"{"Credits":5.5}"#,
                      #"{"Credits":"abc"}"#, #"{"Credits":"5.0"}"#, #"{"Credits":""}"#, #"{"Credits":" 5"}"#,
                      #"{"Credits":"5abc"}"#, #"{"Credits":"99999999999999999999"}"#, #"{"Credits":[1]}"#,
-                     #"{"Credits":{}}"#] {
+                     #"{"Credits":{}}"#, #"{"Credits":2147483648}"#, #"{"Credits":-2147483649}"#,
+                     #"{"Credits":9223372036854775808}"#, #"{"Credits":99999999999999999999}"#] {
             expectError("getCredits", body)
         }
         let rows = [#"{}"#, #"{"address":true,"status":"valid"}"#, #"{"address":"a@b.c","status":5}"#,
@@ -5026,6 +5037,12 @@ extension TransportSafetyTests {
         let examples: [(String, String)] = [
             ("getCredits", #"{"Credits":"123456"}"#),
             ("getCredits", #"{"Credits":"-1"}"#),
+            // Credits as a JSON integer: zerobounce.net's own getcredits
+            // example, verbatim, and the ends of the Int32 range.
+            ("getCredits", #"{"Credits":2375323}"#),
+            ("getCredits", #"{"Credits":-1}"#),
+            ("getCredits", #"{"Credits":2147483647}"#),
+            ("getCredits", #"{"Credits":-2147483648}"#),
             ("getActivityData", #"{"found":true,"active_in_days":"180"}"#),
             ("getActivityData", #"{"found":false,"active_in_days":null}"#),
             ("validate", row),
@@ -5046,6 +5063,161 @@ extension TransportSafetyTests {
             let (error, _) = run("\(name) with \(body)", calls[name]!)
             XCTAssertNil(error, "\(name) with \(body): \(describe(error))")
         }
+        script(200, "application/json", #"{"Credits":2375323}"#)
+        var credits: String?
+        let (error, _) = run("getCredits value") { r in
+            sdk.getCredits { result in
+                if case .Success(let response) = result { credits = response.credits }
+                r(nil)
+            }
+        }
+        XCTAssertNil(error)
+        XCTAssertEqual(credits, "2375323")
+    }
+
+    /// One step of a path into a JSON value: an object member or an item.
+    private enum NestedStep { case key(String), index(Int) }
+
+    /// Every path below root (objects' members and arrays' items).
+    private func nestedPaths(_ value: Any, _ at: [NestedStep] = []) -> [[NestedStep]] {
+        var out: [[NestedStep]] = []
+        if let object = value as? [String: Any] {
+            for (key, child) in object.sorted(by: { $0.key < $1.key }) {
+                out.append(at + [.key(key)])
+                out += nestedPaths(child, at + [.key(key)])
+            }
+        } else if let array = value as? [Any] {
+            for (i, child) in array.enumerated() {
+                out.append(at + [.index(i)])
+                out += nestedPaths(child, at + [.index(i)])
+            }
+        }
+        return out
+    }
+
+    private func nestedValue(_ root: Any, _ path: [NestedStep]) -> Any {
+        var value = root
+        for step in path {
+            switch step {
+            case .key(let key): value = (value as! [String: Any])[key]!
+            case .index(let i): value = (value as! [Any])[i]
+            }
+        }
+        return value
+    }
+
+    private func nestedReplacing(_ root: Any, _ path: [NestedStep], with new: Any) -> Any {
+        guard let first = path.first else { return new }
+        let rest = Array(path.dropFirst())
+        switch first {
+        case .key(let key):
+            var object = root as! [String: Any]
+            object[key] = nestedReplacing(object[key]!, rest, with: new)
+            return object
+        case .index(let i):
+            var array = root as! [Any]
+            array[i] = nestedReplacing(array[i], rest, with: new)
+            return array
+        }
+    }
+
+    /// The JSON type of a value JSONSerialization read: null, bool, int,
+    /// float, string, array or object.
+    private func nestedKind(_ value: Any) -> String {
+        if value is NSNull { return "null" }
+        if let number = value as? NSNumber {
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return "bool" }
+            return CFNumberIsFloatType(number) ? "float" : "int"
+        }
+        if value is String { return "string" }
+        if value is [Any] { return "array" }
+        return "object"
+    }
+
+    /// Standard section 3: a value of another JSON type than the documented
+    /// one, at any path of an example (a nested object, an array item, a
+    /// batch row, a row's field), is an API error with status 200. null is
+    /// taken only for an optional object field; an array item that is null is
+    /// a wrong type too. Credits also takes a JSON integer. The examples are
+    /// copied verbatim from zerobounce.net/docs where the site has a success
+    /// example, and from the repo's fixtures for the other typed calls.
+    func testEveryNestedValueOfAnExampleIsTypeChecked() {
+        defer { OfflineURLProtocol.lock.lock(); OfflineURLProtocol.scripted = nil; OfflineURLProtocol.lock.unlock() }
+        let (sdk, warmup) = clients("nested-sweep")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        let examples: [(String, String)] = [
+            ("getCredits", #"{"Credits":2375323}"#),
+            ("getCredits", #"{"Credits":"-1"}"#),
+            ("validate", "{\n      \"address\": \"john.doe@zerobounce.net\",\n      \"status\": \"valid\",\n      \"sub_status\": \"\",\n      \"free_email\": false,\n      \"catchall_domain\": true,\n      \"did_you_mean\": null,\n      \"account\": \"johndoe\",\n      \"domain\": \"zerobounce.net\",\n      \"domain_age_days\": \"3431\",\n      \"active_in_days\": \"30\",\n      \"active_first_seen\": \"2026-02-25\",\n      \"smtp_provider\": \"g-suite\",\n      \"mx_found\": \"true\",\n      \"mx_record\": \"aspmx.l.google.com\",\n      \"firstname\": \"dan\",\n      \"lastname\": \"cotet\",\n      \"gender\": \"male\",\n      \"country\": null,\n      \"region\": null,\n      \"city\": null,\n      \"zipcode\": null,\n      \"processed_at\": \"2026-06-18 07:05:00.033\"\n  }"),
+            ("validate", #"{"address":"a@example.com","Message":"Greylisted email, we will retry"}"#),
+            ("validate POST", #"{"address":"a@example.com","status":"valid","sub_status":"","free_email":false,"catchall_domain":false,"domain_age_days":"9692","mx_found":"true","firstname":"zero"}"#),
+            ("validateBatch", #"{"email_batch":[{"address":"valid@example.com","status":"valid","sub_status":"","free_email":false,"did_you_mean":null,"account":null,"domain":null,"domain_age_days":"9692","smtp_provider":"example","catchall_domain":false,"mx_found":"true","mx_record":"mx.example.com","firstname":"zero","lastname":"bounce","gender":"male","country":"United States","region":"Florida","city":"West Palm Beach","zipcode":"33401","processed_at":"2023-03-23 13:30:28.105"}],"errors":[{"error":"Mock error message","email_address":"invalid@example.com"}]}"#),
+            ("sendFile data", "{\n      \"success\": true,\n      \"message\": \"File Accepted\",\n      \"file_name\": \"Your file name.csv\",\n      \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\"\n    }"),
+            ("fileStatus", "{\n    \"success\": true,\n    \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n    \"file_name\": \"Your file name.csv\",\n    \"upload_date\": \"2023-04-28T15:25:41Z\",\n    \"file_status\": \"Complete\",\n    \"file_phase_2_status\": \"Complete\",\n    \"complete_percentage\": \"100%\",\n    \"return_url\": \"Your return URL if provided when calling sendfile API\"\n  }"),
+            ("deleteFile", "{\n    \"success\": true,\n    \"message\": \"File Deleted\",\n    \"file_name\": \"test2\",\n    \"file_id\": \"b222a0fd-90d5-416c-8f1a-9cc3851fc823\"\n  }"),
+            ("scoringSendFile data", "{\n          \"success\": true,\n          \"message\": \"File Accepted\",\n          \"file_name\": \"Your file name.csv\",\n          \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\"\n      }"),
+            ("scoringFileStatus", "{\n          \"success\": true,\n          \"file_id\": \"aaaaaaaa-zzzz-xxxx-yyyy-5003727fffff\",\n          \"file_name\": \"Your file name.csv\",\n          \"upload_date\": \"2023-04-28T15:25:41Z\",\n          \"file_status\": \"Complete\",\n          \"complete_percentage\": \"100%\",\n          \"return_url\": \"Your return URL if provided when calling sendfile API\"\n      }"),
+            ("scoringDeleteFile", "{\n        \"success\": true,\n        \"message\": \"File Deleted\",\n        \"file_name\": \"test2\",\n        \"file_id\": \"b222a0fd-90d5-416c-8f1a-9cc3851fc823\"\n    }"),
+            ("getApiUsage", #"{"total":10,"status_valid":10,"status_invalid":0,"sub_status_toxic":0,"start_date":"1/12/2010","end_date":"12/1/2030"}"#),
+            ("getActivityData", #"{"found":true,"active_in_days":"180"}"#),
+            ("scoreEmail", #"{"email":"a@example.com","score":10}"#),
+            ("findEmail domain", #"{"email":"john.doe@example.com","email_confidence":"high","domain":"","company_name":"Internet Assigned Numbers Authority","did_you_mean":"","failure_reason":""}"#),
+            ("findDomain domain", #"{"domain":"example.com","company_name":"","format":"first.last","confidence":"high","did_you_mean":"","failure_reason":"","other_domain_formats":[{"format":"first_last","confidence":"high"},{"format":"first","confidence":"medium"}]}"#),
+            ("listS3files", #"[{"name":"emails.csv","size":1024,"last_modified":"2026-01-01T00:00:00Z"}]"#),
+        ]
+        let replacements: [Any] = [NSNull(), true, 5, 5.5, "x", [Any](), [String: Any]()]
+        // Fields this SDK's released types make non-optional, so null is not
+        // taken there (3.0.1 alike).
+        let nonOptional: [String: Set<String>] = [
+            "sendFile data": ["file_id", "file_name"], "scoringSendFile data": ["file_id", "file_name"],
+            "deleteFile": ["file_id", "file_name"], "scoringDeleteFile": ["file_id", "file_name"],
+            "fileStatus": ["success", "file_id", "file_status"], "scoringFileStatus": ["success", "file_id", "file_status"],
+            "findEmail domain": ["email", "email_confidence", "domain", "company_name"],
+            "findDomain domain": ["domain", "company_name", "format", "confidence", "other_domain_formats"],
+            "getActivityData": ["found"], "listS3files": ["name", "size", "last_modified"],
+            "validateBatch": ["email_batch", "errors", "error", "email_address"],
+        ]
+        // The other spelling a validate field takes: mx_found and free_email
+        // as a boolean or the string "true"/"false", the activity fields as a
+        // string or a whole number.
+        let alsoTakes: [String: String] = ["mx_found": "bool", "free_email": "string-bool",
+                                           "catchall_domain": "string-bool",
+                                           "active_in_days": "int", "active_first_seen": "int"]
+        var checked = 0
+        for (name, body) in examples {
+            script(200, "application/json", body)
+            let (error, _) = run("\(name) with \(body)", calls[name]!)
+            XCTAssertNil(error, "\(name) with \(body): \(describe(error))")
+            let root = try! JSONSerialization.jsonObject(with: Data(body.utf8), options: [.fragmentsAllowed])
+            let greylist = (root as? [String: Any])?["Message"] != nil
+            for path in nestedPaths(root) {
+                let original = nestedValue(root, path)
+                // A null in the example does not show the field's type.
+                if original is NSNull { continue }
+                var key: String? = nil
+                if case .key(let k)? = path.last { key = k }
+                for value in replacements where nestedKind(value) != nestedKind(original) {
+                    let required = (greylist ? key == "Message" : ["Credits", "address", "status"].contains(key ?? "")) ||
+                        (nonOptional[name] ?? []).contains(key ?? "")
+                    let ok = (value is NSNull && key != nil && !required) ||
+                        (key == "Credits" && nestedKind(value) == "int") ||
+                        (name.hasPrefix("validate") && alsoTakes[key ?? ""] == nestedKind(value))
+                    let changed = String(decoding: try! JSONSerialization.data(
+                        withJSONObject: nestedReplacing(root, path, with: value), options: [.fragmentsAllowed]), as: UTF8.self)
+                    script(200, "application/json", changed)
+                    let label = "\(name) \(path) = \(value): \(changed)"
+                    let (error, _) = run(label, calls[name]!)
+                    checked += 1
+                    if ok {
+                        XCTAssertNil(error, "\(label): \(describe(error))")
+                    } else {
+                        XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(label): \(describe(error))")
+                    }
+                }
+            }
+        }
+        // 18 examples, about 580 substitutions when this was written.
+        XCTAssertGreaterThanOrEqual(checked, 500)
     }
 
     /// E2: the three dead-key spellings the API answers with on an HTTP 200,

@@ -125,10 +125,13 @@ extension ZBValidateResponse {
     /// `mxFound` and `catchallDomain` used to be declared `= nil` / `= false`
     /// and so were never read from the response, whatever the API sent.
     ///
-    /// Those five are read leniently, so a value of an unexpected type leaves
-    /// the field at its default instead of failing the whole response. The API
-    /// sends `mx_found` (and sometimes `free_email`) as the string "true" or
-    /// "false" rather than a JSON boolean, so both spellings are accepted.
+    /// Those five accept two spellings: the API sends `mx_found` (and
+    /// sometimes `free_email`) as the string "true" or "false" rather than a
+    /// JSON boolean, so both are read, and `active_in_days` /
+    /// `active_first_seen` as a string or a number. Any other value (E7: a
+    /// number for a boolean, "maybe", an array or an object) fails the decode,
+    /// as a wrong type does for every other field; null or a missing key
+    /// leaves the default.
     ///
     /// Declared in an extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
@@ -157,13 +160,13 @@ extension ZBValidateResponse {
         domain = try container.decodeIfPresent(String.self, forKey: .domain)
         didYouMean = try container.decodeIfPresent(String.self, forKey: .didYouMean)
         domainAgeDays = try container.decodeIfPresent(String.self, forKey: .domainAgeDays)
-        activeInDays = ZBValidateResponse.lenientString(container, .activeInDays)
-        activeFirstSeen = ZBValidateResponse.lenientString(container, .activeFirstSeen)
-        freeEmail = ZBValidateResponse.lenientBool(container, .freeEmail) ?? false
-        mxFound = ZBValidateResponse.lenientBool(container, .mxFound) ?? false
+        activeInDays = try ZBValidateResponse.lenientString(container, .activeInDays)
+        activeFirstSeen = try ZBValidateResponse.lenientString(container, .activeFirstSeen)
+        freeEmail = try ZBValidateResponse.lenientBool(container, .freeEmail) ?? false
+        mxFound = try ZBValidateResponse.lenientBool(container, .mxFound) ?? false
         mxRecord = try container.decodeIfPresent(String.self, forKey: .mxRecord)
         smtpProvider = try container.decodeIfPresent(String.self, forKey: .smtpProvider)
-        catchallDomain = ZBValidateResponse.lenientBool(container, .catchallDomain)
+        catchallDomain = try ZBValidateResponse.lenientBool(container, .catchallDomain)
         firstName = try container.decodeIfPresent(String.self, forKey: .firstName)
         lastName = try container.decodeIfPresent(String.self, forKey: .lastName)
         gender = try container.decodeIfPresent(String.self, forKey: .gender)
@@ -177,34 +180,39 @@ extension ZBValidateResponse {
         message = try container.decodeIfPresent(String.self, forKey: .message)
     }
 
-    /// A JSON boolean, or the string "true" / "false" in any case. Anything
-    /// else, a null or a missing key is nil.
+    /// A JSON boolean, or the string "true" / "false" in any case; nil for
+    /// null or a missing key. Anything else throws.
     private static func lenientBool(
         _ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys
-    ) -> Bool? {
-        if let flag = try? container.decodeIfPresent(Bool.self, forKey: key) {
+    ) throws -> Bool? {
+        if try !container.contains(key) || container.decodeNil(forKey: key) { return nil }
+        if let flag = try? container.decode(Bool.self, forKey: key) {
             return flag
         }
-        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
+        if let text = try? container.decode(String.self, forKey: key) {
             switch text.trimmingCharacters(in: .whitespaces).lowercased() {
             case "true": return true
             case "false": return false
-            default: return nil
+            default: break
             }
         }
-        return nil
+        throw DecodingError.dataCorruptedError(
+            forKey: key, in: container, debugDescription: "\(key.stringValue) is not a boolean")
     }
 
-    /// A JSON string, or a number spelled as one. Anything else is nil.
+    /// A JSON string, or a whole number spelled as one; nil for null or a
+    /// missing key. Anything else throws.
     private static func lenientString(
         _ container: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys
-    ) -> String? {
-        if let text = try? container.decodeIfPresent(String.self, forKey: key) {
+    ) throws -> String? {
+        if try !container.contains(key) || container.decodeNil(forKey: key) { return nil }
+        if let text = try? container.decode(String.self, forKey: key) {
             return text
         }
-        if let number = try? container.decodeIfPresent(Int.self, forKey: key) {
+        if let number = try? container.decode(Int.self, forKey: key) {
             return String(number)
         }
-        return nil
+        throw DecodingError.dataCorruptedError(
+            forKey: key, in: container, debugDescription: "\(key.stringValue) is not a string")
     }
 }
