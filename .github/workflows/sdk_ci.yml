@@ -24,7 +24,13 @@ jobs:
           persist-credentials: false
 
       - name: Install CocoaPods dependencies
-        run: pod install --deployment
+        run: |
+          set -euo pipefail
+          # --deployment rejects a lockfile written by another CocoaPods.
+          # The runner's pod is newer than Podfile.lock (1.16.2), so install that one.
+          version=$(awk '/^COCOAPODS:/{print $2}' Podfile.lock)
+          sudo gem install cocoapods -v "$version" --no-document
+          pod "_${version}_" install --deployment
 
       - name: Run tests (Mac Catalyst)
         run: |

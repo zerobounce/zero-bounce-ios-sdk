@@ -91,7 +91,12 @@ jobs:
           fi
 
       - name: Install CocoaPods dependencies
-        run: pod install --deployment
+        run: |
+          set -euo pipefail
+          # Same as sdk_ci.yml: --deployment needs the CocoaPods that wrote the lockfile.
+          version=$(awk '/^COCOAPODS:/{print $2}' Podfile.lock)
+          sudo gem install cocoapods -v "$version" --no-document
+          pod "_${version}_" install --deployment
 
       - name: Run tests (Mac Catalyst)
         run: |
