@@ -10,6 +10,7 @@ Guidance for AI coding agents working in this repository.
 
 - `Zero Bounce iOS SDK/`: Swift sources. `ZeroBounceSDK.swift` is the client. `Priority3Api.swift` is bulk finder, domain search, list evaluator, filters, S3/SFTP and the Inbox Placement Tester. `ZeroBounceWarmup.swift` is the Warmup API: a separate product on its own host with its own team-scoped key and an `API-Key` header, so it never touches the validation key.
 - `Zero Bounce iOS SDKTests/Zero_Bounce_iOS_SDKTests.swift`: XCTest, including the offline `URLProtocol` suites for the client and for Warmup.
+- `Zero Bounce iOS SDKTests/SecretRedactionTests.swift`: the offline tests for secret redaction (the case fold, the decode layers).
 - `Zero Bounce iOS SDKTests/LiveApiTests.swift`: the opt-in live suite. The Mac Catalyst test command and CI exclude it by name (the simulator command does not skip it), and it does nothing without keys.
 - `ZeroBounceSDK.podspec`: `s.version`.
 - `Zero Bounce iOS SDK.xcodeproj/project.pbxproj`: `MARKETING_VERSION`.
@@ -30,7 +31,7 @@ xcodebuild test \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
-The live suite is the one test that is excluded there. To run it:
+The command above skips the live suite. To run it:
 
 ```bash
 export ZEROBOUNCE_API_KEY=... ZEROBOUNCE_WARMUP_API_KEY=...
@@ -69,7 +70,7 @@ That `xcodebuild` compile is the typecheck. There is no separate lint step. CI (
 - **A `"success": false` field on an HTTP 200 is a failure.** `getFile` and `deleteFile` report an unknown or deleted file id that way. `ZBError.successMeansFailure` catches it in `sendRequest`, and `ZBError.httpError` carries the HTTP status.
 - **`exportSFTPFile` sends `export_path`**, not the `export_bucket` that `exportS3File` sends. Both are optional: nil means the path or bucket from the account's settings, and a blank string is a mistake rather than a default.
 - **Safety rails.** `initialize` refuses a key with surrounding whitespace or control characters; with U+00A0, U+2028 or U+3000 anywhere; with U+180B through U+180F anywhere; with U+2000-U+200A, U+2029, U+202F, U+205F or U+1680 in the middle; or made only of combining marks. A mid-key ordinary space (U+0020) stays allowed. `ZeroBounceSDK.isAllowedURL` allows https only (loopback aside, for a local stub), `escapePathSegment` keeps a slash encoded, and redirects are never followed. A base URL with `?` or `#` is refused when it is set, and the call fails with `url must be an https:// URL` (`baseUrl must be an https:// URL` on Warmup) without quoting it. Use these rather than adding a second rail beside them.
-- **Redaction masks, then decodes.** `redactingApiKey` and the Warmup redaction fold case and canonical equivalents on both sides (marks are put in canonical order, then U+0307 after `i` is dropped; never `localizedLowercase`), mask every spelling they generate, and then look for the secret in views decoded up to four times: URL, `+`, JSON `\uXXXX`, `\u{X}`, `\UXXXX`/`\UXXXXXXXX`, octal `\NNN`, `\xHH`, `\'` and HTML references. A view that still holds a secret turns the whole text into the omitted-credential sentence. `%u0027` is not decoded. A new decode step needs a test in `SecretRedactionTests.swift`.
+- **Redaction masks, then decodes.** `redactingApiKey` and the Warmup redaction fold case and canonical equivalents on both sides (each character is decomposed canonically before its scalars are folded, so a Greek ypogegrammeni plus an accent matches its precomposed form; marks are put in canonical order, then U+0307 after `i` is dropped; never `localizedLowercase`), mask every spelling they generate, and then look for the secret in views decoded up to four times: URL, `+`, JSON `\uXXXX`, `\u{X}`, `\UXXXX`/`\UXXXXXXXX`, octal `\NNN`, `\xHH`, `\'` and HTML references. A view that still holds a secret turns the whole text into the omitted-credential sentence. `%u0027` is not decoded. A new decode step needs a test in `SecretRedactionTests.swift`.
 - **A file's result and its path.** `getFile` and `scoringGetFile` save under a name that contains the file id, keeping the last path component only. The downloads that take a `downloadPath` refuse an empty path, a trailing separator and an existing directory before sending, write through a symlink, and keep the permissions of a file they replace. The SDK logs no saved file name, upload path, request URL or response body.
 - **Requests go through `ZeroBounceSDK.urlSession`**, not `URLSession.shared`, because a shared session cannot refuse a redirect. A test that stubs HTTP puts its `URLProtocol` on that session; `URLProtocol.registerClass` alone reaches only the shared one.
 - **Offline tests register their protocol on `ZeroBounceSDK.urlSession`.** Do not call the live API from anything but `LiveApiTests`.

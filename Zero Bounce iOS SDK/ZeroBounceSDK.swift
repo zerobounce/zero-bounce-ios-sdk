@@ -241,6 +241,18 @@ public class ZeroBounceSDK {
         /// `Character` and one past the last.
         var starts: [Int] = []
         var ends: [Int] = []
+        /// Whether the scalar is a U+0307 that directly follows an "i". The
+        /// text keeps it so a secret that begins with that mark can match it;
+        /// every other match leaves it out (see `occurrences`).
+        var droppable: [Bool] = []
+
+        /// The scalars with the droppable U+0307 left out: a secret's spelling.
+        var spelling: [Unicode.Scalar] {
+            var out: [Unicode.Scalar] = []
+            out.reserveCapacity(scalars.count)
+            for index in scalars.indices where !droppable[index] { out.append(scalars[index]) }
+            return out
+        }
     }
 
     /// The full case fold of one scalar, and not `lowercased()` alone:
@@ -268,30 +280,39 @@ public class ZeroBounceSDK {
         (0x41...0x5A).contains(scalar.value) ? Unicode.Scalar(UInt8(scalar.value + 0x20)) : scalar
     }
 
+    private static func decomposed(_ scalars: [Unicode.Scalar]) -> [Unicode.Scalar] {
+        Array(String(String.UnicodeScalarView(scalars)).decomposedStringWithCanonicalMapping.unicodeScalars)
+    }
+
     /// The fold of one `Character`, so that canonical equivalents agree: a
-    /// Hangul syllable and its jamo, "é" and "e" plus U+0301, and marks in
+    /// Hangul syllable and its jamo, "é" and "e" plus U+0301, a Greek
+    /// ypogegrammeni plus an accent and its precomposed form, and marks in
     /// either order ("i" plus U+0323 plus U+0307 and "i" plus U+0307 plus
-    /// U+0323). The folded scalars are canonically decomposed and reordered
-    /// first; then a U+0307 right after an "i" is dropped, so "İ" (folded to
-    /// "i" plus U+0307), "i" plus U+0307 and a plain "i" are one spelling: a
-    /// server that echoes "İ" may have lost the dot or kept it.
-    private static func foldedCharacter(_ character: Character) -> [Unicode.Scalar] {
-        var out: [Unicode.Scalar] = []
-        var plain = true
-        for scalar in character.unicodeScalars {
-            if !(0x4E00...0x9FFF).contains(scalar.value) { plain = false }
-            out.append(contentsOf: foldedScalars(scalar))
+    /// U+0323). The character is canonically decomposed first, and only then
+    /// are its scalars folded (a precomposed "ᾀ" folds to "ἀι", where its
+    /// decomposed ypogegrammeni is a mark that folds to "ι" after the accent,
+    /// and the two must reach the same order), and the result is reordered.
+    /// Then a U+0307 right after an "i" is marked droppable, so "İ" (folded
+    /// to "i" plus U+0307), "i" plus U+0307 and a plain "i" are one spelling:
+    /// a server that echoes "İ" may have lost the dot or kept it.
+    private static func foldedCharacter(_ character: Character) -> (scalars: [Unicode.Scalar], droppable: [Bool]) {
+        var out = Array(character.unicodeScalars)
+        let plain = out.allSatisfy { (0x4E00...0x9FFF).contains($0.value) }
+        if !plain { out = decomposed(out) }
+        var folded: [Unicode.Scalar] = []
+        folded.reserveCapacity(out.count)
+        for scalar in out { folded.append(contentsOf: foldedScalars(scalar)) }
+        if !plain && folded != out { folded = decomposed(folded) }
+        var droppable = [Bool](repeating: false, count: folded.count)
+        var previous: Unicode.Scalar?
+        for (index, scalar) in folded.enumerated() {
+            if scalar.value == 0x307, previous?.value == 0x69 {
+                droppable[index] = true
+            } else {
+                previous = scalar
+            }
         }
-        if !plain {
-            out = Array(String(String.UnicodeScalarView(out)).decomposedStringWithCanonicalMapping.unicodeScalars)
-        }
-        var result: [Unicode.Scalar] = []
-        result.reserveCapacity(out.count)
-        for scalar in out {
-            if scalar.value == 0x307, result.last?.value == 0x69 { continue }
-            result.append(scalar)
-        }
-        return result
+        return (folded, droppable)
     }
 
     internal static func folded(_ text: String) -> FoldedText {
@@ -299,12 +320,14 @@ public class ZeroBounceSDK {
         result.scalars.reserveCapacity(text.utf8.count)
         result.starts.reserveCapacity(text.utf8.count)
         result.ends.reserveCapacity(text.utf8.count)
+        result.droppable.reserveCapacity(text.utf8.count)
         if text.utf8.allSatisfy({ $0 < 0x80 }) {
             var index = 0
             for scalar in text.unicodeScalars {
                 result.scalars.append(asciiFolded(scalar))
                 result.starts.append(index)
                 result.ends.append(index + 1)
+                result.droppable.append(false)
                 index += 1
             }
             return result
@@ -313,36 +336,75 @@ public class ZeroBounceSDK {
         for character in text {
             let width = character.unicodeScalars.count
             let pieces: [Unicode.Scalar]
+            let droppable: [Bool]
             if character.isASCII {
                 pieces = character.unicodeScalars.map(asciiFolded)
+                droppable = [Bool](repeating: false, count: pieces.count)
             } else {
-                pieces = foldedCharacter(character)
+                (pieces, droppable) = foldedCharacter(character)
             }
-            for piece in pieces {
+            for (piece, drop) in zip(pieces, droppable) {
                 result.scalars.append(piece)
                 result.starts.append(offset)
                 result.ends.append(offset + width)
+                result.droppable.append(drop)
             }
             offset += width
         }
         return result
     }
 
-    /// Where `needle` starts in `haystack`, at every position, overlaps
-    /// included.
-    private static func occurrences(of needle: [Unicode.Scalar], in haystack: [Unicode.Scalar]) -> [Int] {
-        guard let first = needle.first, haystack.count >= needle.count else { return [] }
-        var found: [Int] = []
+    private static func isMark(_ scalar: Unicode.Scalar) -> Bool {
+        scalar.properties.canonicalCombiningClass.rawValue != 0
+    }
+
+    /// Where `needle` (a secret's `spelling`) is in `haystack`, at every
+    /// position, overlaps included: the first and the last folded scalar of
+    /// each match. The text's droppable U+0307 is skipped, except that a
+    /// match may begin on it, so a secret that starts with that mark is found
+    /// on the "i" it was attached to. When the needle ends in marks, they
+    /// need only be among the marks of the same `Character` in the text, in
+    /// order, so "a" plus U+0307 is found in "a" plus U+0323 plus U+0307
+    /// (marks sort by class, and the text's extra U+0323 comes first). A text
+    /// with fewer marks than the needle is not a match: "ki" plus U+0323 plus
+    /// U+0307 is not found in "ki" plus U+0323.
+    private static func occurrences(of needle: [Unicode.Scalar], in haystack: FoldedText) -> [(start: Int, last: Int)] {
+        let text = haystack.scalars
+        guard let first = needle.first, text.count >= needle.count else { return [] }
+        var baseIndex = needle.count - 1
+        if isMark(needle[baseIndex]), let base = needle.lastIndex(where: { !isMark($0) }) {
+            baseIndex = base
+        }
+        var found: [(start: Int, last: Int)] = []
         var start = 0
-        while start + needle.count <= haystack.count {
-            if haystack[start] == first {
+        while start < text.count {
+            if text[start] == first {
                 var matches = true
+                var position = start + 1
                 var offset = 1
-                while offset < needle.count {
-                    if haystack[start + offset] != needle[offset] { matches = false; break }
+                while offset <= baseIndex {
+                    while position < text.count, haystack.droppable[position], text[position] != needle[offset] {
+                        position += 1
+                    }
+                    if position >= text.count || text[position] != needle[offset] { matches = false; break }
+                    position += 1
                     offset += 1
                 }
-                if matches { found.append(start) }
+                var last = position - 1
+                if matches, baseIndex < needle.count - 1 {
+                    let span = haystack.starts[last]
+                    var next = last + 1
+                    for mark in needle[(baseIndex + 1)...] {
+                        var seen = false
+                        while next < text.count, haystack.starts[next] == span {
+                            let hit = !haystack.droppable[next] && text[next] == mark
+                            next += 1
+                            if hit { seen = true; last = next - 1; break }
+                        }
+                        if !seen { matches = false; break }
+                    }
+                }
+                if matches { found.append((start, last)) }
             }
             start += 1
         }
@@ -354,13 +416,13 @@ public class ZeroBounceSDK {
     /// and a match is cut out as whole `Character`s of the original, so no
     /// part of a spelling is left behind.
     internal static func masking(_ forms: [String], in text: String) -> String {
-        let needles = forms.map { folded($0).scalars }.filter { !$0.isEmpty }
+        let needles = forms.map { folded($0).spelling }.filter { !$0.isEmpty }
         guard !needles.isEmpty, !text.isEmpty else { return text }
         let view = folded(text)
         var ranges: [(start: Int, end: Int)] = []
         for needle in needles {
-            for start in occurrences(of: needle, in: view.scalars) {
-                ranges.append((view.starts[start], view.ends[start + needle.count - 1]))
+            for match in occurrences(of: needle, in: view) {
+                ranges.append((view.starts[match.start], view.ends[match.last]))
             }
         }
         guard !ranges.isEmpty else { return text }
@@ -398,10 +460,10 @@ public class ZeroBounceSDK {
     /// numeric entities), in any order. `%u0027` is not decoded. Both sides
     /// are folded, so a key in other letter case is read too.
     internal static func revealsSecret(_ text: String, _ secrets: [String]) -> Bool {
-        let needles = secrets.filter { !$0.isEmpty }.map { folded($0).scalars }.filter { !$0.isEmpty }
+        let needles = secrets.filter { !$0.isEmpty }.map { folded($0).spelling }.filter { !$0.isEmpty }
         guard !needles.isEmpty else { return false }
         func search(_ bytes: [UInt8], _ layers: Int) -> Bool {
-            let view = folded(String(decoding: bytes, as: UTF8.self)).scalars
+            let view = folded(String(decoding: bytes, as: UTF8.self))
             if needles.contains(where: { !occurrences(of: $0, in: view).isEmpty }) { return true }
             guard layers > 0, bytes.contains(where: { $0 == 0x25 || $0 == 0x2B || $0 == 0x5C || $0 == 0x26 }) else { return false }
             for view in [percentDecoded(bytes, plusAsSpace: false), percentDecoded(bytes, plusAsSpace: true),
@@ -1010,7 +1072,7 @@ public class ZeroBounceSDK {
         if let lastName = names[2] {
             items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), messageOnly: true, completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     // MARK: Domain Search
@@ -1059,7 +1121,7 @@ public class ZeroBounceSDK {
         if let companyName {
             items.append(URLQueryItem(name: "company_name", value: companyName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), messageOnly: true, completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     @available(*, deprecated, message: "Use findEmail() for Email Finder API, or findDomain() for Domain Search API")
@@ -1088,7 +1150,7 @@ public class ZeroBounceSDK {
         if let lastName {
             items.append(URLQueryItem(name: "last_name", value: lastName))
         }
-        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), messageOnly: true, completion: completion)
+        sendJsonRequest(url: makeURL("/guessformat", queryItems: items), completion: completion)
     }
     
     // MARK: Get Credits
@@ -1992,8 +2054,10 @@ public class ZeroBounceSDK {
         return comp?.url
     }
     
-    /// The name `getFile` saves under: `file_<fileId>_<name>`, or
-    /// `file_<fileId>.csv` when the server suggests no name. The id is a
+    /// The name `getFile` saves under: `file_<fileId>_<name>`. With no
+    /// `Content-Disposition`, Foundation suggests `getfile`, so the file is
+    /// `file_<fileId>_getfile`; the `file_<fileId>.csv` form is only for a
+    /// suggested name that is empty, `.` or `..`. The id is a
     /// single path component (a slash or a backslash in it becomes "_"), so a
     /// hostile id cannot leave the folder either; only the last path
     /// component of the suggested name is kept.

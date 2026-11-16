@@ -58,6 +58,58 @@ class SecretRedactionTests: XCTestCase {
         XCTAssertEqual(ZeroBounceSDK.redacting(["ki\u{323}\u{307}-key9"], in: "ki\u{323}-key9"), "ki\u{323}-key9")
     }
 
+    func testAGreekYpogegrammeniPlusAnAccentMatchesItsPrecomposedFormBothWays() {
+        // "ᾀ" (U+1F80) plus an acute accent, against the precomposed "ᾄ" (U+1F84).
+        let decomposedMarks = "k\u{1F80}\u{301}-key9"
+        let precomposed = "k\u{1F84}-key9"
+        let jamoStyle = "k\u{3B1}\u{313}\u{301}\u{345}-key9"
+        for (secret, echo) in [(decomposedMarks, precomposed), (precomposed, decomposedMarks),
+                               (decomposedMarks, jamoStyle), (jamoStyle, precomposed), (precomposed, jamoStyle)] {
+            XCTAssertEqual(ZeroBounceSDK.redacting([secret], in: "bad \(echo) here"), "bad *** here")
+            XCTAssertTrue(ZeroBounceSDK.revealsSecret(echo, [secret]))
+        }
+        XCTAssertEqual(ZeroBounceSDK.redacting([decomposedMarks], in: "bad \(precomposed.uppercased()) here"), "bad *** here")
+        // Another letter is another key.
+        XCTAssertEqual(ZeroBounceSDK.redacting([decomposedMarks], in: "k\u{1F85}-key9"), "k\u{1F85}-key9")
+    }
+
+    func testASecretThatStartsWithTheDotAboveIsMaskedWhereTheTextPutsItOnAnI() {
+        let key = "\u{307}key99"
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad xi\u{307}key99 here"), "bad x*** here")
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("i\u{307}key99", [key]))
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("\u{130}KEY99", [key]))
+        // Still found where the mark has any other base.
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad x\u{307}key99 here"), "bad *** here")
+        // Not found without the mark, and a plain "i" is not a dot.
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad ikey99 here"), "bad ikey99 here")
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad key99 here"), "bad key99 here")
+    }
+
+    func testASecretThatEndsInADotAboveIsMaskedWhereTheTextContinuesWithADotBelow() {
+        let key = "key99a\u{307}"
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad key99a\u{307}\u{323} here"), "bad *** here")
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad key99a\u{323}\u{307} here"), "bad *** here")
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("key99a\u{323}\u{307}", [key]))
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("KEY99A\u{307}\u{323}", [key]))
+        // The mark is still required.
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad key99a\u{323} here"), "bad key99a\u{323} here")
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad key99a here"), "bad key99a here")
+    }
+
+    func testADotBelowAndAboveOnAnIDoesNotMaskAnIWithADotBelow() {
+        XCTAssertEqual(ZeroBounceSDK.redacting(["ki\u{323}\u{307}-key9"], in: "ki\u{323}-key9"), "ki\u{323}-key9")
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ki\u{323}-key9", ["ki\u{323}\u{307}-key9"]))
+        // A text with the marks in the other order is the same spelling.
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("ki\u{307}\u{323}-key9", ["ki\u{323}\u{307}-key9"]))
+    }
+
+    func testALocaleCasingOfTheDottedCapitalIWithABelowMarkIsNotMasked() {
+        // "İ" plus a dot below is "i", the dot below and the dot above under the
+        // default fold; a Turkish or Lithuanian casing is no such spelling.
+        XCTAssertEqual(ZeroBounceSDK.redacting(["k\u{130}\u{323}-key9"], in: "ki\u{323}-key9"), "ki\u{323}-key9")
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ki\u{323}-key9", ["k\u{130}\u{323}-key9"]))
+    }
+
     func testSchwaEchoedInCapitalsIsMasked() {
         XCTAssertEqual(ZeroBounceSDK.redacting(["\u{4D9}key77"], in: "bad \u{4D8}KEY77 here"), "bad *** here")
         XCTAssertEqual(ZeroBounceSDK.redacting(["\u{4D8}KEY77"], in: "bad \u{4D9}key77 here"), "bad *** here")

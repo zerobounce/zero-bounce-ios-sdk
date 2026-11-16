@@ -263,7 +263,7 @@ ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
 }
 ```
 
-Optional `download_type` and `activity_data` (validation only). An unknown or deleted file id, or a file still being processed, comes back as JSON (often on an HTTP 200) rather than a file. Any JSON body is returned as `.Failure(ZBError.httpError(message:statusCode:))` with the HTTP status, and no file is saved. The result is saved in `Documents/SavedFiles` under a name that contains the file id, so two jobs never share a path, and only the last path component of a name the server suggests is kept. The SDK does not print the saved name. `emailFinderGetFile`, `domainSearchGetFile`, `getFileStreaming` and `scoringGetFileStreaming` take a `downloadPath`, and refuse an empty one, one that ends in a path separator and one that is an existing directory before sending; a symlink there is written through, and an existing file keeps its permissions. The other downloads (`getFileStreaming`, the scoring, email finder and domain search ones) behave the same way:
+Optional `download_type` and `activity_data` (validation only). An unknown or deleted file id, or a file still being processed, comes back as JSON (often on an HTTP 200) rather than a file. Any JSON body is returned as `.Failure(ZBError.httpError(message:statusCode:))` with the HTTP status, and no file is saved. `getFile` and `scoringGetFile` save the result in `Documents/SavedFiles` under a name that contains the file id, so two jobs never share a path, and only the last path component of a name the server suggests is kept. The SDK does not print the saved name. `emailFinderGetFile`, `domainSearchGetFile`, `getFileStreaming` and `scoringGetFileStreaming` take a `downloadPath` instead, and refuse an empty one, one that ends in a path separator and one that is an existing directory before sending; a symlink there is written through, and an existing file keeps its permissions. `getFile` with options:
 
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
@@ -297,7 +297,7 @@ ZeroBounceSDK.shared.fileStatus(fileId: fileId) { result in
 
 A file status answer needs at least one non-null known field (`file_status`, `file_id`, `file_name`, `upload_date`, `file_phase_2_status`, `complete_percentage`, `error_reason`, `return_url` or a real `success` flag). An object with none of them (`{"foo":1}`, `{"":""}`) is `.Failure(ZBError.httpError(message:statusCode:))` with status 200, while `{"file_status":"Processing"}` and `{"success":true}` are results. The same holds for `scoringFileStatus` and the email finder and domain search file status calls. A `success` that is present but is not a flag (`5`, `"maybe"`, `[]`) fails with the same error.
 
-* ##### Deletes the file that was submitted using scoring sendfile API. File can be deleted only when its status is _`Complete`_
+* ##### Deletes the file that was submitted using sendfile API. File can be deleted only when its status is _`Complete`_
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
@@ -384,7 +384,7 @@ ZeroBounceSDK.shared.scoringFileStatus(fileId: fileId) { result in
 }
 ```
 
-* ##### Deletes the file that was submitted using scoring scoringSendFile API. File can be deleted only when its status is _`Complete`_
+* ##### Deletes the file that was submitted using scoringSendFile API. File can be deleted only when its status is _`Complete`_
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
@@ -677,7 +677,7 @@ ZeroBounceSDK.setSessionConfiguration(nil)             // back to the default, e
 
 ## Running Unit Tests
 
-Unit tests are located in `Zero Bounce iOS SDKTests/Zero_Bounce_iOS_SDKTests.swift` and use XCTest with the [Mocker](https://github.com/WeTransfer/Mocker) library for HTTP mocking.
+Unit tests are located in `Zero Bounce iOS SDKTests/Zero_Bounce_iOS_SDKTests.swift` (the secret-redaction tests are in `Zero Bounce iOS SDKTests/SecretRedactionTests.swift`) and use XCTest with the [Mocker](https://github.com/WeTransfer/Mocker) library for HTTP mocking.
 
 ### Option 1: Xcode (Recommended)
 
@@ -707,7 +707,7 @@ xcodebuild test \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
-The one test the command above skips is the opt-in live suite, which calls the
+The command above skips the opt-in live suite, which calls the
 real API. To run it, with keys from the environment only:
 
 ```bash

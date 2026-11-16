@@ -5667,14 +5667,14 @@ extension TransportSafetyTests {
     }
 
     /// The other typed calls that read an answer with no result in it as an
-    /// error: activity, score, file status, delete, batch, usage, finder and
-    /// domain search.
+    /// error: activity, score, file status, delete, batch, usage, finder,
+    /// domain search and the deprecated guessFormat.
     private func resultCalls(_ sdk: ZeroBounceSDK, _ warmup: ZeroBounceWarmup) -> [(String, (@escaping Report) -> ())] {
         let names: Set<String> = [
             "getActivityData", "scoreEmail", "scoreEmailPost", "fileStatus", "scoringFileStatus", "deleteFile",
             "scoringDeleteFile", "emailFinderFileStatus", "emailFinderDeleteFile", "domainSearchFileStatus",
             "domainSearchDeleteFile", "validateBatch", "validateBatch options", "getApiUsage", "findEmail domain",
-            "findEmail company", "findDomain domain", "findDomain company",
+            "findEmail company", "findDomain domain", "findDomain company", "guessFormat",
         ]
         return everyCall(sdk, warmup).filter { names.contains($0.0) }
     }
@@ -5688,7 +5688,7 @@ extension TransportSafetyTests {
         let sends = fileJobSends(sdk, warmup)
         let others = resultCalls(sdk, warmup)
         XCTAssertGreaterThanOrEqual(sends.count, 20)
-        XCTAssertEqual(others.count, 18)
+        XCTAssertEqual(others.count, 19)
         let bodies: [(String, String?)] = [
             ("{}", nil), ("{ }", nil), ("{\n}", nil), ("{\t}", nil),
             (#"{"message":"m-text"}"#, "m-text"), (#"{"Message":"m-text"}"#, "m-text"),
@@ -6274,7 +6274,11 @@ extension TransportSafetyTests {
         try Data("keep".utf8).write(to: URL(fileURLWithPath: folder + "/inside.csv"))
         let link = dir + "/link-to-folder"
         try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: folder)
-        let paths = ["", "   ", dir + "/new.csv/", folder, folder + "/", link, link + "/", dir + "/.", dir + "/.."]
+        // `.` and `..` after a folder that is not there name a directory too.
+        let paths = [
+            "", "   ", dir + "/new.csv/", folder, folder + "/", link, link + "/", dir + "/.", dir + "/..",
+            dir + "/missing/.", dir + "/missing/..", dir + "/missing/../..", "missing/..", ".", "..",
+        ]
         for (name, call) in pathCalls(sdk) {
             for path in paths {
                 scriptFile(Data("email\na@b.c\n".utf8))
@@ -6349,5 +6353,109 @@ extension TransportSafetyTests {
                 try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: plain)
             }
         }
+    }
+
+    // MARK: Fix 3 behaviour
+
+    /// `message(from:)` reads the keys in the order `messageOnlyFailure`
+    /// does, so the two never show different text for one body.
+    func testMessageFromReadsTheKeysInTheOrderMessageOnlyFailureDoes() {
+        let order = ["Message", "message", "error", "error_message", "Error", "detail"]
+        for first in 0..<order.count {
+            var pairs: [String] = []
+            for key in order[first...] { pairs.append(#""\#(key)":"text-\#(key)""#) }
+            // Shuffle the written order: the read order is what counts.
+            let body = Data("{\(pairs.reversed().joined(separator: ","))}".utf8)
+            let expected = "text-\(order[first])"
+            XCTAssertEqual(ZBError.message(from: body, statusCode: 200), expected)
+            XCTAssertEqual(ZBError.messageOnlyFailure(body, statusCode: 200)?.errorDescription, expected)
+        }
+        // "detail" is read too, and a blank value is skipped.
+        XCTAssertEqual(ZBError.message(from: Data(#"{"detail":"d-text"}"#.utf8), statusCode: 200), "d-text")
+        XCTAssertEqual(ZBError.message(from: Data(#"{"Message":"  ","error":"e-text"}"#.utf8), statusCode: 200), "e-text")
+    }
+
+    /// A `{` or `[` body that does not parse is "too long to show" when its
+    /// raw bytes fill the probe window, whatever it trims to, and shows as
+    /// it is when it is short and complete.
+    func testAnUnparseableJsonBodyThatFillsTheProbeWindowIsTooLongToShow() {
+        let tooLong = "ZeroBounce returned a JSON error response that is too long to show."
+        // 4096 bytes: a brace and padding only, so the trimmed text is "{".
+        let braceAndSpaces = Data(("{" + String(repeating: " ", count: 4095)).utf8)
+        XCTAssertEqual(braceAndSpaces.count, 4096)
+        XCTAssertEqual(ZBError.message(from: braceAndSpaces, statusCode: 200), tooLong)
+        // A key cut short with padding after it: 6 bytes and 4090 of padding.
+        let cutKey = Data(("{\"a\":\"" + String(repeating: "\n", count: 4090)).utf8)
+        XCTAssertEqual(cutKey.count, 4096)
+        XCTAssertEqual(ZBError.message(from: cutKey, statusCode: 200), tooLong)
+        // The same bytes one short of the window, with a short trimmed text,
+        // are shown as they are.
+        let short = Data(("{" + String(repeating: " ", count: 4094)).utf8)
+        XCTAssertEqual(ZBError.message(from: short, statusCode: 200), "{")
+        XCTAssertEqual(ZBError.message(from: Data("{oops".utf8), statusCode: 200), "{oops")
+        // An array start fills a bigger window.
+        let arraySpaces = Data(("[" + String(repeating: " ", count: 4095)).utf8)
+        XCTAssertEqual(ZBError.message(from: arraySpaces, statusCode: 200), "[")
+        let arrayWindow = Data(("[" + String(repeating: " ", count: (1 << 20) - 1)).utf8)
+        XCTAssertEqual(ZBError.message(from: arrayWindow, statusCode: 200), tooLong)
+        // A parseable object is read, whatever its size.
+        let padded = Data((#"{"message":"m-text"}"# + String(repeating: " ", count: 5000)).utf8)
+        XCTAssertEqual(ZBError.message(from: padded, statusCode: 200), "m-text")
+    }
+
+    /// The temporary file does not carry the target's name, so a last
+    /// component at the 255-byte limit is written, and nothing is left beside it.
+    func testADownloadToA255ByteNameIsWritten() throws {
+        let dir = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let name = String(repeating: "n", count: 251) + ".csv"
+        XCTAssertEqual(name.utf8.count, 255)
+        let target = URL(fileURLWithPath: dir).appendingPathComponent(name)
+        try ZBFileManager.replaceFile(at: target, with: Data("one".utf8))
+        try ZBFileManager.replaceFile(at: target, with: Data("two".utf8))
+        XCTAssertEqual(try Data(contentsOf: target), Data("two".utf8))
+        let source = URL(fileURLWithPath: dir).appendingPathComponent("source.tmp")
+        try Data("three".utf8).write(to: source)
+        try ZBFileManager.replaceFile(at: target, withContentsOf: source)
+        XCTAssertEqual(try Data(contentsOf: target), Data("three".utf8))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir), [name])
+    }
+
+    /// A chain of links that does not end within 40 fails and leaves every
+    /// link a link; a chain of 40 still reaches its file.
+    func testASymlinkChainLongerThan40LinksFailsAndKeepsTheLinks() throws {
+        let dir = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let file = dir + "/file.csv"
+        try Data("OLD".utf8).write(to: URL(fileURLWithPath: file))
+        func chain(_ count: Int, _ label: String) throws -> [String] {
+            var links: [String] = []
+            var previous = "file.csv"
+            for index in 1...count {
+                let link = "\(dir)/\(label)-\(index)"
+                try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: previous)
+                previous = "\(label)-\(index)"
+                links.append(link)
+            }
+            return links
+        }
+        let ok = try chain(40, "ok")
+        try ZBFileManager.replaceFile(at: URL(fileURLWithPath: ok[39]), with: Data("NEW".utf8))
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: file)), Data("NEW".utf8))
+        for link in ok { XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: link), link) }
+
+        let long = try chain(41, "long")
+        XCTAssertThrowsError(try ZBFileManager.replaceFile(at: URL(fileURLWithPath: long[40]), with: Data("BAD".utf8)))
+        let source = dir + "/source.tmp"
+        try Data("BAD".utf8).write(to: URL(fileURLWithPath: source))
+        XCTAssertThrowsError(try ZBFileManager.replaceFile(at: URL(fileURLWithPath: long[40]), withContentsOf: URL(fileURLWithPath: source)))
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: file)), Data("NEW".utf8))
+        for link in long { XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: link), link) }
+        // A loop fails the same way.
+        let loop = dir + "/loop"
+        try FileManager.default.createSymbolicLink(atPath: loop, withDestinationPath: "loop")
+        XCTAssertThrowsError(try ZBFileManager.replaceFile(at: URL(fileURLWithPath: loop), with: Data("BAD".utf8)))
+        XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: loop))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir).filter { $0.hasSuffix(".zbtmp") }, [])
     }
 }

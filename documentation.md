@@ -251,7 +251,7 @@ ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
 }
 ```
 
-The result is saved in `Documents/SavedFiles` under a name that contains the file id, so two jobs never share a path. Only the last path component of a name the server suggests is kept, and the SDK does not print the saved name. A JSON body, an HTML page or an empty body is returned as `.Failure(ZBError.httpError(message:statusCode:))` with the HTTP status, and no file is saved. `emailFinderGetFile`, `domainSearchGetFile`, `getFileStreaming` and `scoringGetFileStreaming` take a `downloadPath`, and refuse an empty one, one that ends in a path separator and one that is an existing directory before sending; a symlink there is written through, and an existing file keeps its permissions.
+`getFile` and `scoringGetFile` save the result in `Documents/SavedFiles` under a name that contains the file id, so two jobs never share a path. Only the last path component of a name the server suggests is kept, and the SDK does not print the saved name. A JSON body, an HTML page or an empty body is returned as `.Failure(ZBError.httpError(message:statusCode:))` with the HTTP status, and no file is saved. `emailFinderGetFile`, `domainSearchGetFile`, `getFileStreaming` and `scoringGetFileStreaming` take a `downloadPath` instead, and refuse an empty one, one that ends in a path separator and one that is an existing directory before sending; a symlink there is written through, and an existing file keeps its permissions.
 
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
@@ -285,7 +285,7 @@ ZeroBounceSDK.shared.fileStatus(fileId: fileId) { result in
 
 A file status answer needs at least one non-null known field (`file_status`, `file_id`, `file_name`, `upload_date`, `file_phase_2_status`, `complete_percentage`, `error_reason`, `return_url` or a real `success` flag). An object with none of them (`{"foo":1}`, `{"":""}`) is `.Failure(ZBError.httpError(message:statusCode:))` with status 200, while `{"file_status":"Processing"}` and `{"success":true}` are results. The same holds for `scoringFileStatus` and the email finder and domain search file status calls. A `success` that is present but is not a flag (`5`, `"maybe"`, `[]`) fails with the same error.
 
-###### Deletes the file that was submitted using scoring sendfile API. File can be deleted only when its status is _`Complete`_
+###### Deletes the file that was submitted using sendfile API. File can be deleted only when its status is _`Complete`_
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
@@ -364,7 +364,7 @@ ZeroBounceSDK.shared.scoringFileStatus(fileId: fileId) { result in
 }
 ```
 
-###### Deletes the file that was submitted using scoring scoringSendFile API. File can be deleted only when its status is _`Complete`_
+###### Deletes the file that was submitted using scoringSendFile API. File can be deleted only when its status is _`Complete`_
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 

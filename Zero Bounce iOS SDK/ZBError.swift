@@ -130,7 +130,7 @@ public enum ZBError: LocalizedError {
             }
         }
         var text = ""
-        for key in ["Message", "message", "error", "error_message", "Error", "detail"] where text.isEmpty {
+        for key in messageKeyOrder where text.isEmpty {
             if let value = object[key] as? String {
                 text = stripErrorPrefix(value)
             } else if let lines = object[key] as? [String] {
@@ -288,6 +288,22 @@ public enum ZBError: LocalizedError {
         )
     }
 
+    /// The message keys, in the order `messageOnlyFailure` and `message(from:)`
+    /// read them.
+    private static let messageKeyOrder = ["Message", "message", "error", "error_message", "Error", "detail"]
+
+    /// How many bytes a streaming download's probe reads after its padding
+    /// (`ZeroBounceSDK.downloadProbe`): 4096, or 1 MiB when the file starts
+    /// with "[".
+    private static let probeWindow = 4096
+    private static let arrayProbeWindow = 1 << 20
+
+    /// Whether `data` is as long as the probe reads, so a body that does not
+    /// parse may only be the start of a longer one.
+    private static func isFullProbeWindow(_ data: Data, startsWithArray: Bool) -> Bool {
+        data.count >= (startsWithArray ? arrayProbeWindow : probeWindow)
+    }
+
     static func message(from data: Data, statusCode: Int) -> String {
         let body = decodedBody(data)
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -308,7 +324,8 @@ public enum ZBError: LocalizedError {
                    (object["cloudflare_error"] as? Bool) == true {
                     return title
                 }
-                for key in ["message", "error_message", "error", "Message", "Error"] {
+                // The same order `messageOnlyFailure` reads.
+                for key in messageKeyOrder {
                     if let value = object[key] as? String {
                         let text = stripErrorPrefix(value)
                         if !text.isEmpty { return text }
@@ -322,8 +339,10 @@ public enum ZBError: LocalizedError {
                 }
             }
             // A JSON error too long to show, or the start of one cut short
-            // by a streaming download's probe, which cannot be parsed.
-            if trimmed.count > 1000 {
+            // by a streaming download's probe, which cannot be parsed. A
+            // full probe window is cut short whatever its trimmed length is
+            // (a window of padding after the brace trims to almost nothing).
+            if trimmed.count > 1000 || isFullProbeWindow(data, startsWithArray: trimmed.hasPrefix("[")) {
                 return "ZeroBounce returned a JSON error response that is too long to show."
             }
             return trimmed
