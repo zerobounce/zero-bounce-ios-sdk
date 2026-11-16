@@ -159,6 +159,12 @@ internal final class Priority3Api {
             completion(.Failure(ZBError.notInitialized))
             return
         }
+        // An empty path, a trailing separator or an existing directory is
+        // refused before anything is sent.
+        if let failure = ZBFileManager.downloadPathFailure(downloadPath) {
+            completion(.Failure(failure))
+            return
+        }
         let url = sdk.priority3QueryURL(base: "\(baseUrl)/getfile", query: [
             "api_key": apiKey,
             "file_id": fileId,

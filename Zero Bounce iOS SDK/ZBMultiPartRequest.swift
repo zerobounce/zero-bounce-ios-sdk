@@ -103,8 +103,6 @@ internal class ZBMultiPartRequest {
             let data = try Data(contentsOf: url)
             let mimetype = mimeType(for: path)
             
-            NSLog("ZBMultiPartRequest path \(path) has mimeType \(mimetype)")
-            
             body.append("--\(boundary)\r\n")
             body.append("Content-Disposition: form-data; name=\"\(filePathKey)\"; filename=\"\(filename)\"\r\n")
             body.append("Content-Type: \(mimetype)\r\n\r\n")

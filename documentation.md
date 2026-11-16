@@ -34,7 +34,7 @@ Initialize the SDK with your api key and preferred api:
 ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiBaseUrl: .API_DEFAULT_URL)
 ```
 
-`initialize` returns `false` (the result is discardable) when it refuses a key, for example one with surrounding whitespace or control characters. The SDK is then uninitialized and every call fails with `ZBError.notInitialized`. `ZeroBounceWarmup.initialize(apiKey:)` also returns `false`, and Warmup calls then fail with `ZBError.decodeError` (message: `The Warmup API is not initialized. Please call ZeroBounceWarmup.shared.initialize(apiKey:) first`).
+`initialize` returns `false` (the result is discardable) when it refuses a key. It refuses a key with surrounding whitespace or control characters; one with U+00A0, U+2028 or U+3000 anywhere; one with any of U+180B through U+180F anywhere; one with U+2000 through U+200A, U+2029, U+202F, U+205F or U+1680 in the middle; and one made only of combining marks. An ordinary space (U+0020) in the middle of a key is allowed. The SDK is then uninitialized and every call fails with `ZBError.notInitialized`. `ZeroBounceWarmup.initialize(apiKey:)` also returns `false`, and Warmup calls then fail with `ZBError.decodeError` (message: `The Warmup API is not initialized. Please call ZeroBounceWarmup.shared.initialize(apiKey:) first`).
 
 #### Examples
 Then you can use any of the SDK methods, for example:
@@ -251,6 +251,8 @@ ZeroBounceSDK.shared.getFile(fileId: fileId) { result in
 }
 ```
 
+The result is saved in `Documents/SavedFiles` under a name that contains the file id, so two jobs never share a path. Only the last path component of a name the server suggests is kept, and the SDK does not print the saved name. A JSON body, an HTML page or an empty body is returned as `.Failure(ZBError.httpError(message:statusCode:))` with the HTTP status, and no file is saved. `emailFinderGetFile`, `domainSearchGetFile`, `getFileStreaming` and `scoringGetFileStreaming` take a `downloadPath`, and refuse an empty one, one that ends in a path separator and one that is an existing directory before sending; a symlink there is written through, and an existing file keeps its permissions.
+
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
@@ -280,6 +282,8 @@ ZeroBounceSDK.shared.fileStatus(fileId: fileId) { result in
     }
 }
 ```
+
+A file status answer needs at least one non-null known field (`file_status`, `file_id`, `file_name`, `upload_date`, `file_phase_2_status`, `complete_percentage`, `error_reason`, `return_url` or a real `success` flag). An object with none of them (`{"foo":1}`, `{"":""}`) is `.Failure(ZBError.httpError(message:statusCode:))` with status 200, while `{"file_status":"Processing"}` and `{"success":true}` are results. The same holds for `scoringFileStatus` and the email finder and domain search file status calls. A `success` that is present but is not a flag (`5`, `"maybe"`, `[]`) fails with the same error.
 
 ###### Deletes the file that was submitted using scoring sendfile API. File can be deleted only when its status is _`Complete`_
 ```swift
@@ -614,6 +618,12 @@ product: its own host, its own team-scoped key, and an `API-Key` header instead
 of an `api_key` parameter. Use `ZeroBounceWarmup` with a Warmup API key;
 `ZeroBounceSDK` stays for the validation key.
 
+`ZeroBounceWarmup.baseUrl` is `https://warmup-api.zerobounce.net`; trailing slashes are
+dropped when it is set. A `baseUrl` with a `?` or a `#` is refused: every call
+fails before anything is sent with `baseUrl must be an https:// URL`, and the
+error does not quote the URL. The same refusal on `ZeroBounceSDK`'s base URLs
+reads `url must be an https:// URL`.
+
 The body comes back parsed — a dictionary, an array or a number depending on
 the endpoint, and `nil` for the documented empty successes (HTTP 204 and an
 empty 200). The two download endpoints hand over CSV text.
@@ -675,6 +685,11 @@ SMTP login with HTTP 500, which arrives as `ZBError.httpError` with
 The list evaluator and the Inbox Placement Tester have their own base URLs, not
 paths built from the bulk one (both default to `bulkapi.zerobounce.net`), so
 `initialize` alone leaves them pointing at the live API.
+
+Every base URL must be `https://`, and trailing slashes are dropped when it is
+set. A base URL with a `?` or a `#` is refused: every call built on it fails
+before anything is sent with `url must be an https:// URL`, and the error does
+not quote the URL.
 
 ```swift
 ZeroBounceSDK.shared.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/listevaluator")

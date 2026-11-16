@@ -164,9 +164,11 @@ public class ZeroBounceWarmup {
     /// not the validation key.
     ///
     /// A key with surrounding whitespace or control characters, with U+00A0,
-    /// U+2028 or U+3000 in the middle, with U+180B anywhere, or made of
-    /// combining marks alone is refused rather than stored: it would otherwise
-    /// be quoted, unredacted, in a transport error.
+    /// U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F or U+3000 in
+    /// the middle, with U+180B to U+180F anywhere, or made of combining marks
+    /// alone is refused rather than stored: it would otherwise be quoted,
+    /// unredacted, in a transport error. An ordinary space (U+0020) in the
+    /// middle is allowed.
     ///
     /// - returns: false when the key was refused. The client is then left
     ///   uninitialized, so every call fails with "not initialized" instead of
@@ -174,7 +176,7 @@ public class ZeroBounceWarmup {
     @discardableResult
     public func initialize(apiKey: String) -> Bool {
         guard ZeroBounceSDK.isCleanApiKey(apiKey) else {
-            print("ZeroBounce: the Warmup api_key has surrounding whitespace or control characters; it was not accepted.")
+            print("ZeroBounce: the Warmup api_key was not accepted: it has surrounding whitespace or control characters, a no-break or other Unicode space (U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) in the middle, a Mongolian variation selector or vowel separator (U+180B-U+180F), or it is made of combining marks alone.")
             self.apiKey = nil
             return false
         }

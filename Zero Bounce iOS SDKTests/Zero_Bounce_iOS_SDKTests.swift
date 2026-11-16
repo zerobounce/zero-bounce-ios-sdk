@@ -1126,6 +1126,9 @@ final class OfflineURLProtocol: URLProtocol {
     /// When set, every request gets this answer instead of the one its key
     /// picks. Set and cleared under `lock`.
     static var scripted: (status: Int, contentType: String, body: Data)?
+    /// Extra headers on the scripted answer (a Content-Disposition). Set and
+    /// cleared under `lock`.
+    static var scriptedHeaders: [String: String] = [:]
 
     override class func canInit(with request: URLRequest) -> Bool { enabled }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -1185,11 +1188,11 @@ final class OfflineURLProtocol: URLProtocol {
         OfflineURLProtocol.lock.lock()
         OfflineURLProtocol.records.append(record)
         let scripted = OfflineURLProtocol.scripted
+        let scriptedHeaders = OfflineURLProtocol.scriptedHeaders
         OfflineURLProtocol.lock.unlock()
         if let scripted = scripted {
-            let response = HTTPURLResponse(url: url, statusCode: scripted.status, httpVersion: "HTTP/1.1", headerFields: [
-                "Content-Type": scripted.contentType
-            ])!
+            let response = HTTPURLResponse(url: url, statusCode: scripted.status, httpVersion: "HTTP/1.1", headerFields:
+                scriptedHeaders.merging(["Content-Type": scripted.contentType]) { _, type in type })!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: scripted.body)
             client?.urlProtocolDidFinishLoading(self)
@@ -5967,6 +5970,11 @@ extension TransportSafetyTests {
             ($0 as NSString).appendingPathComponent("SavedFiles/file_f.csv")
         }
         if let saved = saved { try? FileManager.default.removeItem(atPath: saved) }
+        // getFile saves under the file id and the name the server suggests.
+        let savedByGetFile = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first.map {
+            ($0 as NSString).appendingPathComponent("SavedFiles/file_f_getfile")
+        }
+        if let savedByGetFile = savedByGetFile { try? FileManager.default.removeItem(atPath: savedByGetFile) }
     }
 
     /// A JSON error longer than the streaming probe is still the fixed
@@ -5980,7 +5988,7 @@ extension TransportSafetyTests {
             for (name, call) in downloadCalls(sdk, warmup) where name.hasSuffix("Streaming") {
                 let (error, _) = runDownload("\(name) padded \(pad.count)", call)
                 XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name): \(describe(error))")
-                XCTAssertEqual(describe(error), "ZeroBounce returned a response that is not valid JSON.", name)
+                XCTAssertEqual(describe(error), "ZeroBounce returned a JSON error response that is too long to show.", name)
             }
         }
     }
@@ -6012,5 +6020,334 @@ extension TransportSafetyTests {
         let plain = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Length": "20"])
         XCTAssertNotNil(ZeroBounceSDK.cutShortError(plain, received: 5))
         XCTAssertNil(ZeroBounceSDK.cutShortError(plain, received: 20))
+    }
+}
+
+/// Behaviour fixes (iOS depth-first fix 2): the saved name of a getfile
+/// download, the file status shape, URL builders that do not crash, and
+/// download paths that cannot be written.
+extension TransportSafetyTests {
+    private typealias FileDone = (ZeroBounceSDK.ZBResult<ZBGetFileResponse>) -> ()
+
+    private func scriptFile(_ body: Data, disposition: String? = nil) {
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.scripted = (200, "text/csv", body)
+        OfflineURLProtocol.scriptedHeaders = disposition.map { ["Content-Disposition": $0] } ?? [:]
+        OfflineURLProtocol.lock.unlock()
+    }
+
+    private func clearFileScript() {
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.scripted = nil
+        OfflineURLProtocol.scriptedHeaders = [:]
+        OfflineURLProtocol.records = []
+        OfflineURLProtocol.lock.unlock()
+    }
+
+    private func recordedRequests() -> Int {
+        OfflineURLProtocol.lock.lock()
+        defer { OfflineURLProtocol.lock.unlock() }
+        return OfflineURLProtocol.records.count
+    }
+
+    private func fixDescribe(_ error: Error?) -> String {
+        guard let error = error else { return "succeeded" }
+        return (error as? LocalizedError)?.errorDescription ?? "\(error)"
+    }
+
+    /// The four in-memory getfile calls.
+    private func getFileKinds(_ sdk: ZeroBounceSDK) -> [(String, (String, @escaping FileDone) -> ())] {
+        [
+            ("getFile", { id, done in sdk.getFile(fileId: id, completion: done) }),
+            ("getFile options", { id, done in sdk.getFile(fileId: id, options: ZBGetFileOptions(), completion: done) }),
+            ("scoringGetFile", { id, done in sdk.scoringGetFile(fileId: id, completion: done) }),
+            ("scoringGetFile options", { id, done in
+                sdk.scoringGetFile(fileId: id, options: ZBGetFileOptions(), completion: done)
+            }),
+        ]
+    }
+
+    /// The four calls that write to a path the caller gives.
+    private func pathCalls(_ sdk: ZeroBounceSDK) -> [(String, (String, @escaping FileDone) -> ())] {
+        [
+            ("getFileStreaming", { path, done in sdk.getFileStreaming(fileId: "f", downloadPath: path, completion: done) }),
+            ("scoringGetFileStreaming", { path, done in
+                sdk.scoringGetFileStreaming(fileId: "f", downloadPath: path, completion: done)
+            }),
+            ("emailFinderGetFile", { path, done in sdk.emailFinderGetFile(fileId: "f", downloadPath: path, completion: done) }),
+            ("domainSearchGetFile", { path, done in sdk.domainSearchGetFile(fileId: "f", downloadPath: path, completion: done) }),
+        ]
+    }
+
+    private func finish(_ name: String, _ call: (@escaping FileDone) -> ()) -> (Error?, String?) {
+        var out: (Error?, String?) = (nil, nil)
+        let done = expectation(description: name)
+        call { result in
+            switch result {
+            case .Success(let response): out = (nil, response.localFilePath)
+            case .Failure(let error): out = (error, nil)
+            }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+        return out
+    }
+
+    private func scratchDirectory() throws -> String {
+        let dir = NSTemporaryDirectory() + "zb-fix2-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func permissions(_ path: String) -> Int? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: path),
+              let mode = attributes[.posixPermissions] as? NSNumber else { return nil }
+        return mode.intValue & 0o777
+    }
+
+    private func scriptJson(_ body: String) {
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.scripted = (200, "application/json", Data(body.utf8))
+        OfflineURLProtocol.scriptedHeaders = [:]
+        OfflineURLProtocol.lock.unlock()
+    }
+
+    // MARK: getfile names
+
+    /// The saved name carries the file id, with or without a
+    /// Content-Disposition, so two jobs never share `SavedFiles/getfile` or a
+    /// server filename; only the last component of the server's name is kept.
+    func testGetFileSavesUnderTheFileIdSoTwoJobsNeverShareAFile() {
+        defer { clearFileScript() }
+        let (sdk, _) = clients("save-name-key")
+        let dispositions: [String?] = [
+            nil,
+            #"attachment; filename="results.csv""#,
+            #"attachment; filename="a/b/results.csv""#,
+        ]
+        var written: [String] = []
+        defer { written.forEach { try? FileManager.default.removeItem(atPath: $0) } }
+        for disposition in dispositions {
+            for (name, call) in getFileKinds(sdk) {
+                var paths: [String] = []
+                for suffix in ["one", "two"] {
+                    let id = "job-\(name.replacingOccurrences(of: " ", with: "-"))-\(suffix)-\(UUID().uuidString.prefix(8))"
+                    let body = Data("rows for \(id)\n".utf8)
+                    scriptFile(body, disposition: disposition)
+                    let (error, path) = finish("\(name) \(id)") { call(id, $0) }
+                    XCTAssertNil(error, "\(name) \(id): \(fixDescribe(error))")
+                    guard let path = path else { continue }
+                    written.append(path)
+                    paths.append(path)
+                    XCTAssertTrue((path as NSString).lastPathComponent.contains(id), "\(name): \(path)")
+                    XCTAssertTrue((path as NSString).deletingLastPathComponent.hasSuffix("/SavedFiles"), "\(name): \(path)")
+                    XCTAssertEqual(try? Data(contentsOf: URL(fileURLWithPath: path)), body, "\(name): \(path)")
+                    if disposition?.contains("results.csv") == true {
+                        XCTAssertTrue(path.hasSuffix("_results.csv"), "\(name): \(path)")
+                    }
+                }
+                XCTAssertEqual(Set(paths).count, 2, "\(name) \(disposition ?? "no disposition"): two jobs shared \(paths)")
+            }
+        }
+    }
+
+    /// The name itself: the file id in every case, one path component, and
+    /// the `file_<id>.csv` form for a server that suggests nothing usable.
+    func testSavedFileNameIsOnePathComponentWithTheFileId() {
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: "getfile"), "file_abc_getfile")
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: "results.csv"), "file_abc_results.csv")
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: "../../x.csv"), "file_abc_x.csv")
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: "a/b/c.csv"), "file_abc_c.csv")
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: "a\\b\\c.csv"), "file_abc_c.csv")
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: ""), "file_abc.csv")
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: ".."), "file_abc.csv")
+        XCTAssertEqual(ZeroBounceSDK.savedFileName(fileId: "abc", suggested: "/"), "file_abc.csv")
+        for id in ["../x", "a/b", "..\\x", "/"] {
+            for suggested in ["r.csv", "", "../r.csv"] {
+                let name = ZeroBounceSDK.savedFileName(fileId: id, suggested: suggested)
+                XCTAssertEqual((name as NSString).lastPathComponent, name, "\(id) \(suggested)")
+                XCTAssertFalse(name.contains("/") || name.contains("\\"), "\(id) \(suggested): \(name)")
+                XCTAssertTrue(name.hasPrefix("file_"), name)
+            }
+        }
+    }
+
+    // MARK: File status
+
+    /// A file status body needs one non-null known field or a real `success`
+    /// flag; `{"foo":1}` and `{"":""}` have none.
+    func testFileStatusModelNeedsAKnownField() throws {
+        let decoder = JSONDecoder()
+        for body in [
+            #"{"foo":1}"#, #"{"":""}"#, "{}", #"{"success":null}"#, #"{"file_status":null}"#,
+            #"{"file_id":null,"file_name":null,"upload_date":null,"file_phase_2_status":null,"complete_percentage":null,"error_reason":null,"return_url":null}"#,
+            #"{"message":"x","foo":1}"#, #"{"File_Status":"Complete"}"#,
+        ] {
+            XCTAssertThrowsError(try decoder.decode(ZBFileStatusResponse.self, from: Data(body.utf8)), body)
+        }
+        // A present success that is not a real flag throws; it is not false.
+        for flag in [#""maybe""#, "2", "0.4", "[]", "{}"] {
+            XCTAssertThrowsError(try decoder.decode(ZBFileStatusResponse.self, from: Data(#"{"success":\#(flag)}"#.utf8)), flag)
+            XCTAssertThrowsError(try decoder.decode(ZBFileStatusResponse.self, from: Data(#"{"success":\#(flag),"file_id":"f"}"#.utf8)), flag)
+        }
+        for body in [
+            #"{"file_status":"Processing"}"#, #"{"success":true}"#, #"{"success":"True"}"#, #"{"success":1}"#,
+            #"{"file_id":"f"}"#, #"{"file_name":"f.csv"}"#, #"{"upload_date":"2023-04-28T15:25:41Z"}"#,
+            #"{"file_phase_2_status":"N/A"}"#, #"{"complete_percentage":"100%"}"#, #"{"error_reason":"bad file"}"#,
+            #"{"return_url":"https://example.com/done"}"#, #"{"file_status":""}"#,
+            #"{"foo":1,"file_status":"Complete"}"#,
+        ] {
+            XCTAssertNoThrow(try decoder.decode(ZBFileStatusResponse.self, from: Data(body.utf8)), body)
+        }
+        XCTAssertEqual(try decoder.decode(ZBFileStatusResponse.self, from: Data(#"{"file_status":"Processing"}"#.utf8)).fileStatus, "Processing")
+        XCTAssertFalse(try decoder.decode(ZBFileStatusResponse.self, from: Data(#"{"file_status":"Processing"}"#.utf8)).success)
+        XCTAssertTrue(try decoder.decode(ZBFileStatusResponse.self, from: Data(#"{"success":true}"#.utf8)).success)
+    }
+
+    /// On the four calls that read a file status: `{"foo":1}` and `{"":""}`
+    /// are an API error with status 200; `{"file_status":"Processing"}` and
+    /// `{"success":true}` are results.
+    func testFileStatusCallsRejectABodyWithNoKnownField() {
+        defer { clearFileScript() }
+        let (sdk, warmup) = clients("file-status-key")
+        let calls = Dictionary(uniqueKeysWithValues: everyCall(sdk, warmup))
+        for name in ["fileStatus", "scoringFileStatus", "emailFinderFileStatus", "domainSearchFileStatus"] {
+            for body in [#"{"foo":1}"#, #"{"":""}"#] {
+                scriptJson(body)
+                let (error, _) = run("\(name) \(body)", calls[name]!)
+                guard let failure = error as? ZBError, case .httpError(_, let status) = failure else {
+                    XCTFail("\(name) \(body): \(fixDescribe(error))")
+                    continue
+                }
+                XCTAssertEqual(status, 200, "\(name) \(body)")
+            }
+            for body in [#"{"file_status":"Processing"}"#, #"{"success":true}"#] {
+                scriptJson(body)
+                let (error, _) = run("\(name) \(body)", calls[name]!)
+                XCTAssertNil(error, "\(name) \(body): \(fixDescribe(error))")
+            }
+        }
+    }
+
+    // MARK: URL builders
+
+    /// A base URL that does not make a URL ends the call with
+    /// `invalidEndpoint`; it does not crash the process, whatever the call.
+    func testAnUnbuildableBaseUrlIsInvalidEndpointNotACrash() {
+        defer { clearFileScript() }
+        let (sdk, warmup) = clients("bad-base-key")
+        sdk.apiBaseUrl = "https://[::1"
+        sdk.bulkApiBaseUrl = "https://[::1"
+        sdk.bulkApiRootUrl = "https://[::1"
+        sdk.inboxPlacementBaseUrl = "https://[::1"
+        let names: Set<String> = [
+            "validate", "validateBatch", "validateBatch options", "getCredits", "getApiUsage", "getActivityData",
+            "scoreEmail", "fileStatus", "scoringFileStatus", "deleteFile", "emailFinderFileStatus",
+            "emailFinderDeleteFile", "domainSearchFileStatus", "findEmail domain", "findDomain domain",
+        ]
+        let calls = everyCall(sdk, warmup).filter { names.contains($0.0) }
+        XCTAssertGreaterThanOrEqual(calls.count, 15)
+        for (name, call) in calls {
+            let (error, records) = run(name, call)
+            XCTAssertTrue(records.isEmpty, "\(name) sent a request")
+            guard let failure = error as? ZBError else {
+                XCTFail("\(name): \(fixDescribe(error))")
+                continue
+            }
+            if case .invalidEndpoint = failure { continue }
+            XCTFail("\(name): \(failure)")
+        }
+    }
+
+    // MARK: Download paths
+
+    /// An empty path, a trailing separator and an existing directory (a
+    /// symlink to one included) are refused before anything is sent, and the
+    /// directory is left alone.
+    func testADownloadPathThatCannotBeWrittenIsRefusedBeforeSending() throws {
+        defer { clearFileScript() }
+        let (sdk, _) = clients("refuse-path-key")
+        let dir = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let folder = dir + "/folder"
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        try Data("keep".utf8).write(to: URL(fileURLWithPath: folder + "/inside.csv"))
+        let link = dir + "/link-to-folder"
+        try FileManager.default.createSymbolicLink(atPath: link, withDestinationPath: folder)
+        let paths = ["", "   ", dir + "/new.csv/", folder, folder + "/", link, link + "/", dir + "/.", dir + "/.."]
+        for (name, call) in pathCalls(sdk) {
+            for path in paths {
+                scriptFile(Data("email\na@b.c\n".utf8))
+                OfflineURLProtocol.lock.lock()
+                OfflineURLProtocol.records = []
+                OfflineURLProtocol.lock.unlock()
+                let (error, saved) = finish("\(name) '\(path)'") { call(path, $0) }
+                XCTAssertNil(saved, "\(name) '\(path)'")
+                guard let failure = error as? ZBError, case .decodeError = failure else {
+                    XCTFail("\(name) '\(path)': \(fixDescribe(error))")
+                    continue
+                }
+                XCTAssertEqual(recordedRequests(), 0, "\(name) '\(path)' sent a request")
+            }
+        }
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder, isDirectory: &isDirectory) && isDirectory.boolValue)
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: folder + "/inside.csv")), Data("keep".utf8))
+        XCTAssertEqual((try? FileManager.default.destinationOfSymbolicLink(atPath: link)), folder)
+        XCTAssertNil(try? FileManager.default.destinationOfSymbolicLink(atPath: folder))
+    }
+
+    /// A symlink at the path is written through, not replaced by a regular
+    /// file (a dangling one included), and a file that is replaced keeps its
+    /// permissions.
+    func testADownloadIsWrittenThroughASymlinkAndKeepsPermissions() throws {
+        defer { clearFileScript() }
+        let (sdk, _) = clients("symlink-key")
+        let dir = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let body = Data("email\na@b.c\n".utf8)
+        for (name, call) in pathCalls(sdk) {
+            // A relative link, an absolute one, and a chain of two.
+            let target = "\(dir)/\(name)-target.csv"
+            try Data("OLD".utf8).write(to: URL(fileURLWithPath: target))
+            try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: target)
+            let relative = "\(dir)/\(name)-relative.csv"
+            let absolute = "\(dir)/\(name)-absolute.csv"
+            let chain = "\(dir)/\(name)-chain.csv"
+            try FileManager.default.createSymbolicLink(atPath: relative, withDestinationPath: "\(name)-target.csv")
+            try FileManager.default.createSymbolicLink(atPath: absolute, withDestinationPath: target)
+            try FileManager.default.createSymbolicLink(atPath: chain, withDestinationPath: "\(name)-relative.csv")
+            for link in [relative, absolute, chain] {
+                try Data("OLD".utf8).write(to: URL(fileURLWithPath: target))
+                scriptFile(body)
+                let (error, saved) = finish("\(name) \(link)") { call(link, $0) }
+                XCTAssertNil(error, "\(name) \(link): \(fixDescribe(error))")
+                XCTAssertEqual(saved, link, "\(name) \(link)")
+                XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: link), "\(name): \(link) is no longer a symlink")
+                XCTAssertEqual(try? Data(contentsOf: URL(fileURLWithPath: target)), body, "\(name) \(link): the target was not written")
+                XCTAssertEqual(permissions(target), 0o640, "\(name) \(link)")
+            }
+            // A link to a file that is not there yet creates it.
+            let created = "\(dir)/\(name)-created.csv"
+            let dangling = "\(dir)/\(name)-dangling.csv"
+            try FileManager.default.createSymbolicLink(atPath: dangling, withDestinationPath: "\(name)-created.csv")
+            scriptFile(body)
+            let (error, _) = finish("\(name) dangling") { call(dangling, $0) }
+            XCTAssertNil(error, "\(name) dangling: \(fixDescribe(error))")
+            XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: dangling), "\(name): the dangling link was replaced")
+            XCTAssertEqual(try? Data(contentsOf: URL(fileURLWithPath: created)), body, "\(name) dangling")
+            // A plain file that is replaced keeps its mode.
+            for mode in [0o600, 0o664, 0o444] {
+                let plain = "\(dir)/\(name)-plain-\(String(mode, radix: 8)).csv"
+                try Data("OLD".utf8).write(to: URL(fileURLWithPath: plain))
+                try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: plain)
+                scriptFile(body)
+                let (plainError, _) = finish("\(name) \(plain)") { call(plain, $0) }
+                XCTAssertNil(plainError, "\(name) \(plain): \(fixDescribe(plainError))")
+                XCTAssertEqual(try? Data(contentsOf: URL(fileURLWithPath: plain)), body, "\(name) \(plain)")
+                XCTAssertEqual(permissions(plain), mode, "\(name) \(plain)")
+                try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: plain)
+            }
+        }
     }
 }

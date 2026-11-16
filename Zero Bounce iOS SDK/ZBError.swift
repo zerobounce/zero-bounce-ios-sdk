@@ -22,8 +22,9 @@ public enum ZBError: LocalizedError {
     /// The status is 200 when the API answered a failure on a success code:
     /// `"success": false` (`getfile` and `deletefile` for an unknown file id),
     /// a dead key's error-only body, `validateBatch`'s account-level
-    /// "all" error, and a body that is not the call's answer (not JSON, or
-    /// JSON of another shape).
+    /// "all" error, and a body that is not the call's answer: not JSON, a
+    /// message-only object (on the calls that read one), or a file status
+    /// body with none of its known fields.
     case httpError(message: String, statusCode: Int)
 
     /// The HTTP status behind this error, when there was one.
@@ -268,10 +269,13 @@ public enum ZBError: LocalizedError {
     }
 
     /// The error for a 2xx body that is not the call's answer: not JSON
-    /// (plain text, CSV sent as `application/json`), or JSON of another
-    /// shape. The API answered, so it is an API error with the HTTP status
-    /// (standard §3), never `.decodeError`, which is left for arguments
-    /// refused before sending.
+    /// (plain text, CSV sent as `application/json`), or JSON the typed model
+    /// refuses. The only shapes refused on purpose are a message-only object
+    /// (`messageOnlyFailure`) and a file status with no known field
+    /// (`ZBFileStatusResponse`); other models read what they find. The API
+    /// answered, so it is an API error with the HTTP status (standard §3),
+    /// never `.decodeError`, which is left for arguments refused before
+    /// sending.
     static func unreadableBody(_ data: Data, statusCode: Int) -> ZBError {
         let text = message(from: data, statusCode: statusCode)
         let isJson = ZBStrictJson.isStrict(data)
@@ -316,11 +320,11 @@ public enum ZBError: LocalizedError {
                         if !stripped.isEmpty { return stripped }
                     }
                 }
-            } else if trimmed.count > 1000 {
-                return "ZeroBounce returned a response that is not valid JSON."
             }
+            // A JSON error too long to show, or the start of one cut short
+            // by a streaming download's probe, which cannot be parsed.
             if trimmed.count > 1000 {
-                return "ZeroBounce returned a response that is not valid JSON."
+                return "ZeroBounce returned a JSON error response that is too long to show."
             }
             return trimmed
         }

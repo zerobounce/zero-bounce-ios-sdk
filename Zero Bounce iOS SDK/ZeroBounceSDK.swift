@@ -53,8 +53,11 @@ public class ZeroBounceSDK {
     }
     
     /// Sets the API key. A key with surrounding whitespace or control
-    /// characters is refused rather than stored: it would otherwise be quoted,
-    /// unredacted, in a transport error.
+    /// characters, with U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029,
+    /// U+202F, U+205F or U+3000 in the middle, with U+180B to U+180F anywhere,
+    /// or made of combining marks alone is refused rather than stored: it
+    /// would otherwise be quoted, unredacted, in a transport error. An
+    /// ordinary space (U+0020) in the middle is allowed.
     ///
     /// - returns: false when the key was refused. The client is then left
     ///   uninitialized, so every call reports `ZBError.notInitialized` instead
@@ -65,7 +68,7 @@ public class ZeroBounceSDK {
         apiBaseUrl: ZBApiURL = .API_DEFAULT_URL
     ) -> Bool {
         guard ZeroBounceSDK.isCleanApiKey(apiKey) else {
-            print("ZeroBounce: api_key has surrounding whitespace or control characters; it was not accepted.")
+            print("ZeroBounce: api_key was not accepted: it has surrounding whitespace or control characters, a no-break or other Unicode space (U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) in the middle, a Mongolian variation selector or vowel separator (U+180B-U+180F), or it is made of combining marks alone.")
             self.apiKey = nil
             return false
         }
@@ -93,10 +96,11 @@ public class ZeroBounceSDK {
     }
 
     /// Whether a key is free of surrounding whitespace and control
-    /// characters, of U+00A0, U+2028 and U+3000 in the middle, of U+180B
-    /// anywhere, and is not made of combining marks alone. An empty key stays
-    /// allowed: it is reported as `notInitialized` by the first call that
-    /// needs it.
+    /// characters, of U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029,
+    /// U+202F, U+205F and U+3000 in the middle, of U+180B to U+180F anywhere,
+    /// and is not made of combining marks alone. An ordinary space (U+0020)
+    /// in the middle stays allowed. An empty key stays allowed: it is reported
+    /// as `notInitialized` by the first call that needs it.
     internal static func isCleanApiKey(_ apiKey: String) -> Bool {
         if apiKey.isEmpty { return true }
         if apiKey != apiKey.trimmingCharacters(in: .whitespacesAndNewlines) { return false }
@@ -104,7 +108,9 @@ public class ZeroBounceSDK {
         for scalar in apiKey.unicodeScalars {
             if CharacterSet.controlCharacters.contains(scalar) { return false }
             switch scalar.value {
-            case 0x00A0, 0x2028, 0x3000, 0x180B: return false
+            case 0x00A0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
+                 0x180B...0x180F:
+                return false
             default: break
             }
             switch scalar.properties.generalCategory {
@@ -115,9 +121,6 @@ public class ZeroBounceSDK {
         return !onlyMarks
     }
 
-    /// Refuses a URL that is not https, so the api_key is never put on the
-    /// wire in the clear. Loopback is allowed so an offline test can point the
-    /// SDK at a local stub.
     /// `error` with the API key replaced by "***" wherever its user info
     /// carries it. URLSession puts the request URL, `api_key` query parameter
     /// included, into every transport error (`NSErrorFailingURLKey`,
@@ -266,22 +269,29 @@ public class ZeroBounceSDK {
     }
 
     /// The fold of one `Character`, so that canonical equivalents agree: a
-    /// Hangul syllable and its jamo, "é" and "e" plus U+0301. A U+0307 right
-    /// after an "i" is dropped, so "İ" (folded to "i" plus U+0307), "i" plus
-    /// U+0307 and a plain "i" are one spelling: a server that echoes "İ" may
-    /// have lost the dot or kept it.
+    /// Hangul syllable and its jamo, "é" and "e" plus U+0301, and marks in
+    /// either order ("i" plus U+0323 plus U+0307 and "i" plus U+0307 plus
+    /// U+0323). The folded scalars are canonically decomposed and reordered
+    /// first; then a U+0307 right after an "i" is dropped, so "İ" (folded to
+    /// "i" plus U+0307), "i" plus U+0307 and a plain "i" are one spelling: a
+    /// server that echoes "İ" may have lost the dot or kept it.
     private static func foldedCharacter(_ character: Character) -> [Unicode.Scalar] {
         var out: [Unicode.Scalar] = []
         var plain = true
         for scalar in character.unicodeScalars {
             if !(0x4E00...0x9FFF).contains(scalar.value) { plain = false }
-            for item in foldedScalars(scalar) {
-                if item.value == 0x307, out.last?.value == 0x69 { continue }
-                out.append(item)
-            }
+            out.append(contentsOf: foldedScalars(scalar))
         }
-        if plain { return out }
-        return Array(String(String.UnicodeScalarView(out)).decomposedStringWithCanonicalMapping.unicodeScalars)
+        if !plain {
+            out = Array(String(String.UnicodeScalarView(out)).decomposedStringWithCanonicalMapping.unicodeScalars)
+        }
+        var result: [Unicode.Scalar] = []
+        result.reserveCapacity(out.count)
+        for scalar in out {
+            if scalar.value == 0x307, result.last?.value == 0x69 { continue }
+            result.append(scalar)
+        }
+        return result
     }
 
     internal static func folded(_ text: String) -> FoldedText {
@@ -383,8 +393,8 @@ public class ZeroBounceSDK {
 
     /// Whether a secret can be read in `text` or in any view of it decoded
     /// up to `secretDecodeLayers` times: URL-decoded, form-decoded ("+" as a space too),
-    /// JSON-unescaped (`\/`, `\uXXXX`, `\u{X}`, `\UXXXX`, `\UXXXXXXXX` and
-    /// three-digit octal `\NNN` included) and HTML-unescaped (named and
+    /// JSON-unescaped (`\/`, `\'`, `\xXX`, `\uXXXX`, `\u{X}`, `\UXXXX`,
+    /// `\UXXXXXXXX` and three-digit octal `\NNN` included) and HTML-unescaped (named and
     /// numeric entities), in any order. `%u0027` is not decoded. Both sides
     /// are folded, so a key in other letter case is read too.
     internal static func revealsSecret(_ text: String, _ secrets: [String]) -> Bool {
@@ -476,7 +486,8 @@ public class ZeroBounceSDK {
     /// hex digits (a surrogate pair as one character), `\u{X}` and `\U{X}`
     /// with 1 to 6 digits, `\UXXXX`, `\UXXXXXXXX` (when the eight digits are
     /// a valid code point, otherwise the first four) and `\NNN` with exactly
-    /// three octal digits. `%u0027` is not an escape of any of these.
+    /// three octal digits, `\x` or `\X` plus exactly two hex digits, and `\'`.
+    /// `%u0027` is not an escape of any of these.
     private static func jsonUnescaped(_ bytes: [UInt8]) -> [UInt8] {
         let simple: [UInt8: UInt8] = [0x22: 0x22, 0x5C: 0x5C, 0x2F: 0x2F, 0x62: 0x08, 0x66: 0x0C,
                                       0x6E: 0x0A, 0x72: 0x0D, 0x74: 0x09]
@@ -493,6 +504,16 @@ public class ZeroBounceSDK {
             if let decoded = simple[marker] {
                 out.append(decoded)
                 i += 2
+                continue
+            }
+            if marker == 0x27 {
+                out.append(0x27)
+                i += 2
+                continue
+            }
+            if marker == 0x78 || marker == 0x58, let code = hexDigits(bytes, i + 2, 2) {
+                appendScalar(code, to: &out)
+                i += 4
                 continue
             }
             if marker == 0x75 || marker == 0x55 {
@@ -709,6 +730,9 @@ public class ZeroBounceSDK {
         return head + more
     }
 
+    /// Refuses a URL that is not https, so the api_key is never put on the
+    /// wire in the clear. Loopback is allowed so an offline test can point the
+    /// SDK at a local stub.
     internal static func isAllowedURL(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased() ?? ""
         if scheme == "https" { return true }
@@ -1860,8 +1884,10 @@ public class ZeroBounceSDK {
             completion(.Failure(ZBError.notInitialized))
             return
         }
-        guard !downloadPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            completion(.Failure(ZBError.decodeError(messages: ["Empty parameter: downloadPath"])))
+        // An empty path, a trailing separator or an existing directory is
+        // refused before anything is sent.
+        if let failure = ZBFileManager.downloadPathFailure(downloadPath) {
+            completion(.Failure(failure))
             return
         }
         guard let requestURL = buildGetFileURL(
@@ -1966,6 +1992,23 @@ public class ZeroBounceSDK {
         return comp?.url
     }
     
+    /// The name `getFile` saves under: `file_<fileId>_<name>`, or
+    /// `file_<fileId>.csv` when the server suggests no name. The id is a
+    /// single path component (a slash or a backslash in it becomes "_"), so a
+    /// hostile id cannot leave the folder either; only the last path
+    /// component of the suggested name is kept.
+    internal static func savedFileName(fileId: String, suggested: String) -> String {
+        func component(_ text: String) -> String {
+            (text.replacingOccurrences(of: "\\", with: "/") as NSString).lastPathComponent
+        }
+        let id = fileId.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "\\", with: "_")
+        let name = component(suggested)
+        if name.isEmpty || name == "." || name == ".." || name == "/" {
+            return "file_\(id).csv"
+        }
+        return "file_\(id)_\(name)"
+    }
+
     private func _getFile(scoring: Bool, fileId: String, options: ZBGetFileOptions?, completion: @escaping (ZBResult<ZBGetFileResponse>) -> ()) {
         let completion = redacted(completion)
         guard let apiKey = normalizedApiKey else {
@@ -1989,10 +2032,12 @@ public class ZeroBounceSDK {
                     return
                 }
                 
-                let fileName = (response.suggestedFilename != nil) ? response.suggestedFilename! : "file_\(fileId).csv"
+                // The file id is in every name, so two jobs never share a file,
+                // whatever name the server suggests (`suggestedFilename` is
+                // "getfile" when there is no Content-Disposition).
+                let fileName = ZeroBounceSDK.savedFileName(fileId: fileId, suggested: response.suggestedFilename ?? "")
                 // The bytes as they came: a BOM stays, and a file that is not
                 // UTF-8 is still the file.
-                print("Zero Bounce SDK getFile fileName=\(fileName)")
                 ZBFileManager.writeFile(data: data, to: fileName) { writeResult in
                     switch writeResult {
                     case .success(let path):
@@ -2030,17 +2075,26 @@ public class ZeroBounceSDK {
         case Failure(Error)
     }
     
+    /// What a URL builder returns when the URL cannot be built (a base URL
+    /// that does not parse): not a URL, so the request helpers answer
+    /// `ZBError.invalidEndpoint` instead of the process crashing.
+    internal static let unbuildableURL = ""
+
     private func makeURL(_ path: String, queryItems: [URLQueryItem]) -> String {
-        var components = URLComponents(string: apiBaseUrl + path)!
+        guard var components = URLComponents(string: apiBaseUrl + path) else {
+            return ZeroBounceSDK.unbuildableURL
+        }
         components.queryItems = queryItems
-        return components.url!.absoluteString
+        return components.url?.absoluteString ?? ZeroBounceSDK.unbuildableURL
     }
 
     private func makeBulkURL(scoring: Bool, subpath: String, queryItems: [URLQueryItem]) -> String {
         let base = scoring ? bulkApiScoringBaseUrl : bulkApiBaseUrl
-        var components = URLComponents(string: base + subpath)!
+        guard var components = URLComponents(string: base + subpath) else {
+            return ZeroBounceSDK.unbuildableURL
+        }
         components.queryItems = queryItems
-        return components.url!.absoluteString
+        return components.url?.absoluteString ?? ZeroBounceSDK.unbuildableURL
     }
 
     private func sendJsonRequest<T: Codable>(url: String, messageOnly: Bool = false, completion: @escaping (ZBResult<T>) -> ()) {
@@ -2060,11 +2114,20 @@ public class ZeroBounceSDK {
         inspect: ((T, Int) -> ZBError?)? = nil,
         completion: @escaping (ZBResult<T>) -> ()
     ) {
-        var r = URLRequest(url: URL(string: url)!)
+        let completion = redacted(completion)
+        guard let urlValue = URL(string: url) else {
+            completion(.Failure(ZBError.invalidEndpoint))
+            return
+        }
+        guard let data = params else {
+            // The body could not be built: the call ends with an error,
+            // never silently with no completion.
+            completion(.Failure(ZBError.decodeError(messages: ["Invalid request: the request body could not be built"])))
+            return
+        }
+        var r = URLRequest(url: urlValue)
         r.httpMethod = "POST"
         r.timeoutInterval = ZeroBounceSDK.requestTimeout
-        
-        guard let data = params else { return }
         r.httpBody = data
         
         sendJsonRequest(request: r, inspect: inspect, completion: completion)
@@ -2363,9 +2426,11 @@ public class ZeroBounceSDK {
     }
 
     internal func priority3QueryURL(base: String, query: [String: String]) -> String {
-        var components = URLComponents(string: base)!
+        guard var components = URLComponents(string: base) else {
+            return ZeroBounceSDK.unbuildableURL
+        }
         components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
-        return components.url!.absoluteString
+        return components.url?.absoluteString ?? ZeroBounceSDK.unbuildableURL
     }
 
     /// The failure for a body that is an error with no "success" field.

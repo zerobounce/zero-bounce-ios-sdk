@@ -37,12 +37,38 @@ public struct ZBFileStatusResponse : Codable, Equatable {
 
 extension ZBFileStatusResponse {
     /// `message` is a string or a list of strings (joined with a line feed). A
-    /// null `success`, `file_id` or `file_status` reads as false or "" (standard
-    /// section 3), and so does a `success` that is not a real flag. Declared in an
-    /// extension so the memberwise initializer is kept.
+    /// null `file_id` or `file_status` reads as "" (standard section 3). A
+    /// present `success` that is not a real flag (a boolean, 0 or 1, or "true",
+    /// "false", "0" or "1" in any case) throws; it does not read as false. A
+    /// null or missing `success` reads as false.
+    ///
+    /// The body must carry one non-null known field: `file_status`, `file_id`,
+    /// `file_name`, `upload_date`, `file_phase_2_status`, `complete_percentage`,
+    /// `error_reason`, `return_url`, or a real `success` flag. `{"foo": 1}` and
+    /// `{"": ""}` throw, so a call reports them as an API error with the HTTP
+    /// status. `{"file_status": "Processing"}` and `{"success": true}` are
+    /// results. Declared in an extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        success = try container.decodeSuccessFlag(forKey: .success) ?? false
+        let flag = try container.decodeSuccessFlag(forKey: .success)
+        let knownFields: [CodingKeys] = [
+            .fileStatus, .fileId, .fileName, .uploadDate, .filePhase2Status,
+            .completePercentage, .errorReason, .returnUrl,
+        ]
+        var hasKnownField = false
+        for key in knownFields where container.contains(key) {
+            if try container.decodeNil(forKey: key) == false {
+                hasKnownField = true
+                break
+            }
+        }
+        guard flag != nil || hasKnownField else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(
+                codingPath: decoder.codingPath,
+                debugDescription: "no file status field in the body"
+            ))
+        }
+        success = flag ?? false
         message = try container.decodeFileMessage(forKey: .message)
         fileId = try container.decodeNullAsEmpty(String.self, forKey: .fileId, empty: "")
         fileName = try container.decodeIfPresent(String.self, forKey: .fileName)

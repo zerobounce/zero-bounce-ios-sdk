@@ -36,6 +36,28 @@ class SecretRedactionTests: XCTestCase {
         XCTAssertTrue(ZeroBounceSDK.revealsSecret("i\u{307}-key9", [key]))
     }
 
+    func testMarksInEitherOrderFoldToTheSameSpelling() {
+        // "i" plus a dot below plus a dot above, and the other order.
+        let key = "ki\u{323}\u{307}-key9"
+        let other = "ki\u{307}\u{323}-key9"
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad \(other) here"), "bad *** here")
+        XCTAssertEqual(ZeroBounceSDK.redacting([other], in: "bad \(key) here"), "bad *** here")
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret(other, [key]))
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret(key, [other]))
+        // "ị" (U+1ECB) plus a dot above against "i", the dot above, the dot below.
+        let precomposed = "k\u{1ECB}\u{307}-key9"
+        XCTAssertEqual(ZeroBounceSDK.redacting([precomposed], in: "bad \(other) here"), "bad *** here")
+        XCTAssertEqual(ZeroBounceSDK.redacting([other], in: "bad \(precomposed) here"), "bad *** here")
+        XCTAssertEqual(ZeroBounceSDK.redacting([precomposed], in: "bad \(key) here"), "bad *** here")
+        // Capitals too.
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad KI\u{307}\u{323}-KEY9 here"), "bad *** here")
+    }
+
+    func testMarksInADifferentOrderDoNotMaskOtherText() {
+        XCTAssertEqual(ZeroBounceSDK.redacting(["ki\u{323}\u{307}-key9"], in: "ki-key9"), "ki-key9")
+        XCTAssertEqual(ZeroBounceSDK.redacting(["ki\u{323}\u{307}-key9"], in: "ki\u{323}-key9"), "ki\u{323}-key9")
+    }
+
     func testSchwaEchoedInCapitalsIsMasked() {
         XCTAssertEqual(ZeroBounceSDK.redacting(["\u{4D9}key77"], in: "bad \u{4D8}KEY77 here"), "bad *** here")
         XCTAssertEqual(ZeroBounceSDK.redacting(["\u{4D8}KEY77"], in: "bad \u{4D9}key77 here"), "bad *** here")
@@ -117,6 +139,38 @@ class SecretRedactionTests: XCTestCase {
         XCTAssertTrue(ZeroBounceSDK.revealsSecret("ab\\047xy12", ["ab'xy12"]))
     }
 
+    func testAHexEscapeOfAQuoteIsDecoded() {
+        let key = "ab'xy12"
+        for spelling in ["\\x27", "\\X27"] {
+            let text = "Invalid key ab\(spelling)xy12 for this account"
+            XCTAssertTrue(ZeroBounceSDK.revealsSecret(text, [key]), spelling)
+            let cleaned = ZeroBounceSDK.redacting([key], in: text)
+            XCTAssertNotEqual(cleaned, text, spelling)
+            XCTAssertFalse(cleaned.contains("xy12"), spelling)
+            XCTAssertFalse(ZeroBounceSDK.revealsSecret(cleaned, [key]), spelling)
+        }
+        // Exactly two hex digits: one digit, or a non-hex digit, is no escape.
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\x2xy12", [key]))
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xg7xy12", [key]))
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\x", [key]))
+        // Two digits, then whatever follows stays; a letter-case hex works too.
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("AB\\x27XY12", ["ab'xy12"]))
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("k=a\\x2fb", ["a/b"]))
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("k=a\\x2Fb", ["a/b"]))
+    }
+
+    func testAnEscapedQuoteIsDecoded() {
+        let key = "ab'xy12"
+        let text = "Invalid key ab\\'xy12 for this account"
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret(text, [key]))
+        let cleaned = ZeroBounceSDK.redacting([key], in: text)
+        XCTAssertNotEqual(cleaned, text)
+        XCTAssertFalse(cleaned.contains("xy12"))
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret(cleaned, [key]))
+        // A backslash that is escaped itself is not a quote escape.
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\\\xy12", [key]))
+    }
+
     func testAPercentUSpellingStaysUndecoded() {
         XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab%u0027xy12", ["ab'xy12"]))
         XCTAssertEqual(ZeroBounceSDK.redacting(["ab'xy12"], in: "ab%u0027xy12"), "ab%u0027xy12")
@@ -150,6 +204,31 @@ class SecretRedactionTests: XCTestCase {
         XCTAssertFalse(ZeroBounceSDK.isCleanApiKey("abcd\u{180B}"))
     }
 
+    func testAKeyWithTheOtherMongolianSeparatorsIsRefusedAnywhere() {
+        for scalar in ["\u{180C}", "\u{180D}", "\u{180E}", "\u{180F}"] {
+            XCTAssertFalse(ZeroBounceSDK.isCleanApiKey("ab\(scalar)cd"), scalar.unicodeScalars.first!.description)
+            XCTAssertFalse(ZeroBounceSDK.isCleanApiKey("\(scalar)abcd"), scalar.unicodeScalars.first!.description)
+            XCTAssertFalse(ZeroBounceSDK.isCleanApiKey("abcd\(scalar)"), scalar.unicodeScalars.first!.description)
+        }
+    }
+
+    func testAKeyWithAUnicodeSpaceInTheMiddleIsRefused() {
+        var spaces: [Unicode.Scalar] = [Unicode.Scalar(0x1680)!, Unicode.Scalar(0x2029)!,
+                                        Unicode.Scalar(0x202F)!, Unicode.Scalar(0x205F)!]
+        spaces += (0x2000...0x200A).map { Unicode.Scalar($0)! }
+        for scalar in spaces {
+            XCTAssertFalse(ZeroBounceSDK.isCleanApiKey("ab\(scalar)cd"), String(scalar.value, radix: 16))
+        }
+    }
+
+    func testAnOrdinarySpaceInTheMiddleOfAKeyStaysAllowed() {
+        XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("ab cd"))
+        XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("a b c d"))
+        XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("ab\u{B7}cd"))
+        XCTAssertTrue(ZeroBounceSDK().initialize(apiKey: "ab cd"))
+        XCTAssertTrue(ZeroBounceWarmup().initialize(apiKey: "ab cd"))
+    }
+
     func testAKeyOfCombiningMarksAloneIsRefused() {
         XCTAssertFalse(ZeroBounceSDK.isCleanApiKey("\u{301}"))
         XCTAssertFalse(ZeroBounceSDK.isCleanApiKey("\u{301}\u{302}\u{20DD}"))
@@ -159,7 +238,7 @@ class SecretRedactionTests: XCTestCase {
         XCTAssertTrue(ZeroBounceSDK.isCleanApiKey(""))
         XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("0123456789abcdef0123456789abcdef"))
         XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("ab cd"))
-        XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("ab\u{2003}cd"))
+        XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("ab\u{B7}cd"))
         XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("e\u{301}"))
         XCTAssertTrue(ZeroBounceSDK.isCleanApiKey("\u{4D9}key"))
         // The ends and the control characters are still refused.
@@ -170,7 +249,9 @@ class SecretRedactionTests: XCTestCase {
     }
 
     func testBothClientsRefuseTheKeysAndLeaveThemselvesUninitialized() {
-        let bad = ["ab\u{A0}cd", "ab\u{2028}cd", "ab\u{3000}cd", "ab\u{180B}cd", "\u{301}"]
+        let bad = ["ab\u{A0}cd", "ab\u{2028}cd", "ab\u{3000}cd", "ab\u{180B}cd", "\u{301}",
+                   "ab\u{180C}cd", "ab\u{180D}cd", "ab\u{180F}cd", "ab\u{2000}cd", "ab\u{200A}cd",
+                   "ab\u{2029}cd", "ab\u{202F}cd", "ab\u{205F}cd", "ab\u{1680}cd"]
         let sdk = ZeroBounceSDK()
         let warmup = ZeroBounceWarmup()
         for key in bad {

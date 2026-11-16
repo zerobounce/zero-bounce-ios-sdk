@@ -110,6 +110,7 @@ jobs:
     needs: [validate-tag, test]
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: macos-latest
+    timeout-minutes: 20
     environment: release
     steps:
       - name: Checkout tag
