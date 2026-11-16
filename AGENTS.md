@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## Project
 
-`zero-bounce-ios-sdk` is the ZeroBounce iOS SDK. Callers construct `ZeroBounceSDK()` or use `ZeroBounceSDK.shared`, call `initialize(apiKey:)`, and receive `ZBResult` values. HTTP uses `URLSession.shared` in `Zero Bounce iOS SDK/ZeroBounceSDK.swift`. Releases go to CocoaPods from the GitHub tag.
+`zero-bounce-ios-sdk` is the ZeroBounce iOS SDK. Callers construct `ZeroBounceSDK()` or use `ZeroBounceSDK.shared`, call `initialize(apiKey:)`, and receive `ZBResult` values. HTTP goes through the SDK's own session, `ZeroBounceSDK.urlSession`, in `Zero Bounce iOS SDK/ZeroBounceSDK.swift`, not `URLSession.shared`. Releases go to CocoaPods from the GitHub tag.
 
 ## Layout
 
@@ -59,16 +59,16 @@ That `xcodebuild` compile is the typecheck. There is no separate lint step. CI (
 ## Conventions
 
 - **One `ZeroBounceSDK` per API key.** `shared` is a process-wide singleton. Construct `ZeroBounceSDK()` when two keys are in use. The offline concurrency test does this.
-- **Column indexes are 1-based** for optional name, gender, and IP columns. `0` means the field is left out. `emailAddressColumn` on send-file and S3 is sent as given, including `0`, when the caller sets it.
+- **Column indexes are 1-based.** `0` means the field is left out only on the S3 and email-finder option structs. On `sendFile` and `scoringSendFile` the optional name, gender and IP columns are `Int?` and any value the caller sets, `0` included, is sent. `emailAddressColumn` on send-file and S3 is sent as given, including `0`, when the caller sets it.
 - **Optional `Bool?` and `Int?` are omitted until set.** Explicit `false` is sent as `false`.
-- **Booleans are the strings `true` and `false`.** `String(false)` is `false`. Do not send `0` or `1`.
+- **Booleans are the strings `true` and `false` on query and form fields.** `String(false)` is `false`. Do not send `0` or `1`. JSON bodies send JSON booleans: `validateBatch` sends `activity_data` and `verify_plus` that way, and the Warmup bodies do too.
 - **`allowPhase2` is validation file send only.** `activityData` on get-file is validation only.
 - **`validateBatch` uses `api.zerobounce.net`**, not `bulkapi.zerobounce.net`. An empty `ip_address` is JSON `null`.
 - **Failures are `ZBResult.Failure`.** The message must be short: no raw HTML, no megabyte body, and no `Error: Error:` prefix. An account-level batch error (`emailAddress` `all`) is a failure. A per-address error stays on the success value.
 - **The live API wins over the docs.** Where they disagree, follow the API and say so in a comment at the call site, prefixed `LIVE:`. The ones found so far: `validateBatch` sends `timeout` as a JSON *string*; the Inbox Placement Tester authenticates with `Authorization: Bearer` and lists tests from `GET /tests` (plural); every S3/SFTP job requires both `fileName` and `returnUrl`, `validateSFTPFile` included, although the docs call its `fileName` optional and call `validateS3File`'s and `scoreS3File`'s `returnUrl` optional (`POST /validateS3file` without one answers HTTP 400 "Provided return URL is not permitted: None"); the Inbox Placement test listing paginates by `page_size` and silently ignores `pageSize`; `sendEvaluatedFile` takes a file id as a form field, not an upload; Warmup's `checkDomainDmarc` takes an *email address*, not a domain; and `testSmtpConfiguration` answers a failed SMTP login with HTTP 500.
 - **A `"success": false` field on an HTTP 200 is a failure.** `getFile` and `deleteFile` report an unknown or deleted file id that way. `ZBError.successMeansFailure` catches it in `sendRequest`, and `ZBError.httpError` carries the HTTP status.
 - **`exportSFTPFile` sends `export_path`**, not the `export_bucket` that `exportS3File` sends. Both are optional: nil means the path or bucket from the account's settings, and a blank string is a mistake rather than a default.
-- **Safety rails.** `initialize` refuses a key with surrounding whitespace or control characters, `ZeroBounceSDK.isAllowedURL` allows https only (loopback aside, for a local stub), `escapePathSegment` keeps a slash encoded, and redirects are never followed. Use them rather than adding a second rail beside them.
+- **Safety rails.** `initialize` refuses a key with surrounding whitespace or control characters, or one made only of combining marks, `ZeroBounceSDK.isAllowedURL` allows https only (loopback aside, for a local stub), `escapePathSegment` keeps a slash encoded, and redirects are never followed. Use them rather than adding a second rail beside them.
 - **Requests go through `ZeroBounceSDK.urlSession`**, not `URLSession.shared`, because a shared session cannot refuse a redirect. A test that stubs HTTP puts its `URLProtocol` on that session; `URLProtocol.registerClass` alone reaches only the shared one.
 - **Offline tests register their protocol on `ZeroBounceSDK.urlSession`.** Do not call the live API from anything but `LiveApiTests`.
 - **Apps reach that session through `ZeroBounceSDK.setSessionConfiguration(_:)`**, the public hook for stubbing; keep the redirect blocker and the https check in force whatever configuration it is given.
@@ -85,14 +85,14 @@ That `xcodebuild` compile is the typecheck. There is no separate lint step. CI (
 - Add every user-visible change to `## [Unreleased]` in the same commit as the change.
 - Group entries under these headings, in this order, omitting empty ones: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
 - Write for SDK users. Leave out CI-only changes and fixes to code that was never released.
-- At 2.y.z, a breaking change bumps the major version, a new method or option bumps the minor version, and fixes alone bump the patch version.
+- At 3.y.z, a breaking change bumps the major version, a new method or option bumps the minor version, and fixes alone bump the patch version.
 
 ## Releasing
 
 Publishing and pushing tags need a maintainer's explicit approval. Do not bump the version, tag, or publish unless they asked.
 
 1. Move `[Unreleased]` entries under `## [x.y.z] - YYYY-MM-DD`, leave an empty `[Unreleased]` section, and update the compare links.
-2. Set the same version in both `s.version` in `ZeroBounceSDK.podspec` and every `MARKETING_VERSION` in `Zero Bounce iOS SDK.xcodeproj/project.pbxproj`. The publish workflow fails if they differ.
+2. Set the same version in both `s.version` in `ZeroBounceSDK.podspec` and every `MARKETING_VERSION` in `Zero Bounce iOS SDK.xcodeproj/project.pbxproj`. The publish workflow compares only the podspec version with the tag; it does not read `MARKETING_VERSION`, so nothing but you keeps the two equal.
 3. Run the `xcodebuild test` command above, and then the live suite by hand with real keys and both flags set; paste its summary line into the release notes. The offline suite cannot catch an API that has changed shape underneath the SDK.
 4. Tag `vx.y.z` on that commit and run the Publish workflow. It publishes the CocoaPod from that tag.
 
@@ -112,9 +112,9 @@ If `xcodebuild` reports `CoreSimulator is out of date`, run `xcrun simctl list d
 ## Rules
 
 - **Only endpoints documented at https://www.zerobounce.net/docs/.** Do not add a method for an endpoint the public docs do not describe. Check before concluding something is undocumented: the S3 and SFTP bulk endpoints live under https://www.zerobounce.net/docs/api-integrations, not the main API reference.
-- **Four base URLs.** `apiBaseUrl`, `bulkApiBaseUrl` (ends in `/v2`), `bulkApiRootUrl` (the S3/SFTP jobs, **no** `/v2`), and `listEvaluatorBaseUrl` / `inboxPlacementBaseUrl`. The last two are separate hosts rather than paths built from the bulk base, so `initialize` alone leaves them on the live API — use `setListEvaluatorBaseUrl` / `setInboxPlacementBaseUrl`.
-- **Two bulk shapes are easy to get wrong.** `validateSFTPFile`'s `fileName` is optional — leaving it nil uses the input bucket from the account's settings, and every other job requires it. `exportSFTPFile` sends `export_path`, not the `export_bucket` that `exportS3File` sends; both are optional. Every job, `validateS3File` and `scoreS3File` included, needs a `returnUrl`: those two take it in their initializer.
+- **Five base URLs.** `apiBaseUrl`, `bulkApiBaseUrl` (ends in `/v2`), `bulkApiRootUrl` (the S3/SFTP jobs, **no** `/v2`), `listEvaluatorBaseUrl` and `inboxPlacementBaseUrl`. The last two have their own base URLs on `bulkapi.zerobounce.net` (they are not separate hosts) rather than paths built from the bulk base, so `initialize` alone leaves them on the live API — use `setListEvaluatorBaseUrl` / `setInboxPlacementBaseUrl`.
+- **Two bulk shapes are easy to get wrong.** `validateSFTPFile` requires `fileName` like every other job; a nil or blank one is refused before sending ("Empty parameter: file_name"). `exportSFTPFile` sends `export_path`, not the `export_bucket` that `exportS3File` sends; both are optional. Every job, `validateS3File` and `scoreS3File` included, needs a `returnUrl`: those two take it in their initializer.
 - **A greylist-pending response has no `status` and no `processed_at`.** Both are optional on `ZBValidateResponse` for that reason; making either non-optional again makes the whole response fail to decode.
 - **Two test harnesses live in one file.** `Zero_Bounce_iOS_SDKTests` uses Mocker; `OfflineApiTests` uses `OfflineURLProtocol`, which records every request. Prefer `OfflineApiTests` for new work — Mocker's registry is global and a mock registered with `ignoreQuery: true` will swallow requests from the other class's tests.
 - **`URL.path` is percent-decoded and drops a trailing slash.** Assert on `OfflineRecord.rawPath` for anything about encoding.
-- **Offline tests only.** Never call the live API from a test.
+- **The offline suite does not call the live API.** `LiveApiTests` is the only test that does, and it is opt-in: excluded by name in the documented command and CI, and a no-op without keys. Never call the live API from any other test.

@@ -23,9 +23,6 @@ on:
     - cron: '17 20 * * 4'
 
 permissions:
-  security-events: write
-  packages: read
-  actions: read
   contents: read
 
 jobs:
@@ -40,12 +37,6 @@ jobs:
     permissions:
       # required for all workflows
       security-events: write
-
-      # required to fetch internal or private CodeQL packs
-      packages: read
-
-      # only required for workflows in private repositories
-      actions: read
       contents: read
 
     strategy:

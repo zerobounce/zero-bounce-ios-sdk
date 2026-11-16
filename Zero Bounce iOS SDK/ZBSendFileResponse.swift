@@ -28,7 +28,7 @@ extension ZBSendFileResponse {
     /// an extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        success = try container.decodeIfPresent(Bool.self, forKey: .success)
+        success = try container.decodeSuccessFlag(forKey: .success)
         message = try container.decodeFileMessage(forKey: .message)
         fileName = try container.decodeNullAsEmpty(String.self, forKey: .fileName, empty: "")
         fileId = try container.decodeIfPresent(String.self, forKey: .fileId) ?? ""
@@ -48,6 +48,20 @@ extension KeyedDecodingContainer {
             return empty
         }
         return try decode(T.self, forKey: key)
+    }
+
+    /// A file-job `success` flag (ZBError.successFlag): a boolean, the number
+    /// 0 or 1, or "true", "false", "0" or "1" in any case, trimmed. Missing
+    /// and null read nil. Any other present value fails the decode.
+    func decodeSuccessFlag(forKey key: Key) throws -> Bool? {
+        guard contains(key), try decodeNil(forKey: key) == false else { return nil }
+        if let flag = try? decode(Bool.self, forKey: key) { return flag }
+        if let number = try? decode(Double.self, forKey: key) {
+            if let flag = ZBError.successFlag(number: number) { return flag }
+        } else if let text = try? decode(String.self, forKey: key) {
+            if let flag = ZBError.successFlag(text: text) { return flag }
+        }
+        throw DecodingError.dataCorruptedError(forKey: key, in: self, debugDescription: "success is not a flag")
     }
 
     /// A file-job `message` (send, delete and file status answers): one string,

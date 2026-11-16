@@ -45,7 +45,7 @@ Initialize the SDK with your api key and preferred api:
 ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiBaseUrl: .API_DEFAULT_URL)
 ```
 
-`initialize` returns `false` (the result is discardable) when it refuses a key with surrounding whitespace or control characters. The SDK is then uninitialized, and every call fails with `ZBError.notInitialized`, even if an earlier `initialize` had set a key. `ZeroBounceWarmup.initialize(apiKey:)` works the same way.
+`initialize` returns `false` (the result is discardable) when it refuses a key: one with surrounding whitespace or control characters, or one made only of combining marks. The SDK is then uninitialized, and every call fails with `ZBError.notInitialized`, even if an earlier `initialize` had set a key. `ZeroBounceWarmup.initialize(apiKey:)` also returns `false` and clears the key, but Warmup calls then fail with `ZBError.decodeError`, whose message is `The Warmup API is not initialized. Please call ZeroBounceWarmup.shared.initialize(apiKey:) first`. They do not use `ZBError.notInitialized`.
 
 ## Examples
 Then you can use any of the SDK methods, for example:
@@ -494,7 +494,7 @@ ZeroBounceSDK.shared.sendEmailFinderFile(
 
 ## Inbox Placement Tester
 
-Runs on its own host and sends camelCase JSON bodies. It authenticates with an
+Has its own base URL (on `bulkapi.zerobounce.net`) and sends camelCase JSON bodies. It authenticates with an
 `Authorization: Bearer` header rather than the `api_key` parameter the rest of
 the API takes, and it spends the account's inbox-test credits.
 
@@ -620,7 +620,8 @@ SMTP login with HTTP 500, which arrives as `ZBError.httpError` with
 
 ## Per-API base URLs
 
-The list evaluator and the Inbox Placement Tester are separate hosts, so
+The list evaluator and the Inbox Placement Tester have their own base URLs, not
+paths built from the bulk one (both default to `bulkapi.zerobounce.net`), so
 `initialize` alone leaves them pointing at the live API.
 
 ```swift

@@ -17,13 +17,14 @@ jobs:
   test:
     name: Test
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Install CocoaPods dependencies
-        run: pod install
+        run: pod install --deployment
 
       - name: Run tests (Mac Catalyst)
         run: |
@@ -40,6 +41,7 @@ jobs:
   swift-package:
     name: Build Swift Package (iOS Simulator)
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

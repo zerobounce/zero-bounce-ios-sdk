@@ -34,9 +34,11 @@ Initialize the SDK with your api key and preferred api:
 ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiBaseUrl: .API_DEFAULT_URL)
 ```
 
+`initialize` returns `false` (the result is discardable) when it refuses a key, for example one with surrounding whitespace or control characters. The SDK is then uninitialized and every call fails with `ZBError.notInitialized`. `ZeroBounceWarmup.initialize(apiKey:)` also returns `false`, and Warmup calls then fail with `ZBError.decodeError` (message: `The Warmup API is not initialized. Please call ZeroBounceWarmup.shared.initialize(apiKey:) first`).
+
 #### Examples
 Then you can use any of the SDK methods, for example:
-* ####### Validate an email address
+###### Validate an email address
 ```swift
 let email = "<EMAIL_ADDRESS>"   // The email address you want to validate
 let ipAddress = "127.0.0.1"     // The IP Address the email signed up from (Optional)
@@ -67,7 +69,7 @@ ZeroBounceSDK.shared.validate(email: email, ipAddress: ipAddress) { result in
 }
 ```
 
-* ####### Validate up to 100 email addresses using Batch Email Validator
+###### Validate up to 100 email addresses using Batch Email Validator
 ```swift
 // The email addresses you want to validate
 let emails = [ 
@@ -155,7 +157,7 @@ ZeroBounceSDK.shared.findDomain(
 }
 ```
 
-* ####### Check how many credits you have left on your account
+###### Check how many credits you have left on your account
 ```swift
 ZeroBounceSDK.shared.getCredits() { result in
     switch result {
@@ -168,7 +170,7 @@ ZeroBounceSDK.shared.getCredits() { result in
 }
 ```
 
-* ####### Check if your email inbox has been active in the past 30, 60, 90, 180, 365, 730 or 1095 days
+###### Check if your email inbox has been active in the past 30, 60, 90, 180, 365, 730 or 1095 days
 ```swift
 let email = "<EMAIL_ADDRESS>"   // The email address you want to check
 
@@ -182,7 +184,7 @@ ZeroBounceSDK.shared.getActivityData(email: email) { result in
 }
 ```
 
-* ####### Check your API usage for a given period of time
+###### Check your API usage for a given period of time
 ```swift
 let startDate = Date();    // The start date of when you want to view API usage
 let endDate = Date();      // The end date of when you want to view API usage
@@ -197,7 +199,7 @@ ZeroBounceSDK.shared.getApiUsage(startDate: startDate, endDate: endDate) { resul
 }
 ```
 
-* ####### The sendfile API allows user to send a file for bulk email validation
+###### The sendfile API allows user to send a file for bulk email validation
 ```swift
 let filePath = "<FILE_PATH>";       // Path to the local csv or txt file
 let emailAddressColumn = 3;         // The index of "email" column in the file. Index starts at 1
@@ -235,7 +237,7 @@ ZeroBounceSDK.shared.sendFile(
 
 Bulk base URL is `https://bulkapi.zerobounce.net/v2`. See [v2 send file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-send-file), [v2 file status](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-file-status), [v2 get file](https://www.zerobounce.net/docs/email-validation-api-quickstart/v2-get-file).
 
-* ####### The getfile API allows users to get the validation results file for the file been submitted using sendfile API
+###### The getfile API allows users to get the validation results file for the file been submitted using sendfile API
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
@@ -265,7 +267,7 @@ ZeroBounceSDK.shared.getFile(
 }
 ```
 
-* ####### Check the status of a file uploaded via "sendFile" method
+###### Check the status of a file uploaded via "sendFile" method
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
@@ -279,7 +281,7 @@ ZeroBounceSDK.shared.fileStatus(fileId: fileId) { result in
 }
 ```
 
-* ####### Deletes the file that was submitted using scoring sendfile API. File can be deleted only when its status is _`Complete`_
+###### Deletes the file that was submitted using scoring sendfile API. File can be deleted only when its status is _`Complete`_
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling sendfile API
 
@@ -294,7 +296,7 @@ ZeroBounceSDK.shared.deleteFile(fileId: fileId) { result in
 ```
 
 ##### AI Scoring API
-* ####### The scoringSendFile API allows user to send a file for bulk email validation
+###### The scoringSendFile API allows user to send a file for bulk email validation
 ```swift
 let filePath = "<FILE_PATH>";       // Path to the local csv or txt file
 let emailAddressColumn = 3;         // The index of "email" column in the file. Index starts at 1
@@ -321,7 +323,7 @@ ZeroBounceSDK.shared.scoringSendFile(
 }
 ```
 
-* ####### The scoringGetFile API allows users to get the validation results file for the file been submitted using scoringSendFile API
+###### The scoringGetFile API allows users to get the validation results file for the file been submitted using scoringSendFile API
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
@@ -344,7 +346,7 @@ ZeroBounceSDK.shared.scoringGetFile(
 ) { result in /* ... */ }
 ```
 
-* ####### Check the status of a file uploaded via "scoringSendFile" method
+###### Check the status of a file uploaded via "scoringSendFile" method
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
@@ -358,7 +360,7 @@ ZeroBounceSDK.shared.scoringFileStatus(fileId: fileId) { result in
 }
 ```
 
-* ####### Deletes the file that was submitted using scoring scoringSendFile API. File can be deleted only when its status is _`Complete`_
+###### Deletes the file that was submitted using scoring scoringSendFile API. File can be deleted only when its status is _`Complete`_
 ```swift
 let fileId = "<FILE_ID>";    // The returned file ID when calling scoringSendFile API
 
@@ -392,7 +394,7 @@ pod install
 xcodebuild test \
   -workspace "Zero Bounce iOS SDK.xcworkspace" \
   -scheme "Zero Bounce iOS SDK" \
-  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.4' \
+  -destination 'id=<SIMULATOR_UDID>' \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 
 # Mac Catalyst (no iOS Simulator required)
@@ -407,8 +409,10 @@ xcodebuild test \
   ENABLE_USER_SCRIPT_SANDBOXING=NO
 ```
 
-The one test the command above skips is the opt-in live suite, which calls the
-real API. To run it, with keys from the environment only:
+Only the Mac Catalyst command above skips the opt-in live suite
+(`-skip-testing`), which calls the real API; the simulator command does not skip
+it, but the suite does nothing without keys. To run it, with keys from the
+environment only:
 
 ```bash
 export ZEROBOUNCE_API_KEY=... ZEROBOUNCE_WARMUP_API_KEY=...
@@ -542,7 +546,7 @@ ZeroBounceSDK.shared.sendEmailFinderFile(
 
 ## Inbox Placement Tester
 
-Runs on its own host and sends camelCase JSON bodies. It authenticates with an
+Has its own base URL (on `bulkapi.zerobounce.net`) and sends camelCase JSON bodies. It authenticates with an
 `Authorization: Bearer` header rather than the `api_key` parameter the rest of
 the API takes, and it spends the account's inbox-test credits.
 
@@ -668,7 +672,8 @@ SMTP login with HTTP 500, which arrives as `ZBError.httpError` with
 
 ## Per-API base URLs
 
-The list evaluator and the Inbox Placement Tester are separate hosts, so
+The list evaluator and the Inbox Placement Tester have their own base URLs, not
+paths built from the bulk one (both default to `bulkapi.zerobounce.net`), so
 `initialize` alone leaves them pointing at the live API.
 
 ```swift

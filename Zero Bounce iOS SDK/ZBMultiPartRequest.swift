@@ -22,7 +22,8 @@ internal class ZBMultiPartRequest {
     static internal func createFileRequest(url:String, parameters: [String: Any]?, filePathKey: String, paths: [String]) throws -> URLRequest {
         let boundary = generateBoundaryString()
         
-        var request = URLRequest(url: URL(string: url)!)
+        guard let requestURL = URL(string: url) else { throw ZBError.invalidEndpoint }
+        var request = URLRequest(url: requestURL)
         request.httpMethod = "POST"
         request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
@@ -35,7 +36,8 @@ internal class ZBMultiPartRequest {
     static internal func createFileRequestWithData(url: String, parameters: [String: Any]?, filePathKey: String, fileData: Data, fileName: String) throws -> URLRequest {
         let boundary = generateBoundaryString()
         
-        var request = URLRequest(url: URL(string: url)!)
+        guard let requestURL = URL(string: url) else { throw ZBError.invalidEndpoint }
+        var request = URLRequest(url: requestURL)
         request.httpMethod = "POST"
         request.timeoutInterval = ZeroBounceSDK.requestTimeout
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")

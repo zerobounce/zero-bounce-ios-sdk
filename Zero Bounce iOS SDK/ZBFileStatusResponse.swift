@@ -38,10 +38,11 @@ public struct ZBFileStatusResponse : Codable, Equatable {
 extension ZBFileStatusResponse {
     /// `message` is a string or a list of strings (joined with a line feed). A
     /// null `success`, `file_id` or `file_status` reads as false or "" (standard
-    /// section 3). Declared in an extension so the memberwise initializer is kept.
+    /// section 3), and so does a `success` that is not a real flag. Declared in an
+    /// extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        success = try container.decodeNullAsEmpty(Bool.self, forKey: .success, empty: false)
+        success = try container.decodeSuccessFlag(forKey: .success) ?? false
         message = try container.decodeFileMessage(forKey: .message)
         fileId = try container.decodeNullAsEmpty(String.self, forKey: .fileId, empty: "")
         fileName = try container.decodeIfPresent(String.self, forKey: .fileName)

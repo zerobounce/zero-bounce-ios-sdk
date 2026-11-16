@@ -151,7 +151,9 @@ public class ZeroBounceWarmup {
 
     internal var apiKey: String?
     /// The base URL ZeroBounce gave you. Tests point this at a local stub.
-    /// Trailing slashes are dropped when it is set.
+    /// Trailing slashes are dropped when it is set. A URL with a `?` or a `#`
+    /// is refused: it becomes a fixed placeholder that is not https, so every
+    /// call fails before anything is sent.
     public var baseUrl = "https://warmup-api.zerobounce.net" {
         didSet { baseUrl = ZeroBounceSDK.normalizedBaseUrl(baseUrl) }
     }
@@ -161,9 +163,10 @@ public class ZeroBounceWarmup {
     /// Sets the Warmup API key. It is sent in an `API-Key` header, and it is
     /// not the validation key.
     ///
-    /// A key with surrounding whitespace or control characters is refused
-    /// rather than stored: it would otherwise be quoted, unredacted, in a
-    /// transport error.
+    /// A key with surrounding whitespace or control characters, with U+00A0,
+    /// U+2028 or U+3000 in the middle, with U+180B anywhere, or made of
+    /// combining marks alone is refused rather than stored: it would otherwise
+    /// be quoted, unredacted, in a transport error.
     ///
     /// - returns: false when the key was refused. The client is then left
     ///   uninitialized, so every call fails with "not initialized" instead of
@@ -741,23 +744,18 @@ public class ZeroBounceWarmup {
             case .failure(let error):
                 completion(.Failure(error))
             case .success(let (data, response)):
-                let text = String(data: data, encoding: .utf8) ?? ""
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 // An error comes back as JSON, and a proxy or block page as
-                // HTML, by content type or by body, so neither is a file.
+                // HTML, by content type or by body, so neither is a file. A
+                // body of only padding is empty, and a CSV that starts with
+                // "[" is kept: only a JSON array is refused.
                 let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
                 if let failure = ZBError.downloadFailure(data, response: response, statusCode: statusCode) {
                     completion(.Failure(failure))
                     return
                 }
-                if trimmed.isEmpty || trimmed.hasPrefix("[") {
-                    completion(.Failure(ZBError.httpError(
-                        message: ZBError.message(from: data, statusCode: statusCode),
-                        statusCode: statusCode
-                    )))
-                    return
-                }
-                completion(.Success(text))
+                // The text as it came: a BOM and the padding stay, and a byte
+                // that is not UTF-8 reads as U+FFFD instead of emptying the file.
+                completion(.Success(String(decoding: data, as: UTF8.self)))
             }
         }
     }

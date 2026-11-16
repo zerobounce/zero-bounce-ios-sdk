@@ -38,28 +38,56 @@ public enum ZBError: LocalizedError {
         }
     }
 
+    /// The value of a `success` field when it is a real flag, or nil: a JSON
+    /// boolean, the number 0 or 1, or "true", "false", "0" or "1" in any case,
+    /// trimmed. `null`, "", "maybe", a list, an object, 2 and 0.4 are not a
+    /// flag, so they are neither a failure nor a result field.
+    static func successFlag(_ value: Any?) -> Bool? {
+        guard let value = value else { return nil }
+        if let number = value as? NSNumber {
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue }
+            return successFlag(number: number.doubleValue)
+        }
+        if let text = value as? String { return successFlag(text: text) }
+        return nil
+    }
+
+    /// A numeric `success`: 0 and 1 only.
+    static func successFlag(number: Double) -> Bool? {
+        if number == 0 { return false }
+        if number == 1 { return true }
+        return nil
+    }
+
+    /// A textual `success`: "true", "false", "0" or "1", any case, trimmed.
+    static func successFlag(text: String) -> Bool? {
+        switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "true", "1": return true
+        case "false", "0": return false
+        default: return nil
+        }
+    }
+
     /// Whether a JSON body says the call failed although the HTTP status was a
-    /// success. The API sends `success` as a JSON false, "false" or "False".
+    /// success: its `success` is a real flag, and a false one (see
+    /// `successFlag`).
     static func successMeansFailure(_ data: Data) -> Bool {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let value = object["success"] else {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return false
         }
-        if let flag = value as? Bool { return !flag }
-        if let text = value as? String { return text.lowercased() == "false" }
-        if let number = value as? NSNumber { return number.intValue == 0 }
-        return false
+        return successFlag(object["success"]) == false
     }
     
-    /// Whether a JSON body is an error with no "success" field to gate on: a
-    /// non-empty "error", "error_message" or "Error" string. LIVE: an invalid
+    /// Whether a JSON body is an error with no real "success" flag to gate on:
+    /// a non-empty "error", "error_message" or "Error" string. LIVE: an invalid
     /// or drained key answers validate, activity and getapiusage with
     /// {"error": ...}, and the filters with {"Error": ...}, on an HTTP 200.
+    /// A `success` that is not a flag (null, "maybe", 2) does not gate.
     /// "message" and "Message" are not among the keys: successful responses
     /// use them too (a filter change answers with a bare "Message").
     static func errorOnlyBody(_ data: Data) -> Bool {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              object["success"] == nil else {
+              successFlag(object["success"]) == nil else {
             return false
         }
         return ["error", "error_message", "Error"].contains { key in
@@ -71,16 +99,34 @@ public enum ZBError: LocalizedError {
     /// The keys of a message-only answer (standard section 3, E3).
     private static let messageOnlyKeys: Set<String> = ["error", "message", "error_message", "Message", "Error", "detail"]
 
-    /// The failure for a message-only body on the email-finder and domain-search
-    /// calls, or nil. Decided by the keys alone: an object with at least one key,
-    /// every key a message key, and no "success", whatever the message is (text,
-    /// blank, null, a list). The text is the first non-blank message (a list is
-    /// joined with a line feed), or a generic text when there is none.
+    /// Whether a typed call's answer is read by `messageOnlyFailure`. The
+    /// filters, Inbox Placement, the list evaluator and validate/credits are
+    /// not: a bare "Message" is a successful filter change, and validate
+    /// keeps its greylist Message.
+    static func readsMessageOnly<T>(_ type: T.Type) -> Bool {
+        type == ZBSendFileResponse.self || type == ZBDeleteFileResponse.self
+            || type == ZBFileStatusResponse.self || type == ZBActivityDataResponse.self
+            || type == ZBScoreEmailResponse.self || type == ZBValidateBatchResponse.self
+            || type == ZBGetApiUsageResponse.self || type == ZBEmailFinderResponse.self
+            || type == ZBDomainSearchResponse.self
+    }
+
+    /// The failure for an answer with no result in it, or nil: an object with
+    /// no keys (a `success` that is not a real flag is no key), or one whose
+    /// keys are message keys beside nothing but nulls. `{"domain": null}`
+    /// with no message stays a result, and so does any non-null field or a
+    /// real `success` flag. The text is the first non-blank message (a list
+    /// is joined with a line feed), or a generic text when there is none.
     static func messageOnlyFailure(_ data: Data, statusCode: Int) -> ZBError? {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              !object.isEmpty, object["success"] == nil,
-              object.keys.allSatisfy({ messageOnlyKeys.contains($0) }) else {
+        guard var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
+        }
+        if successFlag(object["success"]) == nil { object["success"] = nil }
+        if !object.isEmpty {
+            guard object.keys.contains(where: { messageOnlyKeys.contains($0) }),
+                  object.allSatisfy({ messageOnlyKeys.contains($0.key) || $0.value is NSNull }) else {
+                return nil
+            }
         }
         var text = ""
         for key in ["Message", "message", "error", "error_message", "Error", "detail"] where text.isEmpty {
@@ -96,47 +142,102 @@ public enum ZBError: LocalizedError {
         return .httpError(message: text, statusCode: statusCode)
     }
 
-    /// Whether a body is a JSON object. A file download never is: getfile
-    /// answers with JSON only to say why there is no file.
+    /// How many leading bytes of a download are padding: spaces, tabs, CR,
+    /// LF, vertical tab, form feed, UTF-8 BOMs and U+00A0. There is no limit
+    /// to it.
+    static func paddingLength(_ data: Data) -> Int {
+        data.withUnsafeBytes { raw -> Int in
+            let bytes = raw.bindMemory(to: UInt8.self)
+            var at = 0
+            while at < bytes.count {
+                let byte = bytes[at]
+                if byte == 0x20 || (0x09...0x0D).contains(byte) {
+                    at += 1
+                } else if byte == 0xEF, at + 2 < bytes.count, bytes[at + 1] == 0xBB, bytes[at + 2] == 0xBF {
+                    at += 3
+                } else if byte == 0xC2, at + 1 < bytes.count, bytes[at + 1] == 0xA0 {
+                    at += 2
+                } else {
+                    break
+                }
+            }
+            return at
+        }
+    }
+
+    /// Whether `data` is the start of a padding sequence cut short (a BOM or
+    /// a U+00A0 at the end of a chunk): a longer read could make it padding.
+    static func isPartialPadding(_ data: Data) -> Bool {
+        let bytes = [UInt8](data)
+        return bytes == [0xEF] || bytes == [0xEF, 0xBB] || bytes == [0xC2]
+    }
+
+    /// The body after its padding.
+    private static func unpadded(_ data: Data) -> Data {
+        data.dropFirst(paddingLength(data))
+    }
+
+    /// Whether a body is a JSON object, after its padding. A file download
+    /// never is: getfile answers with JSON only to say why there is no file.
     static func looksLikeJsonObject(_ data: Data) -> Bool {
-        let head = String(decoding: data.prefix(64), as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return head.hasPrefix("{")
+        unpadded(data).first == 0x7B
     }
 
     /// Whether a body is JSON rather than a file: an object, or an array
     /// that parses as JSON (a CSV line can start with "[" too).
     static func looksLikeJson(_ data: Data) -> Bool {
-        if looksLikeJsonObject(data) { return true }
-        let head = String(decoding: data.prefix(64), as: UTF8.self)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return head.hasPrefix("[") && (try? JSONSerialization.jsonObject(with: data)) != nil
+        let body = unpadded(data)
+        if body.first == 0x7B { return true }
+        return body.first == 0x5B && (try? JSONSerialization.jsonObject(with: body)) != nil
+    }
+
+    /// Whether the start of a body is an HTML page: a `<!doctype html`,
+    /// `<html`, `<head` or `<body` tag in its first 2000 characters.
+    static func looksLikeHtml(_ data: Data) -> Bool {
+        let head = decodedBody(data.prefix(65536)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = String(head.prefix(2000)).lowercased()
+        return prefix.contains("<!doctype html") || prefix.contains("<html")
+            || prefix.contains("<head") || prefix.contains("<body")
+    }
+
+    /// A body as text: bytes that are not UTF-8 (or a character cut by the end
+    /// of a probe) become U+FFFD rather than emptying the text, and a leading
+    /// byte order mark is dropped.
+    private static func decodedBody(_ data: Data) -> String {
+        var text = String(decoding: data, as: UTF8.self)
+        if text.unicodeScalars.first == "\u{FEFF}" { text.unicodeScalars.removeFirst() }
+        return text
     }
 
     /// Why a 2xx answer to a file download is not the file, or nil when it
-    /// is one. An empty body, an HTML page (by content type or by body) and
-    /// JSON (by content type or by body) are errors that keep the status:
-    /// the API answers with JSON only to say why there is no file, and a
-    /// proxy or block page may come as `text/html` with no tags a body check
-    /// would see. `data` may be only the start of a large download.
+    /// is one. Padding (spaces, tabs, line breaks, BOMs, U+00A0) is skipped
+    /// first, wherever it ends; a body of nothing else is empty. An empty
+    /// body, an HTML page (by content type or by body) and JSON (by content
+    /// type, an object, or an array that parses) are errors that keep the
+    /// status: the API answers with JSON only to say why there is no file,
+    /// and a proxy or block page may come as `text/html` with no tags a body
+    /// check would see. `data` may be only the start of a large download.
     static func downloadFailure(_ data: Data, response: URLResponse?, statusCode: Int) -> ZBError? {
         let type = (response?.mimeType ?? "").lowercased()
         let htmlType = isHtmlType(response)
         let jsonType = type == "application/json" || type == "text/json" || type.hasSuffix("+json")
-        let message = self.message(from: data, statusCode: statusCode)
-        if data.isEmpty || message.contains("HTML error page") || successMeansFailure(data)
-            || looksLikeJsonObject(data) {
-            return .httpError(message: message, statusCode: statusCode)
+        let body = unpadded(data)
+        if body.isEmpty {
+            return .httpError(message: "Empty response from ZeroBounce (HTTP \(statusCode))", statusCode: statusCode)
+        }
+        if body.first == 0x7B || looksLikeHtml(body) {
+            return .httpError(message: message(from: body, statusCode: statusCode), statusCode: statusCode)
         }
         if htmlType {
             return .httpError(
-                message: "ZeroBounce returned an HTML page (\(type)) instead of a file: \(message)",
+                message: "ZeroBounce returned an HTML page (\(type)) instead of a file: "
+                    + message(from: body, statusCode: statusCode),
                 statusCode: statusCode
             )
         }
-        if jsonType || looksLikeJson(data) {
+        if jsonType || looksLikeJson(body) {
             return .httpError(
-                message: "ZeroBounce returned JSON instead of a file: \(message)",
+                message: "ZeroBounce returned JSON instead of a file: \(message(from: body, statusCode: statusCode))",
                 statusCode: statusCode
             )
         }
@@ -184,7 +285,7 @@ public enum ZBError: LocalizedError {
     }
 
     static func message(from data: Data, statusCode: Int) -> String {
-        let body = String(data: data, encoding: .utf8) ?? ""
+        let body = decodedBody(data)
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             return "Empty response from ZeroBounce (HTTP \(statusCode))"

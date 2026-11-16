@@ -5602,17 +5602,16 @@ extension TransportSafetyTests {
             XCTAssertFalse(fuzzReadable(result, secret, 4), "\(what): \(result)")
         }
         // A \uXXXX escape for each UTF-8 sequence length: 2 bytes (U+00EA),
-        // 3 bytes (U+20AC), and 4 bytes from a surrogate pair. The SDK
-        // generates these escapes in all-lower and all-upper hex, so
-        // mixed-case hex reaches only the decode check, and the body is
-        // dropped whole.
+        // 3 bytes (U+20AC), and 4 bytes from a surrogate pair. Mixed-case hex
+        // is decoded and the secret is masked in place.
         for (what, spelling, secret) in [
             ("\\u escape, 2-byte UTF-8", #"k\u00eAy"#, "k\u{EA}y"),
             ("\\u escape, 3-byte UTF-8", #"k\u20Acy"#, "k\u{20AC}y"),
             ("\\u surrogate pair, 4-byte UTF-8", #"k\uD83d\udD11y"#, "k\u{1F511}y"),
         ] {
-            XCTAssertEqual(ZeroBounceSDK.redacting([secret], in: "echo [\(spelling)] end"),
-                           ZeroBounceSDK.secretOmittedMessage, what)
+            let result = ZeroBounceSDK.redacting([secret], in: "echo [\(spelling)] end")
+            XCTAssertFalse(fuzzReadable(result, secret, 4), "\(what): \(result)")
+            XCTAssertFalse(result.contains("k\\u"), what)
         }
         // The control: a NUL and escapes with no key behind them stay.
         let control = #"nothing secret %00 here \u0000 %41"#
@@ -5638,5 +5637,380 @@ extension TransportSafetyTests {
                 XCTFail("\(name): \(text)")
             }
         }
+    }
+}
+
+/// Behaviour fixes (iOS depth-first fix 1): an answer with no result in it,
+/// the real `success` flag, and download padding. Each test fails on the
+/// code before the fix.
+extension TransportSafetyTests {
+    private func scriptData(_ status: Int, _ contentType: String, _ body: Data) {
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.scripted = (status, contentType, body)
+        OfflineURLProtocol.lock.unlock()
+    }
+
+    private func clearScript() {
+        OfflineURLProtocol.lock.lock()
+        OfflineURLProtocol.scripted = nil
+        OfflineURLProtocol.lock.unlock()
+    }
+
+    /// The calls whose answer is a ZBSendFileResponse.
+    private func fileJobSends(_ sdk: ZeroBounceSDK, _ warmup: ZeroBounceWarmup) -> [(String, (@escaping Report) -> ())] {
+        everyCall(sdk, warmup).filter {
+            $0.0.hasPrefix("send") || $0.0.hasPrefix("scoringSend") || $0.0.contains("S3File") || $0.0.contains("SFTPFile")
+        }
+    }
+
+    /// The other typed calls that read an answer with no result in it as an
+    /// error: activity, score, file status, delete, batch, usage, finder and
+    /// domain search.
+    private func resultCalls(_ sdk: ZeroBounceSDK, _ warmup: ZeroBounceWarmup) -> [(String, (@escaping Report) -> ())] {
+        let names: Set<String> = [
+            "getActivityData", "scoreEmail", "scoreEmailPost", "fileStatus", "scoringFileStatus", "deleteFile",
+            "scoringDeleteFile", "emailFinderFileStatus", "emailFinderDeleteFile", "domainSearchFileStatus",
+            "domainSearchDeleteFile", "validateBatch", "validateBatch options", "getApiUsage", "findEmail domain",
+            "findEmail company", "findDomain domain", "findDomain company",
+        ]
+        return everyCall(sdk, warmup).filter { names.contains($0.0) }
+    }
+
+    /// `{}`, a message-only body, and a message beside only nulls are an
+    /// error with status 200 on the file-job sends and on every other typed
+    /// call that reads a result; the API's text is kept.
+    func testAnAnswerWithNoResultIsAnErrorWithStatus200() {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("no-result-key")
+        let sends = fileJobSends(sdk, warmup)
+        let others = resultCalls(sdk, warmup)
+        XCTAssertGreaterThanOrEqual(sends.count, 20)
+        XCTAssertEqual(others.count, 18)
+        let bodies: [(String, String?)] = [
+            ("{}", nil), ("{ }", nil), ("{\n}", nil), ("{\t}", nil),
+            (#"{"message":"m-text"}"#, "m-text"), (#"{"Message":"m-text"}"#, "m-text"),
+            (#"{"error":"m-text"}"#, "m-text"), (#"{"error_message":"m-text"}"#, "m-text"),
+            (#"{"Error":"m-text"}"#, "m-text"), (#"{"detail":"m-text"}"#, "m-text"),
+            (#"{"message":"m-text","file_id":null,"file_name":null}"#, "m-text"),
+            (#"{"message":"m-text","domain":null}"#, "m-text"),
+            (#"{"success":null,"error":"Invalid API key"}"#, "Invalid API key"),
+            (#"{"success":"maybe","message":"m-text"}"#, "m-text"),
+            (#"{"success":null}"#, nil),
+        ]
+        for (body, text) in bodies {
+            script(200, "application/json", body)
+            for (name, call) in sends + others {
+                let (error, _) = run("\(name) with \(body)", call)
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name) with \(body): \(describe(error))")
+                if let text = text {
+                    XCTAssertTrue(describe(error).contains(text), "\(name) with \(body): \(describe(error))")
+                }
+            }
+        }
+    }
+
+    /// An answer that has a result field in it stays a result, and so do the
+    /// calls that do not read message-only.
+    func testAnswersWithAResultFieldStayResults() {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("has-result-key")
+        let all = everyCall(sdk, warmup)
+        func call(_ name: String) -> (@escaping Report) -> () { all.first { $0.0 == name }!.1 }
+        for (name, body) in [
+            ("getApiUsage", #"{"domain":null}"#),
+            ("fileStatus", #"{"file_status":"Processing"}"#),
+            ("scoringFileStatus", #"{"file_status":"Processing"}"#),
+            ("getActivityData", #"{"found":false}"#),
+            ("sendFile data", #"{"domain":null}"#),
+            // The filters answer with a bare Message on success.
+            ("addFilter", #"{"Message":"Filter added"}"#),
+            ("deleteFilter", #"{"Message":"Filter deleted"}"#),
+        ] {
+            script(200, "application/json", body)
+            let (error, _) = run("\(name) with \(body)", call(name))
+            XCTAssertNil(error, "\(name) with \(body): \(describe(error))")
+        }
+        // Validate keeps its greylist Message.
+        script(200, "application/json", #"{"Message":"Greylist validation still in progress, please try again later."}"#)
+        let (greylist, _) = run("validate greylist", call("validate"))
+        XCTAssertNil(greylist, describe(greylist))
+        // A real success flag of 1, "1" and "true" decodes on the file jobs.
+        for flag in ["1", #""1""#, #""true""#, #""TRUE ""#, "true"] {
+            script(200, "application/json", #"{"success":\#(flag),"file_id":"f1","file_name":"a.csv"}"#)
+            for name in ["sendFile data", "scoringSendFile data", "deleteFile", "fileStatus"] {
+                let (error, _) = run("\(name) with success \(flag)", call(name))
+                XCTAssertNil(error, "\(name) with success \(flag): \(describe(error))")
+            }
+        }
+    }
+
+    /// A `success` that is not a real flag keeps the dead-key rule on every
+    /// call, the filters, Inbox Placement and the list evaluator included.
+    func testASuccessThatIsNotAFlagKeepsTheDeadKeyRule() {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("not-a-flag-key")
+        var swept = 0
+        for flag in ["null", #""""#, #""maybe""#, "[]", "{}", "2", "0.4"] {
+            for key in ["error", "error_message", "Error"] {
+                let body = #"{"success":\#(flag),"\#(key)":"Invalid API key or your account ran out of credits"}"#
+                script(200, "application/json", body)
+                for (name, call) in everyCall(sdk, warmup) where !name.hasPrefix("warmup") {
+                    swept += 1
+                    let (error, _) = run("\(name) with \(body)", call)
+                    XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name) with \(body): \(describe(error))")
+                }
+            }
+        }
+        XCTAssertGreaterThan(swept, 1000)
+    }
+
+    /// The real flags: a boolean, 0 or 1, and "true", "false", "0", "1" in any
+    /// case, trimmed. Only the false ones are a failure; the rest are not a
+    /// flag at all.
+    func testTheSuccessFlag() throws {
+        for (json, flag) in [
+            ("true", true), ("false", false), ("1", true), ("0", false), ("1.0", true),
+            (#""true""#, true), (#""TRUE""#, true), (#"" True ""#, true), (#""1""#, true), (#"" 1\n""#, true),
+            (#""false""#, false), (#"" False ""#, false), (#""FALSE""#, false), (#""0""#, false), (#"" 0 ""#, false),
+        ] as [(String, Bool)] {
+            let body = Data(#"{"success":\#(json)}"#.utf8)
+            XCTAssertEqual(ZBError.successMeansFailure(body), !flag, json)
+            XCTAssertFalse(ZBError.errorOnlyBody(Data(#"{"success":\#(json),"error":"e"}"#.utf8)), json)
+        }
+        for json in ["null", #""""#, #""maybe""#, "[]", "{}", "2", "-1", "0.4", #""2""#, #""yes""#, #""  ""#] {
+            let body = Data(#"{"success":\#(json)}"#.utf8)
+            XCTAssertFalse(ZBError.successMeansFailure(body), json)
+            XCTAssertTrue(ZBError.errorOnlyBody(Data(#"{"success":\#(json),"error":"e"}"#.utf8)), json)
+            XCTAssertNotNil(ZBError.messageOnlyFailure(Data(#"{"success":\#(json),"message":"m"}"#.utf8), statusCode: 200), json)
+            // Not a result field either.
+            XCTAssertNotNil(ZBError.messageOnlyFailure(body, statusCode: 200), json)
+        }
+        XCTAssertNil(ZBError.messageOnlyFailure(Data(#"{"success":1,"message":"m"}"#.utf8), statusCode: 200))
+        let decoder = JSONDecoder()
+        for json in ["1", #""1""#, #""true""#, "true"] {
+            let sent = try decoder.decode(ZBSendFileResponse.self, from: Data(#"{"success":\#(json),"file_id":"f"}"#.utf8))
+            XCTAssertEqual(sent.success, true, json)
+            let deleted = try decoder.decode(ZBDeleteFileResponse.self, from: Data(#"{"success":\#(json),"file_id":"f"}"#.utf8))
+            XCTAssertEqual(deleted.success, true, json)
+            let status = try decoder.decode(ZBFileStatusResponse.self, from: Data(#"{"success":\#(json),"file_id":"f"}"#.utf8))
+            XCTAssertTrue(status.success, json)
+        }
+        for json in ["0", #""0""#, #"" False ""#, "false"] {
+            let sent = try decoder.decode(ZBSendFileResponse.self, from: Data(#"{"success":\#(json),"file_id":"f"}"#.utf8))
+            XCTAssertEqual(sent.success, false, json)
+        }
+        let absent = try decoder.decode(ZBSendFileResponse.self, from: Data(#"{"success":null,"file_id":"f"}"#.utf8))
+        XCTAssertNil(absent.success)
+        for json in [#""maybe""#, "2", "0.4", "[]", "{}"] {
+            XCTAssertThrowsError(try decoder.decode(ZBSendFileResponse.self, from: Data(#"{"success":\#(json),"file_id":"f"}"#.utf8)), json)
+        }
+    }
+
+    /// `"success": "0"` and `" False "` are a failure on the calls too.
+    func testAStringFalseIsAFailureOnEveryCall() {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("string-false-key")
+        for flag in [#""0""#, #"" False ""#, "0", "false"] {
+            script(200, "application/json", #"{"success":\#(flag),"message":"File cannot be found."}"#)
+            for (name, call) in everyCall(sdk, warmup) where !name.hasPrefix("warmup") {
+                let (error, _) = run("\(name) with \(flag)", call)
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name) with \(flag): \(describe(error))")
+            }
+        }
+    }
+
+    // MARK: Downloads
+
+    private typealias DownloadReport = (Error?, Data?) -> ()
+
+    /// The eight downloads (ten calls), each reporting its error or the
+    /// bytes it saved.
+    private func downloadCalls(_ sdk: ZeroBounceSDK, _ warmup: ZeroBounceWarmup) -> [(String, (@escaping DownloadReport) -> ())] {
+        let path = download
+        func saved(_ done: @escaping DownloadReport) -> (ZeroBounceSDK.ZBResult<ZBGetFileResponse>) -> () {
+            { result in
+                switch result {
+                case .Success(let response):
+                    done(nil, response.localFilePath.flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) })
+                case .Failure(let error):
+                    done(error, nil)
+                }
+            }
+        }
+        return [
+            ("getFile", { done in sdk.getFile(fileId: "f", completion: saved(done)) }),
+            ("getFile options", { done in sdk.getFile(fileId: "f", options: ZBGetFileOptions(), completion: saved(done)) }),
+            ("scoringGetFile", { done in sdk.scoringGetFile(fileId: "f", completion: saved(done)) }),
+            ("scoringGetFile options", { done in
+                sdk.scoringGetFile(fileId: "f", options: ZBGetFileOptions(), completion: saved(done))
+            }),
+            ("getFileStreaming", { done in sdk.getFileStreaming(fileId: "f", downloadPath: path, completion: saved(done)) }),
+            ("scoringGetFileStreaming", { done in
+                sdk.scoringGetFileStreaming(fileId: "f", downloadPath: path, completion: saved(done))
+            }),
+            ("emailFinderGetFile", { done in sdk.emailFinderGetFile(fileId: "f", downloadPath: path, completion: saved(done)) }),
+            ("domainSearchGetFile", { done in sdk.domainSearchGetFile(fileId: "f", downloadPath: path, completion: saved(done)) }),
+            ("warmup downloadSeeds", { done in
+                warmup.downloadSeeds { result in
+                    switch result {
+                    case .Success(let text): done(nil, Data(text.utf8))
+                    case .Failure(let error): done(error, nil)
+                    }
+                }
+            }),
+            ("warmup downloadStatistics", { done in
+                warmup.downloadStatistics(cFrom: "s@example.com") { result in
+                    switch result {
+                    case .Success(let text): done(nil, Data(text.utf8))
+                    case .Failure(let error): done(error, nil)
+                    }
+                }
+            }),
+        ]
+    }
+
+    private func runDownload(_ name: String, _ call: (@escaping DownloadReport) -> ()) -> (Error?, Data?) {
+        var reported: (Error?, Data?) = (nil, nil)
+        let done = expectation(description: name)
+        call { error, data in
+            reported = (error, data)
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+        return reported
+    }
+
+    /// Padding (spaces, tabs, CR, LF, vertical tab, form feed, a BOM,
+    /// U+00A0), however long, before a JSON object or array or an HTML page,
+    /// or with nothing after it, is an error with status 200 and no file, on
+    /// all eight downloads; the file already there stays.
+    func testPaddingDoesNotHideAnErrorFromAnyDownload() throws {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("padding-key")
+        let calls = downloadCalls(sdk, warmup)
+        XCTAssertEqual(calls.count, 10)
+        let pathBased: Set<String> = ["getFileStreaming", "scoringGetFileStreaming", "emailFinderGetFile", "domainSearchGetFile"]
+        let bom = Data([0xEF, 0xBB, 0xBF])
+        let nbsp = Data([0xC2, 0xA0])
+        func repeated(_ unit: Data, _ count: Int) -> Data {
+            var out = Data()
+            for _ in 0..<count { out += unit }
+            return out
+        }
+        let json = Data(#"{"message":"File not found"}"#.utf8)
+        let html = Data("<html><title>Blocked</title></html>".utf8)
+        // A character cut by the 4096-byte probe: "é" is bytes 4095 and 4096.
+        let cut = Data("<html>".utf8) + Data(repeating: 0x61, count: 4089) + Data("é and more text".utf8)
+        let bodies: [(String, Data)] = [
+            ("64 spaces then JSON", repeated(Data(" ".utf8), 64) + json),
+            ("100 spaces then JSON", repeated(Data(" ".utf8), 100) + json),
+            ("5000 spaces then JSON", repeated(Data(" ".utf8), 5000) + json),
+            ("BOM then JSON", bom + json),
+            ("BOMs then JSON", repeated(bom, 2000) + json),
+            ("NBSP then JSON", nbsp + json),
+            ("3000 NBSP then JSON", repeated(nbsp, 3000) + json),
+            ("mixed padding then JSON", Data(" \t\r\n\u{0B}\u{0C}".utf8) + bom + nbsp + Data(" \n".utf8) + json),
+            ("padding then JSON array", repeated(Data(" ".utf8), 5000) + Data("[1,2,3]".utf8)),
+            ("5000 spaces then html", repeated(Data(" ".utf8), 5000) + html),
+            ("3000 NBSP then html", repeated(nbsp, 3000) + html),
+            ("a character cut at byte 4096", cut),
+            ("3000 spaces only", repeated(Data(" ".utf8), 3000)),
+            ("BOMs only", repeated(bom, 3000)),
+            ("NBSP only", repeated(nbsp, 3000)),
+            ("a BOM only", bom),
+        ]
+        for (what, body) in bodies {
+            scriptData(200, "text/csv", body)
+            for (name, call) in calls {
+                try Data("OLD".utf8).write(to: URL(fileURLWithPath: download))
+                let (error, data) = runDownload("\(what) \(name)", call)
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(what) \(name): \(describe(error)) \(data?.count ?? -1)")
+                if pathBased.contains(name) {
+                    XCTAssertEqual(try? Data(contentsOf: URL(fileURLWithPath: download)), Data("OLD".utf8), "\(what) \(name) changed the file")
+                }
+            }
+        }
+        try? FileManager.default.removeItem(atPath: download)
+    }
+
+    /// A real CSV is kept, byte for byte: one that starts with "[tag]", one
+    /// behind 3000 spaces (the spaces stay), one behind a BOM, and one that
+    /// is not UTF-8. The in-memory getFile does not drop the BOM or refuse
+    /// the bytes.
+    func testACsvIsSavedUnchangedOnEveryDownload() throws {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("csv-key")
+        let calls = downloadCalls(sdk, warmup)
+        let bodies: [(String, Data)] = [
+            ("starts with [tag]", Data("[tag],b\n1,2\n".utf8)),
+            ("3000 spaces then CSV", Data(String(repeating: " ", count: 3000).utf8) + Data("email\na@b.c\n".utf8)),
+            ("BOM then CSV", Data([0xEF, 0xBB, 0xBF]) + Data("email\na@b.c\n".utf8)),
+            ("not UTF-8", Data("email\n".utf8) + Data([0xE9, 0xFF, 0xFE]) + Data("\n".utf8)),
+        ]
+        for (what, body) in bodies {
+            scriptData(200, "text/csv", body)
+            for (name, call) in calls {
+                try? FileManager.default.removeItem(atPath: download)
+                let (error, data) = runDownload("\(what) \(name)", call)
+                XCTAssertNil(error, "\(what) \(name): \(describe(error))")
+                if name.hasPrefix("warmup") {
+                    // Warmup hands back text: a byte that is not UTF-8 reads
+                    // as U+FFFD, everything else is the body.
+                    XCTAssertEqual(data, Data(String(decoding: body, as: UTF8.self).utf8), "\(what) \(name)")
+                } else {
+                    XCTAssertEqual(data, body, "\(what) \(name)")
+                }
+            }
+        }
+        try? FileManager.default.removeItem(atPath: download)
+        let saved = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first.map {
+            ($0 as NSString).appendingPathComponent("SavedFiles/file_f.csv")
+        }
+        if let saved = saved { try? FileManager.default.removeItem(atPath: saved) }
+    }
+
+    /// A JSON error longer than the streaming probe is still the fixed
+    /// sentence, never a truncated body.
+    func testALongJsonErrorStaysTheFixedSentenceOnTheStreamingDownloads() {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("long-json-key")
+        let body = #"{"message":"\#(String(repeating: "x", count: 6000))"}"#
+        for pad in ["", String(repeating: " ", count: 5000)] {
+            scriptData(200, "text/csv", Data((pad + body).utf8))
+            for (name, call) in downloadCalls(sdk, warmup) where name.hasSuffix("Streaming") {
+                let (error, _) = runDownload("\(name) padded \(pad.count)", call)
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(name): \(describe(error))")
+                XCTAssertEqual(describe(error), "ZeroBounce returned a response that is not valid JSON.", name)
+            }
+        }
+    }
+
+    /// The HTML sniff is not narrowed: a `<html`, `<head` or `<body` tag in
+    /// the first 2000 characters after the padding is HTML.
+    func testTheHtmlSniffStillSeesTheFirst2000CharactersAfterThePadding() {
+        defer { clearScript() }
+        let (sdk, warmup) = clients("sniff-key")
+        let padding = String(repeating: " ", count: 3000)
+        for marker in ["<!DOCTYPE html>", "<html>", "<head>", "<body>"] {
+            scriptData(200, "text/csv", Data((padding + "email\n" + String(repeating: "a", count: 1900) + marker).utf8))
+            for (name, call) in downloadCalls(sdk, warmup) {
+                let (error, _) = runDownload("\(marker) \(name)", call)
+                XCTAssertEqual((error as? ZBError)?.statusCode, 200, "\(marker) \(name): \(describe(error))")
+            }
+        }
+    }
+
+    /// A gzip-decoded body is never compared with Content-Length: the
+    /// compressed-body exception in cutShortError stays.
+    func testACompressedBodyIsNotComparedWithContentLength() throws {
+        let url = URL(string: "https://example.com/x")!
+        let gzip = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
+            "Content-Length": "20", "Content-Encoding": "gzip",
+        ])
+        XCTAssertNil(ZeroBounceSDK.cutShortError(gzip, received: 100))
+        XCTAssertNil(ZeroBounceSDK.cutShortError(gzip, received: 5))
+        let plain = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: ["Content-Length": "20"])
+        XCTAssertNotNil(ZeroBounceSDK.cutShortError(plain, received: 5))
+        XCTAssertNil(ZeroBounceSDK.cutShortError(plain, received: 20))
     }
 }

@@ -74,20 +74,45 @@ public class ZeroBounceSDK {
         return true
     }
 
-    /// The URL without trailing slashes or surrounding whitespace.
+    /// What a base URL becomes when `normalizedBaseUrl` refuses it. The scheme
+    /// is not https, so `isAllowedURL` stops every request built on it before
+    /// anything is sent, and the text is fixed, so no error can quote the
+    /// rejected URL.
+    internal static let refusedBaseUrl = "refused://base-url-must-not-have-a-query-or-a-fragment"
+
+    /// The URL without trailing slashes or surrounding whitespace. A URL with
+    /// a `?` or a `#` is refused: every path and query the SDK appends would
+    /// land inside that query or fragment, and `URLComponents.queryItems`
+    /// would replace the query, so the request would miss its path. It comes
+    /// back as `refusedBaseUrl`.
     internal static func normalizedBaseUrl(_ url: String) -> String {
         var value = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.contains("?") || value.contains("#") { return refusedBaseUrl }
         while value.hasSuffix("/") { value.removeLast() }
         return value
     }
 
-    /// Whether a key is free of surrounding whitespace and control characters.
-    /// An empty key stays allowed: it is reported as `notInitialized` by the
-    /// first call that needs it.
+    /// Whether a key is free of surrounding whitespace and control
+    /// characters, of U+00A0, U+2028 and U+3000 in the middle, of U+180B
+    /// anywhere, and is not made of combining marks alone. An empty key stays
+    /// allowed: it is reported as `notInitialized` by the first call that
+    /// needs it.
     internal static func isCleanApiKey(_ apiKey: String) -> Bool {
         if apiKey.isEmpty { return true }
         if apiKey != apiKey.trimmingCharacters(in: .whitespacesAndNewlines) { return false }
-        return apiKey.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
+        var onlyMarks = true
+        for scalar in apiKey.unicodeScalars {
+            if CharacterSet.controlCharacters.contains(scalar) { return false }
+            switch scalar.value {
+            case 0x00A0, 0x2028, 0x3000, 0x180B: return false
+            default: break
+            }
+            switch scalar.properties.generalCategory {
+            case .nonspacingMark, .spacingMark, .enclosingMark: break
+            default: onlyMarks = false
+            }
+        }
+        return !onlyMarks
     }
 
     /// Refuses a URL that is not https, so the api_key is never put on the
@@ -192,44 +217,190 @@ public class ZeroBounceSDK {
     /// back.
     internal static let secretDecodeLayers = 4
 
-    /// `text` with every form of every secret replaced by "***". Redaction is
-    /// closed under encoding: when a view of the result decoded up to
-    /// `secretDecodeLayers` times (URL-decoding, "+" as a space,
-    /// JSON-unescaping, in any order) still holds a secret, the whole text is
-    /// replaced by `secretOmittedMessage`.
+    /// `text` with every form of every secret replaced by "***". Matching
+    /// folds both sides (see `folded`), so a key echoed in capitals is masked
+    /// too. Redaction is closed under encoding: when a view of the result
+    /// decoded up to `secretDecodeLayers` times (URL-decoding, "+" as a space,
+    /// JSON-unescaping, HTML-unescaping, in any order) still holds a secret,
+    /// the whole text is replaced by `secretOmittedMessage`.
     internal static func redacting(_ secrets: [String], in text: String) -> String {
-        let masked = secretForms(secrets).reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+        let masked = masking(secretForms(secrets), in: text)
         return revealsSecret(masked, secrets) ? secretOmittedMessage : masked
     }
 
+    /// A text reduced to what two spellings of the same characters share: the
+    /// scalars of its full case fold, canonically decomposed. Each scalar
+    /// keeps the span of the original scalars it came from, so a match can be
+    /// cut out of the original text.
+    internal struct FoldedText {
+        var scalars: [Unicode.Scalar] = []
+        /// For each folded scalar, the first original scalar of its
+        /// `Character` and one past the last.
+        var starts: [Int] = []
+        var ends: [Int] = []
+    }
+
+    /// The full case fold of one scalar, and not `lowercased()` alone:
+    /// "ß" is "ss", and "İ" (U+0130) is "i" plus U+0307. It is computed as
+    /// lowercase(uppercase(x)) until it settles, with the Unicode default
+    /// mappings and no locale ("ẞ" goes to "ß" and on to "ss"). Never
+    /// `localizedLowercase` and never a Turkish locale: the fold must not
+    /// depend on the device.
+    private static func foldedScalars(_ scalar: Unicode.Scalar) -> [Unicode.Scalar] {
+        var current = [scalar]
+        for _ in 0..<3 {
+            var next: [Unicode.Scalar] = []
+            for item in current {
+                for upper in item.properties.uppercaseMapping.unicodeScalars {
+                    next.append(contentsOf: upper.properties.lowercaseMapping.unicodeScalars)
+                }
+            }
+            if next == current { break }
+            current = next
+        }
+        return current
+    }
+
+    private static func asciiFolded(_ scalar: Unicode.Scalar) -> Unicode.Scalar {
+        (0x41...0x5A).contains(scalar.value) ? Unicode.Scalar(UInt8(scalar.value + 0x20)) : scalar
+    }
+
+    /// The fold of one `Character`, so that canonical equivalents agree: a
+    /// Hangul syllable and its jamo, "é" and "e" plus U+0301. A U+0307 right
+    /// after an "i" is dropped, so "İ" (folded to "i" plus U+0307), "i" plus
+    /// U+0307 and a plain "i" are one spelling: a server that echoes "İ" may
+    /// have lost the dot or kept it.
+    private static func foldedCharacter(_ character: Character) -> [Unicode.Scalar] {
+        var out: [Unicode.Scalar] = []
+        var plain = true
+        for scalar in character.unicodeScalars {
+            if !(0x4E00...0x9FFF).contains(scalar.value) { plain = false }
+            for item in foldedScalars(scalar) {
+                if item.value == 0x307, out.last?.value == 0x69 { continue }
+                out.append(item)
+            }
+        }
+        if plain { return out }
+        return Array(String(String.UnicodeScalarView(out)).decomposedStringWithCanonicalMapping.unicodeScalars)
+    }
+
+    internal static func folded(_ text: String) -> FoldedText {
+        var result = FoldedText()
+        result.scalars.reserveCapacity(text.utf8.count)
+        result.starts.reserveCapacity(text.utf8.count)
+        result.ends.reserveCapacity(text.utf8.count)
+        if text.utf8.allSatisfy({ $0 < 0x80 }) {
+            var index = 0
+            for scalar in text.unicodeScalars {
+                result.scalars.append(asciiFolded(scalar))
+                result.starts.append(index)
+                result.ends.append(index + 1)
+                index += 1
+            }
+            return result
+        }
+        var offset = 0
+        for character in text {
+            let width = character.unicodeScalars.count
+            let pieces: [Unicode.Scalar]
+            if character.isASCII {
+                pieces = character.unicodeScalars.map(asciiFolded)
+            } else {
+                pieces = foldedCharacter(character)
+            }
+            for piece in pieces {
+                result.scalars.append(piece)
+                result.starts.append(offset)
+                result.ends.append(offset + width)
+            }
+            offset += width
+        }
+        return result
+    }
+
+    /// Where `needle` starts in `haystack`, at every position, overlaps
+    /// included.
+    private static func occurrences(of needle: [Unicode.Scalar], in haystack: [Unicode.Scalar]) -> [Int] {
+        guard let first = needle.first, haystack.count >= needle.count else { return [] }
+        var found: [Int] = []
+        var start = 0
+        while start + needle.count <= haystack.count {
+            if haystack[start] == first {
+                var matches = true
+                var offset = 1
+                while offset < needle.count {
+                    if haystack[start + offset] != needle[offset] { matches = false; break }
+                    offset += 1
+                }
+                if matches { found.append(start) }
+            }
+            start += 1
+        }
+        return found
+    }
+
+    /// `text` with each match of a form replaced by "***". The forms and the
+    /// text are compared folded; a match that overlaps another is one mask,
+    /// and a match is cut out as whole `Character`s of the original, so no
+    /// part of a spelling is left behind.
+    internal static func masking(_ forms: [String], in text: String) -> String {
+        let needles = forms.map { folded($0).scalars }.filter { !$0.isEmpty }
+        guard !needles.isEmpty, !text.isEmpty else { return text }
+        let view = folded(text)
+        var ranges: [(start: Int, end: Int)] = []
+        for needle in needles {
+            for start in occurrences(of: needle, in: view.scalars) {
+                ranges.append((view.starts[start], view.ends[start + needle.count - 1]))
+            }
+        }
+        guard !ranges.isEmpty else { return text }
+        ranges.sort { $0.start < $1.start || ($0.start == $1.start && $0.end > $1.end) }
+        var merged: [(start: Int, end: Int)] = []
+        for range in ranges {
+            if let last = merged.last, range.start < last.end {
+                merged[merged.count - 1].end = max(last.end, range.end)
+            } else {
+                merged.append(range)
+            }
+        }
+        var out = String.UnicodeScalarView()
+        var index = 0
+        var next = 0
+        for scalar in text.unicodeScalars {
+            if next < merged.count, index == merged[next].start {
+                out.append(contentsOf: "***".unicodeScalars)
+            }
+            if next < merged.count, index >= merged[next].start, index < merged[next].end {
+                index += 1
+                if index == merged[next].end { next += 1 }
+                continue
+            }
+            out.append(scalar)
+            index += 1
+        }
+        return String(out)
+    }
+
     /// Whether a secret can be read in `text` or in any view of it decoded
-    /// up to `secretDecodeLayers` times: URL-decoded, form-decoded ("+" as a space too) and
-    /// JSON-unescaped (`\/` and `\uXXXX` included), in any order.
+    /// up to `secretDecodeLayers` times: URL-decoded, form-decoded ("+" as a space too),
+    /// JSON-unescaped (`\/`, `\uXXXX`, `\u{X}`, `\UXXXX`, `\UXXXXXXXX` and
+    /// three-digit octal `\NNN` included) and HTML-unescaped (named and
+    /// numeric entities), in any order. `%u0027` is not decoded. Both sides
+    /// are folded, so a key in other letter case is read too.
     internal static func revealsSecret(_ text: String, _ secrets: [String]) -> Bool {
-        let needles = secrets.filter { !$0.isEmpty }.map { Array($0.utf8) }
+        let needles = secrets.filter { !$0.isEmpty }.map { folded($0).scalars }.filter { !$0.isEmpty }
         guard !needles.isEmpty else { return false }
         func search(_ bytes: [UInt8], _ layers: Int) -> Bool {
-            if needles.contains(where: { containsBytes(bytes, $0) }) { return true }
-            guard layers > 0, bytes.contains(where: { $0 == 0x25 || $0 == 0x2B || $0 == 0x5C }) else { return false }
+            let view = folded(String(decoding: bytes, as: UTF8.self)).scalars
+            if needles.contains(where: { !occurrences(of: $0, in: view).isEmpty }) { return true }
+            guard layers > 0, bytes.contains(where: { $0 == 0x25 || $0 == 0x2B || $0 == 0x5C || $0 == 0x26 }) else { return false }
             for view in [percentDecoded(bytes, plusAsSpace: false), percentDecoded(bytes, plusAsSpace: true),
-                         jsonUnescaped(bytes)] where view != bytes {
+                         jsonUnescaped(bytes), htmlUnescaped(bytes)] where view != bytes {
                 if search(view, layers - 1) { return true }
             }
             return false
         }
         return search(Array(text.utf8), secretDecodeLayers)
-    }
-
-    private static func containsBytes(_ haystack: [UInt8], _ needle: [UInt8]) -> Bool {
-        guard !needle.isEmpty, haystack.count >= needle.count else { return false }
-        var start = 0
-        while start + needle.count <= haystack.count {
-            if haystack[start] == needle[0] && Array(haystack[start..<start + needle.count]) == needle {
-                return true
-            }
-            start += 1
-        }
-        return false
     }
 
     private static func hexValue(_ byte: UInt8) -> UInt8? {
@@ -261,17 +432,51 @@ public class ZeroBounceSDK {
         return out
     }
 
-    private static func hex4(_ bytes: [UInt8], _ at: Int) -> UInt32? {
-        guard at + 4 <= bytes.count else { return nil }
+    /// `count` hex digits at `at`, as a number.
+    private static func hexDigits(_ bytes: [UInt8], _ at: Int, _ count: Int) -> UInt32? {
+        guard at + count <= bytes.count else { return nil }
         var value: UInt32 = 0
-        for byte in bytes[at..<at + 4] {
+        for byte in bytes[at..<at + count] {
             guard let digit = hexValue(byte) else { return nil }
             value = value << 4 | UInt32(digit)
         }
         return value
     }
 
-    /// JSON string escapes undone; anything else is kept.
+    private static func hex4(_ bytes: [UInt8], _ at: Int) -> UInt32? {
+        hexDigits(bytes, at, 4)
+    }
+
+    /// `{`, 1 to 6 hex digits and `}` at `at`: the value and how many bytes
+    /// it took.
+    private static func bracedCode(_ bytes: [UInt8], _ at: Int) -> (code: UInt32, length: Int)? {
+        guard at < bytes.count, bytes[at] == 0x7B else { return nil }
+        var value: UInt32 = 0
+        var digits = 0
+        var i = at + 1
+        while i < bytes.count, let digit = hexValue(bytes[i]), digits < 6 {
+            value = value << 4 | UInt32(digit)
+            digits += 1
+            i += 1
+        }
+        guard digits > 0, i < bytes.count, bytes[i] == 0x7D else { return nil }
+        return (value, i + 1 - at)
+    }
+
+    private static func appendScalar(_ code: UInt32, to out: inout [UInt8]) {
+        if let scalar = Unicode.Scalar(code) {
+            out.append(contentsOf: Array(String(Character(scalar)).utf8))
+        } else {
+            out.append(contentsOf: Array("\u{FFFD}".utf8))
+        }
+    }
+
+    /// JSON string escapes undone, and the other ways a program writes a
+    /// character in a string literal; anything else is kept. `\u` plus four
+    /// hex digits (a surrogate pair as one character), `\u{X}` and `\U{X}`
+    /// with 1 to 6 digits, `\UXXXX`, `\UXXXXXXXX` (when the eight digits are
+    /// a valid code point, otherwise the first four) and `\NNN` with exactly
+    /// three octal digits. `%u0027` is not an escape of any of these.
     private static func jsonUnescaped(_ bytes: [UInt8]) -> [UInt8] {
         let simple: [UInt8: UInt8] = [0x22: 0x22, 0x5C: 0x5C, 0x2F: 0x2F, 0x62: 0x08, 0x66: 0x0C,
                                       0x6E: 0x0A, 0x72: 0x0D, 0x74: 0x09]
@@ -284,27 +489,104 @@ public class ZeroBounceSDK {
                 i += 1
                 continue
             }
-            if let decoded = simple[bytes[i + 1]] {
+            let marker = bytes[i + 1]
+            if let decoded = simple[marker] {
                 out.append(decoded)
                 i += 2
                 continue
             }
-            guard bytes[i + 1] == 0x75, var code = hex4(bytes, i + 2) else {
+            if marker == 0x75 || marker == 0x55 {
+                if let braced = bracedCode(bytes, i + 2) {
+                    appendScalar(braced.code, to: &out)
+                    i += 2 + braced.length
+                    continue
+                }
+                if marker == 0x55, let wide = hexDigits(bytes, i + 2, 8), Unicode.Scalar(wide) != nil {
+                    appendScalar(wide, to: &out)
+                    i += 10
+                    continue
+                }
+                if var code = hex4(bytes, i + 2) {
+                    i += 6
+                    if (0xD800...0xDBFF).contains(code), i + 1 < bytes.count, bytes[i] == 0x5C, bytes[i + 1] == 0x75,
+                       let low = hex4(bytes, i + 2), (0xDC00...0xDFFF).contains(low) {
+                        code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
+                        i += 6
+                    }
+                    appendScalar(code, to: &out)
+                    continue
+                }
+            }
+            if i + 3 < bytes.count, (0x30...0x37).contains(marker),
+               (0x30...0x37).contains(bytes[i + 2]), (0x30...0x37).contains(bytes[i + 3]) {
+                let code = UInt32(marker - 0x30) << 6 | UInt32(bytes[i + 2] - 0x30) << 3 | UInt32(bytes[i + 3] - 0x30)
+                appendScalar(code, to: &out)
+                i += 4
+                continue
+            }
+            out.append(bytes[i])
+            i += 1
+        }
+        return out
+    }
+
+    /// The named references that stand for a character a server may escape.
+    /// Names are matched in any case.
+    private static let htmlNamedReferences: [String: UInt32] = [
+        "apos": 0x27, "quot": 0x22, "amp": 0x26, "lt": 0x3C, "gt": 0x3E, "grave": 0x60,
+        "plus": 0x2B, "sol": 0x2F, "bsol": 0x5C, "num": 0x23, "percnt": 0x25, "nbsp": 0xA0
+    ]
+
+    /// HTML character references undone: named ones (`&apos;`, in any case)
+    /// and numeric ones, decimal or hex (`&#39;`, `&#x27;`, `&#X27;`). A
+    /// numeric reference takes all the digits that follow, and its semicolon
+    /// may be missing; a named one needs its semicolon. A reference that is
+    /// not a valid character is kept.
+    private static func htmlUnescaped(_ bytes: [UInt8]) -> [UInt8] {
+        var out: [UInt8] = []
+        out.reserveCapacity(bytes.count)
+        var i = 0
+        while i < bytes.count {
+            guard bytes[i] == 0x26, i + 1 < bytes.count else {
                 out.append(bytes[i])
                 i += 1
                 continue
             }
-            i += 6
-            if (0xD800...0xDBFF).contains(code), i + 1 < bytes.count, bytes[i] == 0x5C, bytes[i + 1] == 0x75,
-               let low = hex4(bytes, i + 2), (0xDC00...0xDFFF).contains(low) {
-                code = 0x10000 + ((code - 0xD800) << 10) + (low - 0xDC00)
-                i += 6
-            }
-            if let scalar = Unicode.Scalar(code) {
-                out.append(contentsOf: Array(String(Character(scalar)).utf8))
+            if bytes[i + 1] == 0x23 {
+                var j = i + 2
+                var radix: UInt32 = 10
+                if j < bytes.count, bytes[j] == 0x78 || bytes[j] == 0x58 {
+                    radix = 16
+                    j += 1
+                }
+                let digitsStart = j
+                var value: UInt32 = 0
+                while j < bytes.count, let digit = hexValue(bytes[j]), UInt32(digit) < radix {
+                    value = min(value * radix + UInt32(digit), 0x110000)
+                    j += 1
+                }
+                if j > digitsStart, value != 0, Unicode.Scalar(value) != nil {
+                    appendScalar(value, to: &out)
+                    i = j
+                    if i < bytes.count, bytes[i] == 0x3B { i += 1 }
+                    continue
+                }
             } else {
-                out.append(contentsOf: Array("\u{FFFD}".utf8))
+                var j = i + 1
+                var name: [UInt8] = []
+                while j < bytes.count, j - i <= 9,
+                      (0x30...0x39).contains(bytes[j]) || (0x41...0x5A).contains(bytes[j]) || (0x61...0x7A).contains(bytes[j]) {
+                    name.append((0x41...0x5A).contains(bytes[j]) ? bytes[j] + 0x20 : bytes[j])
+                    j += 1
+                }
+                if j < bytes.count, bytes[j] == 0x3B, let code = htmlNamedReferences[String(decoding: name, as: UTF8.self)] {
+                    appendScalar(code, to: &out)
+                    i = j + 1
+                    continue
+                }
             }
+            out.append(bytes[i])
+            i += 1
         }
         return out
     }
@@ -317,7 +599,7 @@ public class ZeroBounceSDK {
         guard !forms.isEmpty else { return error }
         var changed = false
         func clean(_ text: String) -> String {
-            var cleaned = forms.reduce(text) { $0.replacingOccurrences(of: $1, with: "***") }
+            var cleaned = masking(forms, in: text)
             if revealsSecret(cleaned, secrets) {
                 cleaned = secretOmittedMessage
             }
@@ -382,6 +664,49 @@ public class ZeroBounceSDK {
             NSLocalizedDescriptionKey: "The network connection was lost: the response ended after "
                 + "\(received) of the \(http.expectedContentLength) bytes it announced."
         ])
+    }
+
+    /// How much of a download is read after its padding to tell a file from
+    /// an error page.
+    private static let downloadProbeLength = 4096
+    /// How much is read when the file starts with "[", to tell a JSON array
+    /// from a CSV line that starts with one.
+    private static let downloadArrayProbeLength = 1 << 20
+
+    /// The start of the file at `location` after its padding (spaces, tabs,
+    /// line breaks, BOMs, U+00A0): up to 4096 bytes, or more when it starts
+    /// with "[". Empty when the file is empty or only padding. The padding is
+    /// skipped in chunks in the temporary file, so it never has to fit a
+    /// window, and a padding sequence cut by a chunk end is read again whole.
+    internal static func downloadProbe(at location: URL) -> Data {
+        guard let handle = try? FileHandle(forReadingFrom: location) else { return Data() }
+        defer { try? handle.close() }
+        let chunkLength = 65536
+        var offset: UInt64 = 0
+        while true {
+            guard (try? handle.seek(toOffset: offset)) != nil,
+                  let chunk = try? handle.read(upToCount: chunkLength), !chunk.isEmpty else {
+                return Data()
+            }
+            let padding = ZBError.paddingLength(chunk)
+            offset += UInt64(padding)
+            if padding == chunk.count {
+                continue
+            }
+            if chunk.count == chunkLength, ZBError.isPartialPadding(chunk.dropFirst(padding)) {
+                continue
+            }
+            break
+        }
+        guard (try? handle.seek(toOffset: offset)) != nil,
+              let head = try? handle.read(upToCount: downloadProbeLength), !head.isEmpty else {
+            return Data()
+        }
+        guard head.first == 0x5B, head.count == downloadProbeLength,
+              let more = try? handle.read(upToCount: downloadArrayProbeLength - downloadProbeLength) else {
+            return head
+        }
+        return head + more
     }
 
     internal static func isAllowedURL(_ url: URL) -> Bool {
@@ -1573,12 +1898,9 @@ public class ZeroBounceSDK {
             }
 
             // Enough to tell a file from an error page, without reading the
-            // whole download back into memory.
-            let probe = (try? FileHandle(forReadingFrom: location))
-                .map { handle -> Data in
-                    defer { try? handle.close() }
-                    return (try? handle.read(upToCount: 4096)) ?? Data()
-                } ?? Data()
+            // whole download back into memory: the start of the file after
+            // its padding, however long that is.
+            let probe = ZeroBounceSDK.downloadProbe(at: location)
 
             if 300..<400 ~= statusCode {
                 completion(.Failure(ZBError.httpError(
@@ -1668,13 +1990,10 @@ public class ZeroBounceSDK {
                 }
                 
                 let fileName = (response.suggestedFilename != nil) ? response.suggestedFilename! : "file_\(fileId).csv"
-                guard let text = String(data: data, encoding: .utf8) else {
-                    completion(.Failure(ZBError.noData))
-                    return
-                }
-                
+                // The bytes as they came: a BOM stays, and a file that is not
+                // UTF-8 is still the file.
                 print("Zero Bounce SDK getFile fileName=\(fileName)")
-                ZBFileManager.writeFile(text: text, to: fileName) { writeResult in
+                ZBFileManager.writeFile(data: data, to: fileName) { writeResult in
                     switch writeResult {
                     case .success(let path):
                         completion(.Success(ZBGetFileResponse(localFilePath: path)))
@@ -1796,9 +2115,14 @@ public class ZeroBounceSDK {
                     completion(.Failure(failure))
                     return
                 }
-                // The email-finder and domain-search answers: a message-only body
-                // is an error whatever its value (standard E3), by its keys.
-                if messageOnly, let failure = ZBError.messageOnlyFailure(data, statusCode: statusCode) {
+                // An answer with no result in it - `{}`, a message-only body, a
+                // message beside only nulls - is an error whatever the message
+                // is (standard E3), by its keys. Read for the file jobs, activity,
+                // score, usage, batch, finder and domain search; not for
+                // validate, credits, the filters, Inbox Placement or the list
+                // evaluator.
+                if messageOnly || ZBError.readsMessageOnly(T.self),
+                   let failure = ZBError.messageOnlyFailure(data, statusCode: statusCode) {
                     completion(.Failure(failure))
                     return
                 }
@@ -2242,6 +2566,37 @@ public class ZeroBounceSDK {
                 completion(.Failure(error))
             }
         }
+    }
+}
+
+extension ZBFileManager {
+    /// As `writeFile(text:to:folder:result:)`, for the bytes of a download
+    /// exactly as they arrived (a BOM kept, no UTF-8 needed).
+    internal static func writeFile(data: Data, to fileNamed: String, folder: String = "SavedFiles", result: @escaping (WriteFileResult) -> ()) {
+        guard let path = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true).first else {
+            result(.failure(ZBError.saveFileError(message: "Cannot access downloads directory")))
+            return
+        }
+        let writePath = URL(fileURLWithPath: path).appendingPathComponent(folder)
+        do {
+            try FileManager.default.createDirectory(atPath: writePath.path, withIntermediateDirectories: true)
+        } catch {
+            result(.failure(ZBError.saveFileError(message: "Cannot create directory \(writePath.path)")))
+            return
+        }
+        let safeName = (fileNamed as NSString).lastPathComponent
+        guard !safeName.isEmpty, safeName != ".", safeName != "..", safeName != "/" else {
+            result(.failure(ZBError.saveFileError(message: "Invalid file name")))
+            return
+        }
+        let file = writePath.appendingPathComponent(safeName)
+        do {
+            try replaceFile(at: file, with: data)
+        } catch {
+            result(.failure(ZBError.saveFileError(message: "Cannot write to file \(file.path)")))
+            return
+        }
+        result(.success(file.path))
     }
 }
 

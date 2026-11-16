@@ -28,7 +28,7 @@ extension ZBDeleteFileResponse {
     /// Declared in an extension so the memberwise initializer is kept.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        success = try container.decodeIfPresent(Bool.self, forKey: .success)
+        success = try container.decodeSuccessFlag(forKey: .success)
         message = try container.decodeFileMessage(forKey: .message)
         fileName = try container.decodeNullAsEmpty(String.self, forKey: .fileName, empty: "")
         fileId = try container.decodeNullAsEmpty(String.self, forKey: .fileId, empty: "")
