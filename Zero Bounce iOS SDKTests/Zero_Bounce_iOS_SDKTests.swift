@@ -3978,6 +3978,186 @@ final class TransportSafetyTests: XCTestCase {
         XCTAssertEqual((credits as? URLError)?.failingURL?.path, "/v2/getcredits")
     }
 
+    // MARK: Base URLs, multipart fields, download permissions
+
+    private static let dirtyBaseUrls = [
+        "https://user:pw@evil.example", "https://evil.example@good.example/v2",
+        "https://evil.example\\@good.example", "https://good.example\\v2",
+        "https://g\u{F6}\u{F6}d.example/v2", "https://good%2eexample/v2", "https://good.example%2f/v2",
+        "https://good.example/v2%2fx", "https://good.example/%5cv2", "https://good.example/a/../b",
+        "https://good.example/a/%2e%2E/b", "https://good.example/./v2", "https://good.example/v2/%2e",
+        "https://good.\u{200B}example/v2", "https://good.example/v\u{202E}2", "https://good.example/v2\u{FEFF}x",
+        "https://good.example/v2\u{3164}", "https://good.example/v 2", "https://good.example/v2\r\nX: y",
+        "https://good.example/v\u{0}2", "https://good.example/v2\u{FFFD}", "https://good.example/\u{A0}v2",
+        "https://", "https:///v2", "https://:443/v2", "https://[]/v2", "good.example/v2",
+        "ftp://good.example/v2", "//good.example/v2", "https:good.example", "https://good.example?x=1",
+        "https://good.example#x",
+    ]
+
+    func testNormalizedBaseUrlRefusesEveryDirtyForm() {
+        for url in TransportSafetyTests.dirtyBaseUrls {
+            XCTAssertEqual(ZeroBounceSDK.normalizedBaseUrl(url), ZeroBounceSDK.refusedBaseUrl, url)
+        }
+        // Clean ones, loopback included, stay.
+        for url in ["https://good.example", "https://good.example:8443/v2", "HTTPS://Good.Example/v2",
+                    "http://127.0.0.1:8080", "http://localhost/api", "http://[::1]:9/v2",
+                    "https://good.example/a%20b/c"] {
+            XCTAssertEqual(ZeroBounceSDK.normalizedBaseUrl(url), url, url)
+        }
+        XCTAssertEqual(ZeroBounceSDK.normalizedBaseUrl("https://good.example/v2///"), "https://good.example/v2")
+    }
+
+    func testEverySetterRefusesADirtyBaseUrlAndEveryCallStopsBeforeSending() {
+        for url in ["https://user:pw@evil.example/v2", "https://good.example/v2\\x", "https://g\u{F6}\u{F6}d.example",
+                    "https://good.example/v2%2f..", "https://good.example/v\u{200B}2", "https://"] {
+            let (sdk, warmup) = clients("dirty-url-key")
+            sdk.apiBaseUrl = url
+            sdk.bulkApiRootUrl = url
+            sdk.bulkApiBaseUrl = url
+            sdk.setListEvaluatorBaseUrl(url)
+            sdk.setInboxPlacementBaseUrl(url)
+            warmup.baseUrl = url
+            XCTAssertEqual(sdk.apiBaseUrl, ZeroBounceSDK.refusedBaseUrl)
+            XCTAssertEqual(sdk.bulkApiRootUrl, ZeroBounceSDK.refusedBaseUrl)
+            XCTAssertEqual(sdk.bulkApiBaseUrl, ZeroBounceSDK.refusedBaseUrl)
+            XCTAssertEqual(sdk.listEvaluatorBaseUrl, ZeroBounceSDK.refusedBaseUrl)
+            XCTAssertEqual(sdk.inboxPlacementBaseUrl, ZeroBounceSDK.refusedBaseUrl)
+            XCTAssertEqual(warmup.baseUrl, ZeroBounceSDK.refusedBaseUrl)
+            for (name, call) in everyCall(sdk, warmup) {
+                let (error, sent) = run(name, call)
+                XCTAssertEqual(sent.count, 0, "\(name) sent a request on \(url)")
+                XCTAssertNotNil(error, name)
+                let text = describe(error)
+                XCTAssertTrue(text.contains("https://"), "\(name): \(text)")
+                XCTAssertFalse(text.contains("evil") || text.contains("good") || text.contains("dirty-url-key"), "\(name): \(text)")
+            }
+        }
+    }
+
+    func testIsAllowedUrlNeedsAHost() {
+        XCTAssertFalse(ZeroBounceSDK.isAllowedURL(URL(string: "https:///v2")!))
+        XCTAssertTrue(ZeroBounceSDK.isAllowedURL(URL(string: "https://good.example/v2")!))
+        XCTAssertTrue(ZeroBounceSDK.isAllowedURL(URL(string: "http://127.0.0.1:1/v2")!))
+    }
+
+    func testMultipartRefusesCrLfNulAndQuotesBeforeSending() {
+        let csv = Data("email\na@example.com\n".utf8)
+        let bad = ["a\r\nX-Injected: 1", "a\nb", "a\rb", "a\u{0}b"]
+        for value in bad {
+            XCTAssertThrowsError(try ZBMultiPartRequest.createFileRequestWithData(
+                url: "https://good.example/v2/sendfile", parameters: ["return_url": value],
+                filePathKey: "file", fileData: csv, fileName: "f.csv"), value)
+            XCTAssertThrowsError(try ZBMultiPartRequest.createFileRequestWithData(
+                url: "https://good.example/v2/sendfile", parameters: [value: "x"],
+                filePathKey: "file", fileData: csv, fileName: "f.csv"), value)
+            XCTAssertThrowsError(try ZBMultiPartRequest.createFileRequestWithData(
+                url: "https://good.example/v2/sendfile", parameters: nil,
+                filePathKey: "file", fileData: csv, fileName: value), value)
+            XCTAssertThrowsError(try ZBMultiPartRequest.createFileRequestWithData(
+                url: "https://good.example/v2/sendfile", parameters: nil,
+                filePathKey: value, fileData: csv, fileName: "f.csv"), value)
+        }
+        XCTAssertThrowsError(try ZBMultiPartRequest.createFileRequestWithData(
+            url: "https://good.example/v2/sendfile", parameters: nil,
+            filePathKey: "file", fileData: csv, fileName: "a\"; x=\".csv"))
+        // The file-path variant: a quote in the last path component.
+        let quoted = NSTemporaryDirectory() + "zb-q\"uote.csv"
+        try? csv.write(to: URL(fileURLWithPath: quoted))
+        defer { try? FileManager.default.removeItem(atPath: quoted) }
+        XCTAssertThrowsError(try ZBMultiPartRequest.createFileRequest(
+            url: "https://good.example/v2/sendfile", parameters: nil, filePathKey: "file", paths: [quoted]))
+        XCTAssertThrowsError(try ZBMultiPartRequest.createFileRequest(
+            url: "https://good.example/v2/sendfile", parameters: ["a": "x\ny"], filePathKey: "file", paths: [csvPath]))
+        // A clean upload still builds, with the content type from the extension.
+        let ok = try? ZBMultiPartRequest.createFileRequestWithData(
+            url: "https://good.example/v2/sendfile", parameters: ["a": "b"],
+            filePathKey: "file", fileData: csv, fileName: "f.csv")
+        let text = String(data: ok?.httpBody ?? Data(), encoding: .utf8) ?? ""
+        XCTAssertTrue(text.contains("filename=\"f.csv\""), text)
+        XCTAssertTrue(text.contains("Content-Type: text/csv"), text)
+        let noExt = try? ZBMultiPartRequest.createFileRequestWithData(
+            url: "https://good.example/v2/sendfile", parameters: nil,
+            filePathKey: "file", fileData: csv, fileName: "noextension")
+        XCTAssertTrue((String(data: noExt?.httpBody ?? Data(), encoding: .utf8) ?? "").contains("Content-Type: text/csv"))
+    }
+
+    func testPublicUploadsRefuseAHeaderInjectionBeforeSending() {
+        let (sdk, _) = clients("upload-key")
+        let csv = Data("email\na@example.com\n".utf8)
+        let calls: [(String, (@escaping Report) -> ())] = [
+            ("sendFile returnUrl", { r in sdk.sendFile(fileData: csv, fileName: "f.csv", emailAddressColumn: 1,
+                returnUrl: "https://x.example/\r\nX: y") { r(self.err($0)) } }),
+            ("sendFile fileName", { r in sdk.sendFile(fileData: csv, fileName: "f\".csv", emailAddressColumn: 1) { r(self.err($0)) } }),
+            ("sendFile path", { r in sdk.sendFile(filePath: self.csvPath, emailAddressColumn: 1,
+                returnUrl: "a\nb") { r(self.err($0)) } }),
+        ]
+        for (name, call) in calls {
+            let (error, sent) = run(name, call)
+            XCTAssertEqual(sent.count, 0, name)
+            XCTAssertNotNil(error, name)
+            XCTAssertFalse(describe(error).contains("upload-key"), name)
+        }
+    }
+
+    func testTheTemporaryDownloadFileIsNeverMorePermissiveThanTheTarget() throws {
+        let dir = NSTemporaryDirectory() + "zb-perm-\(UUID().uuidString)"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir); ZBFileManager.afterTemporaryCreated = nil }
+        let target = URL(fileURLWithPath: dir + "/out.csv")
+        let source = URL(fileURLWithPath: dir + "/source.tmp")
+        func mode(_ url: URL) -> Int {
+            ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.posixPermissions] as? NSNumber)?.intValue ?? -1
+        }
+        for write in 0..<2 {
+            try Data("old".utf8).write(to: target)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
+            var seen: [Int] = []
+            var sizes: [Int] = []
+            ZBFileManager.afterTemporaryCreated = { temporary in
+                seen.append(mode(temporary))
+                sizes.append((try? FileManager.default.attributesOfItem(atPath: temporary.path))?[.size] as? Int ?? -1)
+            }
+            if write == 0 {
+                try ZBFileManager.replaceFile(at: target, with: Data("new content".utf8))
+            } else {
+                try Data("new content".utf8).write(to: source)
+                try ZBFileManager.replaceFile(at: target, withContentsOf: source)
+                XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+            }
+            XCTAssertEqual(seen, [0o600], "variant \(write)")
+            XCTAssertEqual(sizes, [0], "variant \(write): no data before the mode is set")
+            XCTAssertEqual(mode(target), 0o600)
+            XCTAssertEqual(try String(contentsOf: target), "new content")
+        }
+        // No existing target: the default creation mode (0666 minus the umask).
+        let fresh = URL(fileURLWithPath: dir + "/fresh.csv")
+        var freshMode = -1
+        ZBFileManager.afterTemporaryCreated = { freshMode = mode($0) }
+        try ZBFileManager.replaceFile(at: fresh, with: Data("x".utf8))
+        XCTAssertEqual(freshMode, mode(fresh))
+        XCTAssertEqual(freshMode & 0o111, 0)
+        // A 0640 target keeps 0640, never wider while writing.
+        let wide = URL(fileURLWithPath: dir + "/wide.csv")
+        try Data("old".utf8).write(to: wide)
+        try FileManager.default.setAttributes([.posixPermissions: 0o640], ofItemAtPath: wide.path)
+        var wideMode = -1
+        ZBFileManager.afterTemporaryCreated = { wideMode = mode($0) }
+        try ZBFileManager.replaceFile(at: wide, with: Data("y".utf8))
+        XCTAssertEqual(wideMode, 0o640)
+        XCTAssertEqual(mode(wide), 0o640)
+    }
+
+    func testAWarmupTransportErrorIsTheUrlErrorNotDecodeErrorText() {
+        ZeroBounceSDK.urlSession = ZeroBounceSDK.makeSession()
+        let (_, warmup) = clients("warm-transport-key")
+        warmup.baseUrl = "http://127.0.0.1:1"
+        let (error, _) = run("getSeeds") { r in warmup.getSeeds { r(self.err($0)) } }
+        XCTAssertEqual((error as? URLError)?.code, .cannotConnectToHost, "\(String(describing: error))")
+        XCTAssertFalse(mentions(error as Any, "warm-transport-key"))
+        let (csvError, _) = run("downloadSeeds") { r in warmup.downloadSeeds { r(self.err($0)) } }
+        XCTAssertEqual((csvError as? URLError)?.code, .cannotConnectToHost)
+    }
+
     private func mentions(_ value: Any, _ key: String) -> Bool {
         if let error = value as? NSError {
             return "\(error)".contains(key) || error.localizedDescription.contains(key)
@@ -6232,7 +6412,7 @@ extension TransportSafetyTests {
     // MARK: URL builders
 
     /// A base URL that does not make a URL ends the call with
-    /// `invalidEndpoint`; it does not crash the process, whatever the call.
+    /// `invalidEndpoint` or the refusal of the base URL; it does not crash the process, whatever the call.
     func testAnUnbuildableBaseUrlIsInvalidEndpointNotACrash() {
         defer { clearFileScript() }
         let (sdk, warmup) = clients("bad-base-key")
@@ -6255,6 +6435,8 @@ extension TransportSafetyTests {
                 continue
             }
             if case .invalidEndpoint = failure { continue }
+            // An unclosed bracket is refused up front, before a URL is built.
+            if case .decodeError(let messages) = failure, messages == [ZeroBounceSDK.refusedUrlText] { continue }
             XCTFail("\(name): \(failure)")
         }
     }

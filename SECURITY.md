@@ -16,6 +16,6 @@ We focus on the current release line for fixes. Using the latest release is reco
 
 * Don't commit API keys or `.env` files—use environment variables or a secrets manager.
 * Keep dependencies up to date and upgrade when new versions are released.
-* The client uses HTTPS by default; avoid overriding to non-HTTPS in production.
+* The client uses HTTPS by default and refuses a base URL that is not `https://` (an `http://` URL to a loopback host, for local test stubs, is the only exception); a refused call fails before anything is sent.
 
 Thanks for helping keep things secure.

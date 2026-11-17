@@ -379,6 +379,179 @@ class SecretRedactionTests: XCTestCase {
         XCTAssertFalse(text.contains("sdk-key-1"), text)
     }
 
+    // MARK: Redaction and error text (fixer J)
+
+    /// What a masked error text may never hold: the key, in any case.
+    private func assertNoLeak(_ text: String, _ key: String, _ note: String = "", file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertFalse(text.lowercased().contains(key.lowercased()), "leak: \(note) \(text.prefix(200))", file: file, line: line)
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret(text, [key]), "reveals: \(note)", file: file, line: line)
+    }
+
+    func testAnHtmlTitleIsFoundOnTheOriginalTextWhateverLowercasingDoesToIt() {
+        let key = "zb-dummy-key-ABCDEFGH12345678abcd"
+        let paddings = ["", "\u{130}", String(repeating: "\u{130}", count: 50), "\u{212A}",
+                        String(repeating: "\u{212A}", count: 4), "\u{DF}", "e\u{301}\u{323}",
+                        String(repeating: "\u{130}\u{212A}\u{DF}e\u{301}", count: 40)]
+        let shapes: [(String) -> String] = [
+            { "<html><head><title>\($0)</title></head></html>" },
+            { "<html><head><TITLE>\($0)</TITLE></head></html>" },
+            { "<html><head><TiTlE id=\"a\" class='b'>\($0)</tItLe></head></html>" },
+            { "<html><head><title>\($0)" },
+            { "<html><head><title \($0)" },
+            { "<html><head><title>" + $0 + "</title" },
+        ]
+        for before in paddings {
+            for inside in paddings {
+                for after in paddings {
+                    for shape in shapes {
+                        let body = before + shape(inside + key + inside) + after
+                        let message = ZBError.message(from: Data(body.utf8), statusCode: 502)
+                        assertNoLeak(ZeroBounceSDK.redacting([key], in: message), key)
+                    }
+                }
+            }
+        }
+    }
+
+    func testAnHtmlTitleKeepsItsTextAndTheKeyInItIsMaskedWhole() {
+        let key = "zb-dummy-key-ABCDEFGH12345678abcd"
+        let body = String(repeating: "\u{130}", count: 4) + "<html><head><title> Bad key \(key) </title></head></html>"
+        let message = ZBError.message(from: Data(body.utf8), statusCode: 502)
+        XCTAssertEqual(message, "ZeroBounce returned an HTML error page (\"Bad key \(key)\") instead of an API response.")
+        XCTAssertEqual(ZeroBounceSDK.redacting([key], in: message),
+                       "ZeroBounce returned an HTML error page (\"Bad key ***\") instead of an API response.")
+        XCTAssertEqual(ZBError.message(from: Data("<html><TITLE>Oops</TITLE></html>".utf8), statusCode: 502),
+                       "ZeroBounce returned an HTML error page (\"Oops\") instead of an API response.")
+        XCTAssertEqual(ZBError.message(from: Data("<html><title>Oops".utf8), statusCode: 502),
+                       "ZeroBounce returned an HTML error page instead of an API response.")
+    }
+
+    func testByteEscapesAreUtf8BytesAndANonAsciiKeyEchoedThatWayIsMasked() {
+        let key = "ab\u{E9}cd\u{65E5}\u{672C}k9"
+        let spellings = ["ab\\xc3\\xa9cd\\xe6\\x97\\xa5\\xe6\\x9c\\xack9", "ab\\xC3\\xA9cd\\xE6\\x97\\xA5\\xE6\\x9C\\xACk9",
+                         "ab\\303\\251cd\\346\\227\\245\\346\\234\\254k9"]
+        for spelling in spellings {
+            XCTAssertTrue(ZeroBounceSDK.revealsSecret(spelling, [key]), spelling)
+            XCTAssertEqual(ZeroBounceSDK.redacting([key], in: "bad key: \(spelling)!"),
+                           ZeroBounceSDK.secretOmittedMessage, spelling)
+            // Layered: percent-encoded, JSON-escaped, HTML-escaped on top.
+            let encoded = spelling.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+            XCTAssertTrue(ZeroBounceSDK.revealsSecret(encoded, [key]), encoded)
+            XCTAssertTrue(ZeroBounceSDK.revealsSecret(spelling.replacingOccurrences(of: "\\", with: "\\\\"), [key]))
+            XCTAssertTrue(ZeroBounceSDK.revealsSecret(spelling.replacingOccurrences(of: "\\", with: "&#92;"), [key]))
+        }
+        // A byte that starts no valid sequence is not an invented character.
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xe9cd\\xff", ["ab\u{E9}cd"]))
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xc3cd", ["ab\u{E9}cd"]))
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xc3\\x28cd", ["ab\u{E9}cd"]))
+        // Plain ASCII escapes are as before.
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("ab\\x27xy12", ["ab'xy12"]))
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("ab\\047xy12", ["ab'xy12"]))
+    }
+
+    func testAKeyWithAnInvisibleOrFillerCharacterIsRefusedByBothClients() {
+        let bad: [UInt32] = [0x3164, 0x115F, 0x1160, 0xFFA0, 0x2800, 0xFFFD, 0x34F, 0x17B4, 0xFE0F, 0x200B, 0x200D, 0xAD,
+                             0x2060, 0xFEFF, 0xE0001]
+        let sdk = ZeroBounceSDK()
+        let warmup = ZeroBounceWarmup()
+        for code in bad {
+            let scalar = String(Unicode.Scalar(code)!)
+            for key in ["ab\(scalar)cd", "\(scalar)abcd", "abcd\(scalar)"] {
+                XCTAssertFalse(ZeroBounceSDK.isCleanApiKey(key), String(code, radix: 16))
+            }
+            XCTAssertFalse(sdk.initialize(apiKey: "ab\(scalar)cd"), String(code, radix: 16))
+            XCTAssertNil(sdk.apiKey)
+            XCTAssertFalse(warmup.initialize(apiKey: "ab\(scalar)cd"), String(code, radix: 16))
+            XCTAssertNil(warmup.apiKey)
+        }
+    }
+
+    func testAnAdversarialNonAsciiBodyIsMaskedInAFewSeconds() {
+        let secrets = ["k1-\u{130}\u{DF}-aaaaaaaa", "k2-\u{212A}-bbbbbbbb", "k3-\u{E9}-cccccccc"]
+        let filler = String(repeating: "\u{130}\u{DF}e\u{301}\u{4E2D}%2B\\u00e9&amp;", count: 2_000_000 / 18)
+        let body = "{\"message\":\"\(filler)\"}"
+        let started = Date()
+        let message = ZBError.message(from: Data(body.utf8), statusCode: 500)
+        let cleaned = ZeroBounceSDK.redacting(secrets, in: message)
+        let direct = ZeroBounceSDK.redacting(secrets, in: body)
+        XCTAssertEqual(message, "ZeroBounce returned a JSON error response that is too long to show.")
+        XCTAssertEqual(cleaned, message)
+        XCTAssertEqual(direct, ZeroBounceSDK.tooLongToShowMessage)
+        // The error path takes the same way.
+        _ = ZeroBounceSDK.redacting(secrets, in: ZBError.httpError(message: body, statusCode: 500))
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+    }
+
+    func testAMessageFieldOverAThousandCharactersIsTheFixedText() {
+        let fixed = "ZeroBounce returned a JSON error response that is too long to show."
+        let ok = String(repeating: "\u{E9}", count: 1000)
+        let long = String(repeating: "\u{E9}", count: 1001)
+        XCTAssertEqual(ZBError.message(from: Data("{\"message\":\"\(ok)\"}".utf8), statusCode: 500), ok)
+        XCTAssertEqual(ZBError.message(from: Data("{\"message\":\"\(long)\"}".utf8), statusCode: 500), fixed)
+        XCTAssertEqual(ZBError.message(from: Data("{\"x_error\":\"\(long)\"}".utf8), statusCode: 500), fixed)
+        let only = ZBError.messageOnlyFailure(Data("{\"message\":\"\(long)\"}".utf8), statusCode: 200)
+        guard case .httpError(let text, 200)? = only else { return XCTFail("\(String(describing: only))") }
+        XCTAssertEqual(text, fixed)
+    }
+
+    func testALongJsonErrorWithNoMessageKeyIsTheFixedText() {
+        let fixed = "ZeroBounce returned a JSON error response that is too long to show."
+        // 5000 characters: over the limit, far under 100000.
+        let body = "{\"pad\":\"\(String(repeating: "x", count: 5000))\"}"
+        XCTAssertEqual(ZBError.message(from: Data(body.utf8), statusCode: 500), fixed)
+        let short = "{\"pad\":\"\(String(repeating: "x", count: 900))\"}"
+        XCTAssertEqual(ZBError.message(from: Data(short.utf8), statusCode: 500), short)
+    }
+
+    func testDuplicateSuccessKeysWithARealFalseAreAFailure() {
+        func failure(_ json: String) -> Bool { ZBError.successMeansFailure(Data(json.utf8)) }
+        XCTAssertTrue(failure("{\"success\":true,\"success\":false}"))
+        XCTAssertTrue(failure("{\"success\":false,\"success\":true}"))
+        XCTAssertTrue(failure("{\"a\":{\"success\":true},\"success\":true,\"succ\\u0065ss\":\"false\"}"))
+        XCTAssertTrue(failure("{\"success\":true, \"success\": 0}"))
+        XCTAssertFalse(failure("{\"success\":true,\"success\":true}"))
+        XCTAssertFalse(failure("{\"success\":true,\"success\":null}"))
+        XCTAssertFalse(failure("{\"a\":{\"success\":false},\"success\":true}"))
+        XCTAssertFalse(failure("{\"success\":true}"))
+    }
+
+    func testATransportErrorCarryingTheKeyInItsUserInfoIsScrubbedEverywhere() {
+        let key = "zb-dummy-key-ABCDEFGH12345678abcd"
+        let url = URL(string: "https://api.zerobounce.net/v2/validate?api_key=\(key)&email=a@b.c")!
+        let inner = URLError(.cannotConnectToHost, userInfo: [
+            NSURLErrorFailingURLErrorKey: url, NSURLErrorFailingURLStringErrorKey: url.absoluteString,
+        ])
+        let error = URLError(.timedOut, userInfo: [
+            NSURLErrorFailingURLErrorKey: url,
+            NSURLErrorFailingURLStringErrorKey: url.absoluteString,
+            NSUnderlyingErrorKey: inner,
+            "dict": ["list": [url.absoluteString, ["deep": Data(url.absoluteString.utf8)]]] as [String: Any],
+            "data": Data("GET \(url.absoluteString)".utf8),
+            "any": [AnyHashable("k"): url.absoluteString] as [AnyHashable: Any],
+        ])
+        let cleaned = ZeroBounceSDK.redactingApiKey(key, in: error)
+        XCTAssertEqual((cleaned as? URLError)?.code, .timedOut)
+        let ns = cleaned as NSError
+        func walk(_ value: Any) {
+            switch value {
+            case let text as String: assertNoLeak(text, key)
+            case let url as URL: assertNoLeak(url.absoluteString, key)
+            case let data as Data: assertNoLeak(String(decoding: data, as: UTF8.self), key)
+            case let nested as NSError: nested.userInfo.values.forEach(walk)
+            case let list as [Any]: list.forEach(walk)
+            case let map as [String: Any]: map.values.forEach(walk)
+            case let map as [AnyHashable: Any]: map.values.forEach(walk)
+            default: break
+            }
+        }
+        ns.userInfo.values.forEach(walk)
+        XCTAssertNotNil(ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String)
+        XCTAssertTrue((ns.userInfo[NSURLErrorFailingURLStringErrorKey] as? String)?.contains("api_key=***") == true)
+        XCTAssertNotNil(ns.userInfo["data"] as? Data)
+        assertNoLeak(String(describing: ns.userInfo), key)
+        assertNoLeak(String(describing: cleaned), key)
+    }
+
     // MARK: Multipart
 
     func testAMultipartRequestRefusesAUrlThatDoesNotParse() throws {

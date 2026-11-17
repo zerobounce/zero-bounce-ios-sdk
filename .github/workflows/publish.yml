@@ -7,9 +7,18 @@ on:
         type: string
         description: Tag to publish (e.g. v2.1.2)
         required: true
+      skip_trunk:
+        type: boolean
+        description: Skip the CocoaPods trunk push (GitHub release only, for example once trunk is read-only)
+        default: false
 
 permissions:
   contents: read
+
+# One publish per tag at a time; a second run waits instead of cancelling a release half way.
+concurrency:
+  group: publish-${{ github.event.inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
   validate-tag:
@@ -17,6 +26,7 @@ jobs:
       tag_sha: ${{ steps.tag_sha.outputs.sha }}
     name: Validate tag
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Validate tag input
         env:
@@ -35,7 +45,7 @@ jobs:
           ref: refs/tags/${{ github.event.inputs.tag }}
 
           persist-credentials: false
-      - name: Verify tag and podspec version
+      - name: Verify tag, podspec and Xcode project versions
         env:
           TAG: ${{ github.event.inputs.tag }}
         run: |
@@ -57,7 +67,17 @@ jobs:
             echo "Error: podspec version ($PODSPEC_VERSION) does not match tag ($TAG)."
             exit 1
           fi
-          echo "Publishing tag: $TAG (podspec $PODSPEC_VERSION)"
+          # Every MARKETING_VERSION in the Xcode project (the SDK target, both configurations) must match too.
+          MARKETING_VERSIONS=$(grep -hE '^[[:space:]]*MARKETING_VERSION[[:space:]]*=' "Zero Bounce iOS SDK.xcodeproj/project.pbxproj" | sed -E 's/.*=[[:space:]]*"?([^";]*)"?;.*/\1/' | sort -u)
+          if [ -z "$MARKETING_VERSIONS" ]; then
+            echo "Error: Could not read MARKETING_VERSION from project.pbxproj"
+            exit 1
+          fi
+          if [ "$MARKETING_VERSIONS" != "$TAG_VERSION" ]; then
+            echo "Error: MARKETING_VERSION in project.pbxproj ($MARKETING_VERSIONS) does not match tag ($TAG)."
+            exit 1
+          fi
+          echo "Publishing tag: $TAG (podspec $PODSPEC_VERSION, project $MARKETING_VERSIONS)"
 
       - name: Record tag commit SHA
         id: tag_sha
@@ -110,10 +130,23 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO
 
+      # Same build as sdk_ci.yml, from the tag: the repository root also holds the CocoaPods
+      # project and workspace, so name the package's own workspace.
+      - name: Build Swift Package (iOS Simulator)
+        run: |
+          xcodebuild build \
+            -workspace .swiftpm/xcode/package.xcworkspace \
+            -scheme ZeroBounceSDK \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+  # The trunk push is its own job: if it fails (or is skipped), the GitHub release below is still created.
   publish:
     name: Publish to CocoaPods
     needs: [validate-tag, test]
-    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && github.event.inputs.skip_trunk != 'true' }}
     runs-on: macos-latest
     timeout-minutes: 20
     environment: release
@@ -134,8 +167,15 @@ jobs:
             exit 1
           fi
 
+      - name: Install CocoaPods (the version in Podfile.lock)
+        run: |
+          set -euo pipefail
+          version=$(awk '/^COCOAPODS:/{print $2}' Podfile.lock)
+          sudo gem install cocoapods -v "$version" --no-document
+          echo "COCOAPODS_VERSION=$version" >> "$GITHUB_ENV"
+
       - name: Lint podspec
-        run: pod spec lint ZeroBounceSDK.podspec --allow-warnings
+        run: pod "_${COCOAPODS_VERSION}_" spec lint ZeroBounceSDK.podspec --allow-warnings
 
       - name: Push to CocoaPods trunk
         env:
@@ -145,13 +185,15 @@ jobs:
             echo "Error: COCOAPODS_TRUNK_TOKEN secret is not set."
             exit 1
           fi
-          pod trunk push ZeroBounceSDK.podspec --allow-warnings
+          pod "_${COCOAPODS_VERSION}_" trunk push ZeroBounceSDK.podspec --allow-warnings
 
   release:
     name: Create GitHub Release
-    needs: [validate-tag, publish]
-    if: ${{ !cancelled() && !failure() }}
+    # Needs the validated tag and the passing tests, not the trunk push.
+    needs: [validate-tag, test]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: release
     permissions:
       contents: write

@@ -108,20 +108,63 @@ internal class ZBFileManager {
             .appendingPathComponent(".\(UUID().uuidString).zbtmp")
     }
 
-    /// Renames `temporary` over `target` in one step, or removes it and
-    /// throws: `target` is either the old file or the complete new one. A
-    /// file already at `target` keeps its permissions.
-    private static func commit(_ temporary: URL, over target: URL) throws {
-        do {
-            if let existing = try? FileManager.default.attributesOfItem(atPath: target.path),
-               existing[.type] as? FileAttributeType == .typeRegular,
-               let permissions = existing[.posixPermissions] as? NSNumber {
-                try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: temporary.path)
-            }
-        } catch {
-            try? FileManager.default.removeItem(at: temporary)
-            throw error
+    /// Test seam: called with the temporary file right after it is created,
+    /// before any data is written to it.
+    internal static var afterTemporaryCreated: ((URL) -> Void)?
+
+    /// Creates the empty temporary file `temporary` for a write to `target`
+    /// with its final permission bits already set, before any data goes in:
+    /// those of a regular file already at `target`, else the default creation
+    /// mode (0666 minus the umask). It is created exclusively and never more
+    /// permissive than the file it will replace, so the content of a 0600
+    /// target is not readable by others while it is written. Returns the open
+    /// descriptor; the caller closes it.
+    private static func createTemporary(_ temporary: URL, for target: URL) throws -> Int32 {
+        var finalMode: mode_t?
+        var info = stat()
+        if stat(target.path, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG {
+            finalMode = info.st_mode & 0o7777
         }
+        let fd = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC,
+                      finalMode == nil ? 0o666 : 0o600)
+        if fd < 0 {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
+                NSFilePathErrorKey: target.path
+            ])
+        }
+        if let finalMode = finalMode, fchmod(fd, finalMode) != 0 {
+            let code = errno
+            close(fd)
+            try? FileManager.default.removeItem(at: temporary)
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code), userInfo: [
+                NSFilePathErrorKey: target.path
+            ])
+        }
+        afterTemporaryCreated?(temporary)
+        return fd
+    }
+
+    /// Writes all of `data` to `fd`.
+    private static func writeAll(_ data: Data, to fd: Int32, path: String) throws {
+        try data.withUnsafeBytes { (buffer: UnsafeRawBufferPointer) in
+            var offset = 0
+            while offset < buffer.count {
+                let written = write(fd, buffer.baseAddress! + offset, buffer.count - offset)
+                if written < 0 {
+                    if errno == EINTR { continue }
+                    throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
+                        NSFilePathErrorKey: path
+                    ])
+                }
+                offset += written
+            }
+        }
+    }
+
+    /// Renames `temporary` over `target` in one step, or removes it and
+    /// throws: `target` is either the old file or the complete new one. The
+    /// temporary file already has the permissions of a file at `target`.
+    private static func commit(_ temporary: URL, over target: URL) throws {
         if rename(temporary.path, target.path) != 0 {
             let code = errno
             try? FileManager.default.removeItem(at: temporary)
@@ -136,32 +179,44 @@ internal class ZBFileManager {
     /// that fails (a full disk, a file size limit) leaves a file already at
     /// `target` as it was, and no partial file. A symbolic link at `target`
     /// is written through to the file it points to, and a file already there
-    /// keeps its permissions.
+    /// keeps its permissions, which the temporary file has from its creation.
     internal static func replaceFile(at requested: URL, with data: Data) throws {
         let target = try resolvingLinks(requested)
         let temporary = temporaryURL(beside: target)
+        let fd = try createTemporary(temporary, for: target)
         do {
-            try data.write(to: temporary, options: .withoutOverwriting)
+            try writeAll(data, to: fd, path: temporary.path)
+            close(fd)
         } catch {
+            close(fd)
             try? FileManager.default.removeItem(at: temporary)
             throw error
         }
         try commit(temporary, over: target)
     }
 
-    /// Moves the file at `source` to `target` the same way: to a temporary
-    /// file beside `target` first (a copy when `source` is on another
-    /// volume, which can fail part way), then renamed over `target`, through
-    /// a symbolic link and keeping the permissions of a file already there.
+    /// Moves the file at `source` to `target` the same way: copied in chunks
+    /// into a temporary file beside `target` that is created with the final
+    /// permissions first, then renamed over `target`, through a symbolic link
+    /// and keeping the permissions of a file already there. `source` is
+    /// removed once the copy is complete.
     internal static func replaceFile(at requested: URL, withContentsOf source: URL) throws {
         let target = try resolvingLinks(requested)
+        let input = try FileHandle(forReadingFrom: source)
+        defer { try? input.close() }
         let temporary = temporaryURL(beside: target)
+        let fd = try createTemporary(temporary, for: target)
         do {
-            try FileManager.default.moveItem(at: source, to: temporary)
+            while let chunk = try input.read(upToCount: 1 << 20), !chunk.isEmpty {
+                try writeAll(chunk, to: fd, path: temporary.path)
+            }
+            close(fd)
         } catch {
+            close(fd)
             try? FileManager.default.removeItem(at: temporary)
             throw error
         }
         try commit(temporary, over: target)
+        try? FileManager.default.removeItem(at: source)
     }
 }

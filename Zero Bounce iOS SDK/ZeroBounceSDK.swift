@@ -54,8 +54,9 @@ public class ZeroBounceSDK {
     
     /// Sets the API key. A key with surrounding whitespace or control
     /// characters, with U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029,
-    /// U+202F, U+205F or U+3000 in the middle, with U+180B to U+180F anywhere,
-    /// or made of combining marks alone is refused rather than stored: it
+    /// U+202F, U+205F or U+3000 in the middle, with U+180B to U+180F anywhere, with any
+    /// Default_Ignorable_Code_Point, a Hangul filler (U+115F, U+1160, U+3164,
+    /// U+FFA0), U+2800 or U+FFFD anywhere, or made of combining marks alone is refused rather than stored: it
     /// would otherwise be quoted, unredacted, in a transport error. An
     /// ordinary space (U+0020) in the middle is allowed.
     ///
@@ -68,7 +69,7 @@ public class ZeroBounceSDK {
         apiBaseUrl: ZBApiURL = .API_DEFAULT_URL
     ) -> Bool {
         guard ZeroBounceSDK.isCleanApiKey(apiKey) else {
-            print("ZeroBounce: api_key was not accepted: it has surrounding whitespace or control characters, a no-break or other Unicode space (U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) in the middle, a Mongolian variation selector or vowel separator (U+180B-U+180F), or it is made of combining marks alone.")
+            print("ZeroBounce: api_key was not accepted: it has surrounding whitespace or control characters, a no-break or other Unicode space (U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) in the middle, a Mongolian variation selector or vowel separator (U+180B-U+180F), an invisible character (a Default_Ignorable_Code_Point such as U+200B, a variation selector, a Hangul filler U+115F, U+1160, U+3164, U+FFA0), U+2800 or U+FFFD, or it is made of combining marks alone.")
             self.apiKey = nil
             return false
         }
@@ -81,23 +82,84 @@ public class ZeroBounceSDK {
     /// is not https, so `isAllowedURL` stops every request built on it before
     /// anything is sent, and the text is fixed, so no error can quote the
     /// rejected URL.
-    internal static let refusedBaseUrl = "refused://base-url-must-not-have-a-query-or-a-fragment"
+    internal static let refusedBaseUrl = "refused://base-url-was-refused"
 
-    /// The URL without trailing slashes or surrounding whitespace. A URL with
-    /// a `?` or a `#` is refused: every path and query the SDK appends would
-    /// land inside that query or fragment, and `URLComponents.queryItems`
-    /// would replace the query, so the request would miss its path. It comes
-    /// back as `refusedBaseUrl`.
+    /// The text of the failure for a request on a refused or non-https URL.
+    /// It never quotes the URL, which may carry a credential.
+    internal static let refusedUrlText =
+        "A base URL must be an https:// URL (plain http:// only to 127.0.0.1, localhost or [::1]) with a host, and must not contain user information, a query string or a fragment (\"@\", \"?\" or \"#\"), a backslash, whitespace, control or invisible characters, invalid UTF-8, a non-ASCII character or a \"%\" in the host, or an encoded slash or a dot segment in the path"
+
+    /// The URL without trailing slashes or surrounding whitespace, or
+    /// `refusedBaseUrl` when it cannot be a base URL: every path and query the
+    /// SDK appends would otherwise land inside a query or fragment, or the
+    /// api_key would go to another host. Refused: no `https://` (or `http://`)
+    /// scheme with a non-empty host; user information (`@` in the authority);
+    /// `?`, `#`, a backslash; whitespace, control, invisible (default
+    /// ignorable, format, bidirectional) characters and U+FFFD (invalid UTF-8
+    /// read lossily) anywhere; a non-ASCII character or `%` in the host; an
+    /// encoded slash (`%2f`) or backslash (`%5c`), or a `.` or `..` segment
+    /// (also percent-encoded), in the path.
     internal static func normalizedBaseUrl(_ url: String) -> String {
         var value = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.contains("?") || value.contains("#") { return refusedBaseUrl }
         while value.hasSuffix("/") { value.removeLast() }
-        return value
+        return isCleanBaseUrl(value) ? value : refusedBaseUrl
+    }
+
+    private static func isCleanBaseUrl(_ value: String) -> Bool {
+        for scalar in value.unicodeScalars {
+            if scalar == "\\" || scalar == "?" || scalar == "#" || scalar == "\u{FFFD}" { return false }
+            if scalar.value < 0x20 || scalar.value == 0x7F { return false }
+            if scalar.properties.isWhitespace || scalar.properties.isDefaultIgnorableCodePoint { return false }
+            switch scalar.properties.generalCategory {
+            case .control, .format, .lineSeparator, .paragraphSeparator, .spaceSeparator,
+                 .surrogate, .privateUse, .unassigned:
+                return false
+            default: break
+            }
+        }
+        let lowered = value.lowercased()
+        let rest: Substring
+        if lowered.hasPrefix("https://") {
+            rest = value.dropFirst(8)
+        } else if lowered.hasPrefix("http://") {
+            rest = value.dropFirst(7)
+        } else {
+            return false
+        }
+        let authorityEnd = rest.firstIndex(of: "/") ?? rest.endIndex
+        let authority = rest[..<authorityEnd]
+        if authority.contains("@") { return false }
+        var host = Substring(authority)
+        if host.hasPrefix("[") {
+            guard let close = host.firstIndex(of: "]") else { return false }
+            let port = host[host.index(after: close)...]
+            host = host[host.index(after: host.startIndex)..<close]
+            if host.isEmpty || !(port.isEmpty || (port.hasPrefix(":") && port.dropFirst().allSatisfy { $0.isASCII && $0.isNumber })) {
+                return false
+            }
+            if !host.allSatisfy({ $0.isASCII && ($0.isHexDigit || $0 == ":" || $0 == ".") }) { return false }
+        } else {
+            if let colon = host.lastIndex(of: ":") {
+                let port = host[host.index(after: colon)...]
+                if !port.allSatisfy({ $0.isASCII && $0.isNumber }) { return false }
+                host = host[..<colon]
+            }
+            if host.isEmpty || host.contains(":") { return false }
+            if !host.unicodeScalars.allSatisfy({ $0.isASCII && $0 != "%" }) { return false }
+        }
+        for segment in rest[authorityEnd...].split(separator: "/", omittingEmptySubsequences: true) {
+            let decoded = String(segment).removingPercentEncoding ?? String(segment)
+            if decoded == "." || decoded == ".." || decoded.contains("/") || decoded.contains("\\") { return false }
+            let lowerSegment = segment.lowercased()
+            if lowerSegment.contains("%2f") || lowerSegment.contains("%5c") || lowerSegment.contains("%00") { return false }
+        }
+        return true
     }
 
     /// Whether a key is free of surrounding whitespace and control
     /// characters, of U+00A0, U+1680, U+2000 to U+200A, U+2028, U+2029,
-    /// U+202F, U+205F and U+3000 in the middle, of U+180B to U+180F anywhere,
+    /// U+202F, U+205F and U+3000 in the middle, of U+180B to U+180F anywhere, of any Default_Ignorable_Code_Point, of the
+    /// Hangul fillers U+115F, U+1160, U+3164 and U+FFA0, of U+2800 and U+FFFD,
     /// and is not made of combining marks alone. An ordinary space (U+0020)
     /// in the middle stays allowed. An empty key stays allowed: it is reported
     /// as `notInitialized` by the first call that needs it.
@@ -109,10 +171,13 @@ public class ZeroBounceSDK {
             if CharacterSet.controlCharacters.contains(scalar) { return false }
             switch scalar.value {
             case 0x00A0, 0x1680, 0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
-                 0x180B...0x180F:
+                 0x180B...0x180F, 0x115F, 0x1160, 0x3164, 0xFFA0, 0x2800, 0xFFFD:
                 return false
             default: break
             }
+            // Invisible code points that render as nothing: zero-width and
+            // bidirectional marks, variation selectors, tags, U+034F, U+17B4...
+            if scalar.properties.isDefaultIgnorableCodePoint { return false }
             switch scalar.properties.generalCategory {
             case .nonspacingMark, .spacingMark, .enclosingMark: break
             default: onlyMarks = false
@@ -220,6 +285,14 @@ public class ZeroBounceSDK {
     /// back.
     internal static let secretDecodeLayers = 4
 
+    /// The most text redaction works on. Masking decodes and folds the text
+    /// (seconds per megabyte of non-ASCII text), and no message the SDK
+    /// builds is anywhere near this long (`ZBError.message(from:)` quotes at
+    /// most 1000 characters), so longer text is replaced, whole, by
+    /// `tooLongToShowMessage`.
+    internal static let maxRedactedLength = 65536
+    internal static let tooLongToShowMessage = "The text was omitted because it is too long to show."
+
     /// `text` with every form of every secret replaced by "***". Matching
     /// folds both sides (see `folded`), so a key echoed in capitals is masked
     /// too. Redaction is closed under encoding: when a view of the result
@@ -227,6 +300,7 @@ public class ZeroBounceSDK {
     /// JSON-unescaping, HTML-unescaping, in any order) still holds a secret,
     /// the whole text is replaced by `secretOmittedMessage`.
     internal static func redacting(_ secrets: [String], in text: String) -> String {
+        if text.utf8.count > maxRedactedLength { return tooLongToShowMessage }
         let masked = masking(secretForms(secrets), in: text)
         return revealsSecret(masked, secrets) ? secretOmittedMessage : masked
     }
@@ -535,6 +609,22 @@ public class ZeroBounceSDK {
         return (value, i + 1 - at)
     }
 
+    /// A `\xHH` or `\NNN` (octal, up to \377) escape at `at`: the byte it
+    /// stands for, where it starts and how many bytes it takes.
+    private static func byteEscape(_ bytes: [UInt8], _ at: Int) -> (byte: UInt8, start: Int, length: Int)? {
+        guard at + 3 < bytes.count, bytes[at] == 0x5C else { return nil }
+        let marker = bytes[at + 1]
+        if marker == 0x78 || marker == 0x58, let code = hexDigits(bytes, at + 2, 2) {
+            return (UInt8(code), at, 4)
+        }
+        if (0x30...0x33).contains(marker), (0x30...0x37).contains(bytes[at + 2]),
+           (0x30...0x37).contains(bytes[at + 3]) {
+            let code = UInt32(marker - 0x30) << 6 | UInt32(bytes[at + 2] - 0x30) << 3 | UInt32(bytes[at + 3] - 0x30)
+            return (UInt8(code), at, 4)
+        }
+        return nil
+    }
+
     private static func appendScalar(_ code: UInt32, to out: inout [UInt8]) {
         if let scalar = Unicode.Scalar(code) {
             out.append(contentsOf: Array(String(Character(scalar)).utf8))
@@ -573,9 +663,33 @@ public class ZeroBounceSDK {
                 i += 2
                 continue
             }
-            if marker == 0x78 || marker == 0x58, let code = hexDigits(bytes, i + 2, 2) {
-                appendScalar(code, to: &out)
-                i += 4
+            if let first = byteEscape(bytes, i) {
+                // A run of byte escapes (\xc3\xa9, \303\251) is UTF-8 bytes:
+                // each valid sequence becomes its character, and a byte that
+                // starts no valid sequence stays as it was written.
+                var run = [first]
+                var at = i + first.length
+                while let next = byteEscape(bytes, at) {
+                    run.append(next)
+                    at += next.length
+                }
+                var index = 0
+                while index < run.count {
+                    let lead = run[index].byte
+                    let width = lead < 0x80 ? 1 : (0xC2...0xDF).contains(lead) ? 2
+                        : (0xE0...0xEF).contains(lead) ? 3 : (0xF0...0xF4).contains(lead) ? 4 : 0
+                    let end = index + width
+                    if width > 0, end <= run.count,
+                       String(validatingUTF8: run[index..<end].map { CChar(bitPattern: $0.byte) } + [0]) != nil {
+                        for entry in run[index..<end] { out.append(entry.byte) }
+                        index = end
+                    } else {
+                        let entry = run[index]
+                        out.append(contentsOf: bytes[entry.start..<entry.start + entry.length])
+                        index += 1
+                    }
+                }
+                i = at
                 continue
             }
             if marker == 0x75 || marker == 0x55 {
@@ -602,6 +716,7 @@ public class ZeroBounceSDK {
             }
             if i + 3 < bytes.count, (0x30...0x37).contains(marker),
                (0x30...0x37).contains(bytes[i + 2]), (0x30...0x37).contains(bytes[i + 3]) {
+                // Up to \377 it was a byte above; here it is a code point.
                 let code = UInt32(marker - 0x30) << 6 | UInt32(bytes[i + 2] - 0x30) << 3 | UInt32(bytes[i + 3] - 0x30)
                 appendScalar(code, to: &out)
                 i += 4
@@ -682,6 +797,10 @@ public class ZeroBounceSDK {
         guard !forms.isEmpty else { return error }
         var changed = false
         func clean(_ text: String) -> String {
+            if text.utf8.count > maxRedactedLength {
+                changed = true
+                return tooLongToShowMessage
+            }
             var cleaned = masking(forms, in: text)
             if revealsSecret(cleaned, secrets) {
                 cleaned = secretOmittedMessage
@@ -710,10 +829,18 @@ public class ZeroBounceSDK {
                 let cleaned = clean(text)
                 if cleaned == text { return url }
                 return URL(string: cleaned) ?? cleaned
+            case let data as Data:
+                let text = String(decoding: data, as: UTF8.self)
+                let cleaned = clean(text)
+                return cleaned == text ? data : Data(cleaned.utf8)
             case let nested as NSError:
                 return redact(nested)
             case let list as [Any]:
                 return list.map(scrub)
+            case let map as [String: Any]:
+                return map.mapValues(scrub)
+            case let map as [AnyHashable: Any]:
+                return map.mapValues(scrub)
             default:
                 return value
             }
@@ -797,8 +924,9 @@ public class ZeroBounceSDK {
     /// SDK at a local stub.
     internal static func isAllowedURL(_ url: URL) -> Bool {
         let scheme = url.scheme?.lowercased() ?? ""
+        guard let host = url.host?.lowercased(), !host.isEmpty else { return false }
         if scheme == "https" { return true }
-        guard scheme == "http", let host = url.host?.lowercased() else { return false }
+        guard scheme == "http" else { return false }
         return host == "127.0.0.1" || host == "localhost" || host == "::1"
     }
     
@@ -1959,7 +2087,7 @@ public class ZeroBounceSDK {
             return
         }
         guard ZeroBounceSDK.isAllowedURL(requestURL) else {
-            completion(.Failure(ZBError.decodeError(messages: ["url must be an https:// URL"])))
+            completion(.Failure(ZBError.decodeError(messages: [ZeroBounceSDK.refusedUrlText])))
             return
         }
 
@@ -2307,7 +2435,7 @@ public class ZeroBounceSDK {
             }
         }
         guard let url = request.url, ZeroBounceSDK.isAllowedURL(url) else {
-            result(RequestResult.failure(ZBError.decodeError(messages: ["url must be an https:// URL"])))
+            result(RequestResult.failure(ZBError.decodeError(messages: [ZeroBounceSDK.refusedUrlText])))
             return
         }
         ZeroBounceSDK.urlSession.dataTask(with: request, completionHandler: { data, response, error -> Void in

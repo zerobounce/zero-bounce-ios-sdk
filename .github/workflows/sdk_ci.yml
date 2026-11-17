@@ -13,6 +13,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same PR or branch replaces the run in progress.
+concurrency:
+  group: sdk-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test

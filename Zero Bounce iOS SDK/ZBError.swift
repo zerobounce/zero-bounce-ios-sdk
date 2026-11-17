@@ -76,7 +76,10 @@ public enum ZBError: LocalizedError {
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return false
         }
-        return successFlag(object["success"]) == false
+        if successFlag(object["success"]) == false { return true }
+        // JSONSerialization keeps one of two equal keys. A body that says
+        // `"success": false` anywhere among its top-level keys is a failure.
+        return ZBStrictJson.topLevelValues(named: "success", in: data).contains { successFlag($0) == false }
     }
     
     /// Whether a JSON body is an error with no real "success" flag to gate on:
@@ -140,6 +143,7 @@ public enum ZBError: LocalizedError {
         if text.isEmpty {
             text = "ZeroBounce returned an error with no message text (HTTP \(statusCode))."
         }
+        text = limited(text)
         return .httpError(message: text, statusCode: statusCode)
     }
 
@@ -328,13 +332,13 @@ public enum ZBError: LocalizedError {
                 for key in messageKeyOrder {
                     if let value = object[key] as? String {
                         let text = stripErrorPrefix(value)
-                        if !text.isEmpty { return text }
+                        if !text.isEmpty { return limited(text) }
                     }
                 }
                 for (key, value) in object where key != "success" && (key.contains("message") || key.contains("error")) {
                     if let text = value as? String {
                         let stripped = stripErrorPrefix(text)
-                        if !stripped.isEmpty { return stripped }
+                        if !stripped.isEmpty { return limited(stripped) }
                     }
                 }
             }
@@ -342,12 +346,12 @@ public enum ZBError: LocalizedError {
             // by a streaming download's probe, which cannot be parsed. A
             // full probe window is cut short whatever its trimmed length is
             // (a window of padding after the brace trims to almost nothing).
-            if trimmed.count > 1000 || isFullProbeWindow(data, startsWithArray: trimmed.hasPrefix("[")) {
+            if trimmed.prefix(maxMessageLength + 1).count > maxMessageLength || isFullProbeWindow(data, startsWithArray: trimmed.hasPrefix("[")) {
                 return "ZeroBounce returned a JSON error response that is too long to show."
             }
             return trimmed
         }
-        if trimmed.count > 1000 {
+        if trimmed.prefix(maxMessageLength + 1).count > maxMessageLength {
             return "ZeroBounce returned a response that is not valid JSON."
         }
         let message = stripErrorPrefix(trimmed)
@@ -369,14 +373,47 @@ public enum ZBError: LocalizedError {
         return message
     }
 
+    /// The text of the first `<title>` element, found on the original bytes
+    /// (ASCII letters in any case), never on a lowercased copy: lowercasing
+    /// changes the length of some characters (U+0130, U+212A), so a range from
+    /// the copy cuts the original in the wrong place. A tag with attributes is
+    /// read, an unterminated one is not. A title too long to show is dropped.
     private static func htmlTitle(in body: String) -> String? {
-        let lower = body.lowercased()
-        guard let start = lower.range(of: "<title"),
-              let open = lower.range(of: ">", range: start.upperBound..<lower.endIndex),
-              let close = lower.range(of: "</title>", range: open.upperBound..<lower.endIndex) else {
+        let bytes = Array(body.utf8)
+        func find(_ word: String, from: Int) -> Int? {
+            let needle = Array(word.utf8)
+            guard bytes.count >= needle.count, from <= bytes.count - needle.count else { return nil }
+            var at = from
+            while at <= bytes.count - needle.count {
+                var hit = true
+                for offset in 0..<needle.count {
+                    var byte = bytes[at + offset]
+                    if (0x41...0x5A).contains(byte) { byte += 0x20 }
+                    if byte != needle[offset] { hit = false; break }
+                }
+                if hit { return at }
+                at += 1
+            }
             return nil
         }
-        return String(body[open.upperBound..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let start = find("<title", from: 0),
+              let gt = bytes[(start + 6)...].firstIndex(of: 0x3E),
+              let close = find("</title>", from: gt + 1) else {
+            return nil
+        }
+        let title = String(decoding: bytes[(gt + 1)..<close], as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.prefix(maxMessageLength + 1).count > maxMessageLength ? nil : title
+    }
+
+    /// The longest message text shown from a body; a longer one is replaced
+    /// by `tooLongMessage` (never cut, which could split a character).
+    private static let maxMessageLength = 1000
+    private static let tooLongMessage = "ZeroBounce returned a JSON error response that is too long to show."
+
+    /// `text`, or the fixed text when it is longer than `maxMessageLength`.
+    private static func limited(_ text: String) -> String {
+        text.prefix(maxMessageLength + 1).count > maxMessageLength ? tooLongMessage : text
     }
 
     public var errorDescription: String? {
@@ -427,6 +464,38 @@ internal struct ZBStrictJson {
             throw ZBError.decodeError(messages: ["not strict JSON"])
         }
         return try JSONSerialization.jsonObject(with: data, options: options)
+    }
+
+    /// Every value of the top-level key `name` of a strict JSON object, in
+    /// order, duplicates included (a key's escapes are read: `"succ\u0065ss"`
+    /// is `success`). Empty when the body is not a strict object.
+    static func topLevelValues(named name: String, in data: Data) -> [Any] {
+        guard isStrict(data) else { return [] }
+        var scan = ZBStrictJson(data)
+        scan.whitespace()
+        guard scan.current == 0x7B else { return [] }
+        scan.at += 1
+        scan.whitespace()
+        var found: [Any] = []
+        while scan.current != 0x7D {
+            let keyStart = scan.at
+            guard scan.string() else { return found }
+            let key = Data(scan.bytes[keyStart..<scan.at])
+            scan.whitespace()
+            scan.at += 1  // :
+            scan.whitespace()
+            let valueStart = scan.at
+            guard scan.value(depth: 1) else { return found }
+            if let text = try? JSONSerialization.jsonObject(with: key, options: [.fragmentsAllowed]) as? String,
+               text == name,
+               let value = try? JSONSerialization.jsonObject(
+                   with: Data(scan.bytes[valueStart..<scan.at]), options: [.fragmentsAllowed]) {
+                found.append(value)
+            }
+            scan.whitespace()
+            if scan.current == 0x2C { scan.at += 1; scan.whitespace() }
+        }
+        return found
     }
 
     private var current: UInt8? { at < bytes.count ? bytes[at] : nil }

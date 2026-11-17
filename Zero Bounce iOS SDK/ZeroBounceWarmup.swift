@@ -151,9 +151,12 @@ public class ZeroBounceWarmup {
 
     internal var apiKey: String?
     /// The base URL ZeroBounce gave you. Tests point this at a local stub.
-    /// Trailing slashes are dropped when it is set. A URL with a `?` or a `#`
-    /// is refused: it becomes a fixed placeholder that is not https, so every
-    /// call fails before anything is sent.
+    /// Trailing slashes are dropped when it is set. A URL that is not
+    /// `https://` with a host, or that has user information, a query, a
+    /// fragment, a backslash, whitespace, control or invisible characters, a
+    /// non-ASCII character or `%` in the host, or an encoded slash or dot
+    /// segment in its path is refused: it becomes a fixed placeholder that is
+    /// not https, so every call fails before anything is sent.
     public var baseUrl = "https://warmup-api.zerobounce.net" {
         didSet { baseUrl = ZeroBounceSDK.normalizedBaseUrl(baseUrl) }
     }
@@ -165,8 +168,9 @@ public class ZeroBounceWarmup {
     ///
     /// A key with surrounding whitespace or control characters, with U+00A0,
     /// U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F or U+3000 in
-    /// the middle, with U+180B to U+180F anywhere, or made of combining marks
-    /// alone is refused rather than stored: it would otherwise be quoted,
+    /// the middle, with U+180B to U+180F anywhere, with an invisible character
+    /// (any Default_Ignorable_Code_Point, a Hangul filler, U+2800, U+FFFD), or made of
+    /// combining marks alone is refused rather than stored: it would otherwise be quoted,
     /// unredacted, in a transport error. An ordinary space (U+0020) in the
     /// middle is allowed.
     ///
@@ -176,7 +180,7 @@ public class ZeroBounceWarmup {
     @discardableResult
     public func initialize(apiKey: String) -> Bool {
         guard ZeroBounceSDK.isCleanApiKey(apiKey) else {
-            print("ZeroBounce: the Warmup api_key was not accepted: it has surrounding whitespace or control characters, a no-break or other Unicode space (U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) in the middle, a Mongolian variation selector or vowel separator (U+180B-U+180F), or it is made of combining marks alone.")
+            print("ZeroBounce: the Warmup api_key was not accepted: it has surrounding whitespace or control characters, a no-break or other Unicode space (U+00A0, U+1680, U+2000-U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) in the middle, a Mongolian variation selector or vowel separator (U+180B-U+180F), an invisible character (a Default_Ignorable_Code_Point such as U+200B, a variation selector, a Hangul filler U+115F, U+1160, U+3164, U+FFA0), U+2800 or U+FFFD, or it is made of combining marks alone.")
             self.apiKey = nil
             return false
         }
@@ -781,14 +785,15 @@ public class ZeroBounceWarmup {
             return
         }
         guard let url = request.url, ZeroBounceSDK.isAllowedURL(url) else {
-            completion(.failure(ZBError.decodeError(messages: ["baseUrl must be an https:// URL"])))
+            completion(.failure(ZBError.decodeError(messages: [ZeroBounceSDK.refusedUrlText])))
             return
         }
         ZeroBounceSDK.urlSession.dataTask(with: request) { data, response, error in
             if let error = error ?? ZeroBounceSDK.cutShortError(response, received: Int64(data?.count ?? 0)) {
-                completion(.failure(ZBError.decodeError(messages: [
-                    self.redact(error.localizedDescription, secrets)
-                ])))
+                // The transport error itself, as the main API gives it: the
+                // `redacted` wrappers of `send` and `sendCsv` scrub its text
+                // and user info.
+                completion(.failure(error))
                 return
             }
             guard let http = response as? HTTPURLResponse else {

@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 
+- A refused base URL (on `ZeroBounceSDK` and `ZeroBounceWarmup`) fails with one text, `A base URL must be an https:// URL (plain http:// only to 127.0.0.1, localhost or [::1]) with a host, and must not contain ...`, in `ZBError.decodeError`. 3.0.1 used `url must be an https:// URL` (`baseUrl must be an https:// URL` on Warmup); code that matched those strings must match the new one or the error case.
 - `validate` (and each `validateBatch` row) took a `free_email`, `mx_found` or `catchall_domain` that was neither a boolean nor the string `"true"`/`"false"` (`1`, `"maybe"`, `[]`), or an `active_in_days` / `active_first_seen` that was neither a string nor a whole number (`5.5`, `{}`), as a result with the field at its default (`false`, `nil`), as 3.0.1 did. Such a value now fails with `ZBError.httpError(message:statusCode:)` and status 200, as a wrong type does for every other field. The spellings the API sends still decode: a boolean or `"true"`/`"false"` (any case) for the three flags, a string or a whole number for the two activity fields, and `null` or a missing key still gives the default. No public type changed.
-
+- A 2xx answer with no result in it (`{}`, a body of message keys only, a message beside fields that are all null, `{"foo":1}` where a result is required) on `sendFile`, `scoringSendFile` and the other file-job sends, `getActivityData`, `fileStatus`, `scoringFileStatus` and the finder and domain-search file-status calls, `deleteFile`, `scoringDeleteFile` and the finder and domain-search delete calls, `validateBatch`, `findEmail`, `findDomain` and `guessFormat` now fails with `ZBError.httpError(message:statusCode:)` and status 200. 3.0.1 failed those with `ZBError.decodeError(messages:)` (no status), because the result models have required fields. `scoreEmail`, `scoreEmailPost` and `getApiUsage` returned such a body as a success in 3.0.1; they now fail the same way. Code that matched `.decodeError` for these bodies should match `.httpError` (or read `statusCode`).
 - An error the API reports in the body of a 2xx response now arrives as `ZBError.httpError(message:statusCode:)` carrying the HTTP status (200), instead of `ZBError.decodeError(messages:)`, whose `statusCode` is nil. This covers a dead or invalid key's error-only body (`{"error": ...}`, `{"error_message": ...}`, `{"Error": ...}` with no `success` field) on every JSON call; a body made only of message keys (`error`, `message`, `error_message`, `Message`, `Error`, `detail`) on the finder and domain-search calls, recognised by its keys whatever it would decode as, which is how `findEmail`, `findDomain` and `guessFormat` report a dead key (`{"Message": ...}`); and `validateBatch`'s account-level `"all"` error. The message text is unchanged. Code that matched `.decodeError` for these should match `.httpError` (or read `statusCode`). `.decodeError` is left for arguments rejected before sending (and for `ZeroBounceWarmup`'s transport errors). The wider list of calls that report an answer with no result in it the same way is under **Fixed** ("An answer with no result in it").
 - A 2xx answer whose body is not the call's answer - not JSON at all (plain text, CSV sent as `application/json`), or a JSON array - now fails with `ZBError.httpError(message:statusCode:)` carrying the HTTP status (200) on every request method, instead of `ZBError.decodeError(messages:)` with no status, or, on the Inbox Placement Tester and list evaluator calls, the raw `NSCocoaErrorDomain` 3840 error from `JSONSerialization`. An object that simply lacks the result's fields stays a result, except a file-status body with no non-null known field, which is under **Fixed**. This covers every `ZeroBounceSDK` JSON call and every `ZeroBounceWarmup` JSON call, across the 90 public request methods (64 + 26). A body that is not JSON gets the message "ZeroBounce returned a response that is not valid JSON: ...". Code that matched `.decodeError` or an `NSCocoaErrorDomain` error for a bad response body should match `.httpError` (or read `statusCode`).
 
@@ -27,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Offline tests that a file status answer with no non-null known field (`{"foo":1}`, `{"":""}`) is an error with status 200 while `{"file_status":"Processing"}` and `{"success":true}` stay results; that a key echoed as `\x27`, `\X27` or `\'` is never in an error; and that `ki` plus U+0323 plus U+0307 and `ị` plus U+0307 are masked in either order of their marks.
 - Offline tests: every typed call against JSON of the wrong shape (`0`, `"x"`, `true`, `null`, `[]`, and arrays a decoder could read by position, such as `["x"]`, `["a@example.com",10]` and `[true,"3"]`; typed and raw-JSON calls told apart by the result type each call completes with); every value at every path of every documented example (nested objects, array items, `validateBatch` rows and their fields, `other_domain_formats` items, `listS3files` entries) replaced by each other JSON type, which must fail with status 200 (`null` only for an optional field); 200000 nested `[` on every call; each decode step of the redaction check (lower-case `%xx`, an invalid UTF-8 run, `+`, `\uXXXX`, surrogate pairs, four URL layers) and a `%00` before a fully percent-encoded key on every call.
 
+### Changed
+
+- **Behaviour change:** error texts built from a response body can no longer be longer than about 1000 characters. v3.0.1 returned the whole field.
+- **Behaviour change:** `initialize` returns false for the keys listed above under Security; v3.0.1 accepted them.
+
 ### Deprecated
 
 - `ZBWarmupManagedSending.init(weekdaysOnly:timezone:timezoneOffset:warmupStartDate:)` and the `timezoneOffset: Int?` property, in favour of `timezoneOffsetHours: Double?`. The deprecated property reads `nil` when the offset is fractional.
@@ -35,8 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A field the typed model does not make optional that is missing from a 2xx answer reads as that type's empty value, exactly as `null` does, instead of failing the decode (standard section 3 and B). 3.0.1 failed the decode for a missing `email`, `domain` or `company_name` on `findEmail`, `domain` / `format` / `company_name` / `confidence` / `other_domain_formats` on `findDomain`, `file_name` and `file_id` on `sendFile` and `deleteFile`, `file_id` and `file_status` on `fileStatus`, and `found` on `getActivityData`; the empty value is now read. A missing `success` reads as `false` on a file status answer; on a send or delete answer it was already `nil`. Required fields still fail: `getCredits` `Credits`, `validate` `address` and `status`, and the same two in each `validateBatch` row. A file status answer still needs one non-null known field (see the entry on file status below).
 - A finder or domain-search body whose keys are all message keys (`error`, `message`, `error_message`, `Message`, `Error`, `detail`) is recognised by its keys, not by a failed decode, so a message of any value is the error with its HTTP status (200). Its text is the first non-blank message, a list joined with a line feed, or `ZeroBounce returned an error with no message text (HTTP 200).` when there is none. Released 3.0.1 returned `{"message":null}`, `{"error":""}` and `{"Error":["x"]}` as a `ZBError.decodeError(messages:)` with no status, whose text was the raw JSON body. That is the Breaking entry on the error type; the same rule on the other calls is the next entry.
-- An answer with no result in it - an empty object (`{}`, `{ }`, `{\n}`, `{\t}`), a body made only of message keys (`error`, `message`, `error_message`, `Message`, `Error`, `detail`), or a message beside fields that are all null - in a 2xx answer is `ZBError.httpError(message:statusCode:)` with status 200 on `sendFile`, `scoringSendFile` and the other file-job sends, `getActivityData`, `scoreEmail`, `scoreEmailPost`, `fileStatus`, `scoringFileStatus` and the finder and domain-search file-status calls, `deleteFile`, `scoringDeleteFile`, `emailFinderDeleteFile`, `domainSearchDeleteFile`, `validateBatch`, `getApiUsage`, `findEmail`, `findDomain` and `guessFormat`. 3.0.1 reported those bodies as success. `validate` and `getCredits` stay exempt, with the filters, the Inbox Placement calls and the list-evaluator result: a bare `Message` is a successful filter change, and `validate` keeps its greylist `Message`. `{"domain":null}` with no message, `{"file_status":"Processing"}`, `{"found":false}` and a greylist `{"Message":...}` on `validate` stay results. The finder and domain-search part of this is also the Breaking entry on the error type.
-- The file status calls (`fileStatus`, `scoringFileStatus` and the finder and domain-search file-status calls) took any JSON object that was not empty and not message-only as a result, so `{"foo":1}` and `{"":""}` came back as a status with an empty `fileId` and `fileStatus`. A 2xx answer now needs at least one non-null known field - `file_status`, `file_id`, `file_name`, `upload_date`, `file_phase_2_status`, `complete_percentage`, `error_reason`, `return_url`, or a real `success` flag - and without one it is `ZBError.httpError(message:statusCode:)` with status 200. `{"file_status":"Processing"}` and `{"success":true}` stay results.
+- An answer with no result in it - an empty object (`{}`, `{ }`, `{\n}`, `{\t}`), a body made only of message keys (`error`, `message`, `error_message`, `Message`, `Error`, `detail`), or a message beside fields that are all null - in a 2xx answer is `ZBError.httpError(message:statusCode:)` with status 200 on `sendFile`, `scoringSendFile` and the other file-job sends, `getActivityData`, `scoreEmail`, `scoreEmailPost`, `fileStatus`, `scoringFileStatus` and the finder and domain-search file-status calls, `deleteFile`, `scoringDeleteFile`, `emailFinderDeleteFile`, `domainSearchDeleteFile`, `validateBatch`, `getApiUsage`, `findEmail`, `findDomain` and `guessFormat`. 3.0.1 reported those bodies as success only on `scoreEmail`, `scoreEmailPost` and `getApiUsage`; on `sendFile`, `scoringSendFile` and the other file-job sends, `getActivityData`, `fileStatus` and the file-status calls, `deleteFile` and the delete calls, `validateBatch`, `findEmail`, `findDomain` and `guessFormat` it raised `ZBError.decodeError(messages:)` (the models have required fields), and now it is `ZBError.httpError(message:statusCode:)` with status 200 (the Breaking entry on those calls). `validate` and `getCredits` stay exempt, with the filters, the Inbox Placement calls and the list-evaluator result: a bare `Message` is a successful filter change, and `validate` keeps its greylist `Message`. `{"domain":null}` with no message, `{"file_status":"Processing"}`, `{"found":false}` and a greylist `{"Message":...}` on `validate` stay results. The finder and domain-search part of this is also the Breaking entry on the error type.
+- The file status calls (`fileStatus`, `scoringFileStatus` and the finder and domain-search file-status calls) raised `ZBError.decodeError(messages:)` for a body with no `file_id` / `file_status` in 3.0.1, and the 3.0.1 model would have read any object with those two keys as a status. A 2xx answer now needs at least one non-null known field - `file_status`, `file_id`, `file_name`, `upload_date`, `file_phase_2_status`, `complete_percentage`, `error_reason`, `return_url`, or a real `success` flag - and without one it is `ZBError.httpError(message:statusCode:)` with status 200. `{"file_status":"Processing"}` and `{"success":true}` stay results.
 - A file-job `success` is read as a flag on `sendFile`, `scoringSendFile` and the other file-job sends, `deleteFile`, `scoringDeleteFile` and the file status calls. 3.0.1 took a JSON boolean only. Now a boolean, the number `1` or `0`, and the strings `"true"`, `"false"`, `"1"` and `"0"` in any case and trimmed (`" False "`) decode, and a false one (`"0"` included) is a failure with status 200. A present `success` that is not a flag (`5`, `0.4`, `"maybe"`, `[]`, `{}`) fails the decode: it is `ZBError.httpError(message:statusCode:)` with status 200, and does not read as false. `null` and a missing key are still nil (`false` on a file status answer).
 - `emailFinderGetFile`, `domainSearchGetFile`, `getFileStreaming` and `scoringGetFileStreaming` now refuse a `downloadPath` that is empty, ends in a path separator, or is an existing directory, before anything is sent. A symlink at `downloadPath` is written through to its target instead of being replaced by a regular file, and replacing an existing file keeps its permissions.
 - A call whose request URL cannot be built from the base URL (a query call, a bulk call, a JSON POST, a finder or domain-search call) completes with `ZBError.invalidEndpoint` instead of crashing on a force-unwrap, and a JSON POST with no body completes with an error instead of returning without calling its completion handler.
@@ -57,6 +63,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every JSON call of `ZeroBounceSDK` (the typed results and the dictionary and array results, Inbox Placement included) and of `ZeroBounceWarmup` took bodies that are not JSON as the result, because `JSONSerialization` and `JSONDecoder` are lenient: trailing commas (`{"a":1,}`, `[1,]`), leading zeros (`01`), a raw tab in a string, unknown escapes (`\x41`), and a UTF-8 byte order mark before the value. A 2xx body must now be one strict RFC 8259 JSON value with only space, tab, CR or LF around it; anything else is `ZBError.httpError` with status 200, whose message says the response is not valid JSON.
 - The eight downloads (`getFile`, `scoringGetFile`, `getFileStreaming`, `scoringGetFileStreaming`, `emailFinderGetFile`, `domainSearchGetFile`, `downloadSeeds`, `downloadStatistics`) skip spaces, tabs, CR, LF, vertical tab (VT), form feed (FF), UTF-8 byte order marks and U+00A0 before the JSON and HTML checks, with no limit on how much, so a refused page or JSON body cannot hide behind that padding. A JSON object after the skip is an error, and so is a JSON array, but only when it parses: a CSV whose first line starts with `[tag]` is not JSON and is kept. A body that is only that padding is an error, not a file. A `<html`, `<head` or `<body` tag anywhere in the first 2000 characters after that skip makes the body an HTML page (`ZBError.httpError` with the status, no file written), including when it sits inside what would otherwise be a file. A real file that begins with spaces is saved unchanged, and `getFile` keeps a leading byte order mark and a file that is not UTF-8.
 - `getFile` and `scoringGetFile` save the result under a name that contains the file id, in `Documents/SavedFiles`, so two jobs no longer write to the same path. Until now the name was whatever the response suggested, and `getfile` when it sent no `Content-Disposition` (the `file_<id>.csv` name meant for that case was never used), so every such download overwrote the last. Only the last path component of a server-suggested name is kept, as before.
+- A JSON error field (`message`, `error`, ...) longer than 1000 characters, and an HTML title longer than that, give a fixed text instead of the whole field ("ZeroBounce returned a JSON error response that is too long to show." for a field). Nothing is cut, so no character is split.
+- A body with the top-level key `success` more than once (`{"success":true,"success":false}`) is a failure when any of them is a real false; before, only one of the values was read.
+- **Behaviour change:** a Warmup transport failure (no connection, a time-out, a cut-short body) is now the transport error itself (a `URLError`, with its key redacted), as in the main API, not a `decodeError` carrying its text.
+- The multipart content type is looked up with `UniformTypeIdentifiers` instead of the deprecated `MobileCoreServices` calls (6 warnings at the iOS 15 target); the content types sent are unchanged (`text/csv` for a name with no known type in memory, `application/octet-stream` for a path).
 
 ### Security
 
@@ -67,16 +77,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Case-insensitive masking of the API key and the Warmup and SMTP credentials folds case on both sides: `ß` echoed as `SS` and `İ` echoed as `i` stay masked. 3.0.1 and earlier masked an echo only in the key's own case, so a key quoted back in another case (`ABC` for `abc`) was not masked. The fold is canonical as well: it decomposes each character canonically before it folds, so a Greek ypogegrammeni plus an accent (U+1F80 plus U+0301) matches its precomposed form (U+1F84); the Hangul syllable and its jamo, and `é` and `e` plus U+0301, are one spelling, and a U+0307 after an `i` is dropped, so `i`, `i` plus U+0307 and `İ` match each other, including when another mark sits beside the dot. The marks are put in canonical order before the dot is dropped, so `ki` plus U+0323 plus U+0307 matches `ki` plus U+0307 plus U+0323, and `ị` plus U+0307 matches `i` plus U+0307 plus U+0323. The fold never depends on the device's locale.
 - A key that contains `'` and is echoed with the quote written as `\u{27}`, `\U0027`, `\047`, `\x27` (or `\X27`) or `\'` is never put into an error: the whole error text becomes "The response body was omitted because it contained a credential." `%u0027` is not decoded.
 - `initialize` (on `ZeroBounceSDK` and `ZeroBounceWarmup`) refuses a key that has U+00A0, U+2028 or U+3000 anywhere, any of U+180B through U+180F anywhere, or a U+2000 through U+200A, U+2029, U+202F, U+205F or U+1680 in the middle (at the ends, surrounding whitespace was already refused), and a key made only of combining marks. It returns `false`, as for surrounding whitespace and control characters. An ordinary space (U+0020) in the middle of a key is still allowed. The `initialize` documentation and the console message name these characters.
-- A base URL containing `?` or `#` (`apiBaseUrl`, the bulk and list evaluator and Inbox Placement Tester URLs, and `ZeroBounceWarmup.baseUrl`) is refused before anything is sent: the call fails with the existing not-https error (`ZBError.decodeError` with `url must be an https:// URL`; `baseUrl must be an https:// URL` on `ZeroBounceWarmup`), and the error does not quote the URL.
+- A base URL containing `?` or `#` (`apiBaseUrl`, the bulk and list evaluator and Inbox Placement Tester URLs, and `ZeroBounceWarmup.baseUrl`) is refused before anything is sent, and the error does not quote the URL (see the base URL rules below).
 - `getFile` and `scoringGetFile` no longer print the saved file's name, and a multipart upload no longer logs the local file path with `NSLog`. The 2.2.0 notes list both as still logged.
+- **HTML error pages: the title is cut from the original text.** The `<title>` of an HTML error page was found in a lowercased copy of the body and cut from the original with that copy's positions. Characters whose lowercase has another length (U+0130, U+212A) moved the cut, so part of a key quoted in the title could be shown, and a long run of them crashed the host app with "String index range is out of bounds". The tag is now found on the original bytes (any letter case, attributes allowed), and an unterminated one gives no title.
+- **Byte escapes in an echoed key are read as UTF-8.** `\xHH` and three-digit octal `\NNN` escapes were read as code points, so a non-ASCII key echoed as `ab\xc3\xa9cd` or `ab\303\251cd` was not recognised. Consecutive byte escapes are now assembled as UTF-8; a byte that starts no valid sequence stays as written.
+- **Keys with invisible characters are refused.** `initialize` (SDK and Warmup) now also refuses any Default_Ignorable_Code_Point (U+034F, U+17B4, variation selectors, zero-width characters, tags, ...), the Hangul fillers U+115F, U+1160, U+3164 and U+FFA0, U+2800 and U+FFFD, anywhere in the key.
+- **Redaction cost is bounded.** Text longer than 64 KiB is replaced by a fixed text instead of being decoded and masked (it took seconds per megabyte of non-ASCII text); no message the SDK builds comes near that length.
+- **Transport errors: more of the user info is scrubbed.** Besides strings, URLs, nested errors and arrays, the key is now also removed from `Data` and dictionary values in an error's user info.
+- **Behaviour change:** every base URL (`apiBaseUrl`, the bulk root and bulk URLs, `setListEvaluatorBaseUrl`, `setInboxPlacementBaseUrl`, `ZeroBounceWarmup.baseUrl`) is checked when it is set, and a URL that fails is refused: every call on it fails before anything is sent. Refused: a scheme other than `https://` (or `http://` with a host); an empty host; user information (`@` in the authority, `https://user:pw@evil.example`); a query or fragment; a backslash; any whitespace, control, invisible (default-ignorable, format, bidirectional) character or U+FFFD (invalid UTF-8) anywhere; a non-ASCII character or `%` in the host; `%2f`, `%5c` or `%00` in the path; a `.` or `..` path segment, also percent-encoded. Before, only `?` and `#` were refused, and the rest was sent with the `api_key`. The failure text is `A base URL must be an https:// URL (plain http:// only to 127.0.0.1, localhost or [::1]) with a host, and must not contain ...`; the URL is never quoted. Surrounding whitespace is still trimmed. `isAllowedURL` also refuses a URL with no host.
+- **Behaviour change:** a multipart upload (`sendFile`, `scoringSendFile`, the Email Finder, Domain Search and list-evaluator uploads, both file-path and in-memory variants) refuses a CR, LF or NUL in any form field name or value, and in the file name, and a `"` in the file name or a field name, with `decodeError` and a fixed text, before sending. Before, they were written into the part headers unchanged (header injection). The boundary stays a fresh UUID.
+- Downloads (`getFile`, `getFileStreaming`, the bulk root `getFile` calls, and the Warmup/Priority3 writers) write through a temporary file that is created with its final permission bits before any data goes in: those of the file already at the target, else the default creation mode. Before, the temporary file was created 0644 and the target's mode was copied after the write, so a 0600 target's content was readable by others while it was written. A download moved from the URLSession location is now copied in 1 MB chunks into that file, then the source is removed.
 
-## [3.0.1] - 2026-11-12
+## [3.0.1] - 2026-11-11
+
+Tagged (`v3.0.1`, 2026-11-11 23:47 UTC) but never published: there is no GitHub release for it and CocoaPods trunk ends at 3.0.0. Everything below is in the next release.
 
 ### Security
 
 - A transport failure (connection refused, timeout, TLS failure) was passed to the completion handler as URLSession's own error, unchanged, and URLSession puts the request URL into that error's user info (`NSErrorFailingURLStringKey`, `NSErrorFailingURLKey`, and again in the underlying error). For every `ZeroBounceSDK` call that sends `api_key` in the query string, the key appeared in `String(describing: error)` and in anything that logged the error. The key is now replaced by `***` everywhere in the error before it is handed over. The error keeps its domain and code, so `error as? URLError` and checks such as `.code == .timedOut` work as before. `ZeroBounceWarmup` already reported transport errors with the key masked and is not affected.
 
-## [3.0.0] - 2026-11-12
+## [3.0.0] - 2026-11-11
 
 ### Breaking
 
@@ -86,7 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The license file is `LICENSE` (was `LICENSE.md`), the name GitHub and the package tools look for; its text is unchanged. The podspec and the Xcode project point at it.
-- `getFileStreaming` and `scoringGetFileStreaming` with a base URL that is not https now fail with `ZBError.decodeError(messages: ["url must be an https:// URL"])`, as every other call does, instead of `ZBError.invalidEndpoint`. No request was sent in either version.
+- `getFileStreaming` and `scoringGetFileStreaming` with a base URL that is not https now fail with `ZBError.decodeError` and the base URL refusal text, as every other call does, instead of `ZBError.invalidEndpoint`. No request was sent in either version.
 
 ### Fixed
 
@@ -164,7 +184,13 @@ The **Breaking** entries below give the details.
 - Query parameters are built with `URLComponents` instead of string interpolation, so a value containing `&`, `=`, `#` or a space is percent-encoded and can no longer end the value or add a parameter. (`URLComponents` leaves `+` as is.)
 - Only `https://` URLs are called (loopback aside, so an offline test can use a local stub), and redirects are not followed, so the API key cannot be sent in the clear or to another host.
 
-## [2.1.3] - 2026-06-18
+## [2.1.4] - 2026-08-14
+
+### Changed
+
+- Maintenance release: GitHub Actions dependency bumps (`github/codeql-action`) in the workflows. No change to the SDK sources.
+
+## [2.1.3] - 2026-06-17
 
 ### Fixed
 
@@ -176,12 +202,34 @@ The **Breaking** entries below give the details.
 
 - `ZBValidateResponse.catchallDomain`, read from `catchall_domain`.
 
-## [2.1.0] - 2026-04-05
+## [2.1.1] - 2026-06-10
+
+### Changed
+
+- Pinned the `github/codeql-action` workflow references to v4.35.2. No change to the SDK sources.
+
+## [2.1.0] - 2026-04-08
 
 ### Added
 
 - Optional bulk get-file parameters: download type (`phase_1`, `phase_2`, `combined`) and `activityData` (validation get-file only).
 - `allowPhase2` on validation file send.
+
+## [2.0.12] - 2026-03-05
+
+### Changed
+
+- The podspec `source` and readme URLs use versioned tags. No change to the SDK sources.
+
+## [2.0.11] - 2026-03-03
+
+### Changed
+
+- Licence text changed to MIT (copyright 2026); removed `documentation_es.md`. No change to the SDK sources.
+
+## [2.0.10] - 2026-03-03
+
+Covers the tags 2.0.1 to 2.0.10, all made on the same day. They changed only the GitHub workflows (`sdk_ci.yml`, `auto_assign_ci.yaml`: explicit permissions, newer checkout), the version numbers in the podspec and Xcode project, and the README publish notes. No change to the SDK sources.
 
 ## [2.0.0] - 2026-03-03
 
@@ -193,7 +241,12 @@ The **Breaking** entries below give the details.
 [3.0.1]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.2.0...v3.0.0
 [2.2.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.4...v2.2.0
+[2.1.4]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.3...v2.1.4
 [2.1.3]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.2...v2.1.3
-[2.1.2]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.0...v2.1.2
-[2.1.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.0.0...v2.1.0
+[2.1.2]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.1...v2.1.2
+[2.1.1]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.0...v2.1.1
+[2.1.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.0.12...v2.1.0
+[2.0.12]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.0.11...v2.0.12
+[2.0.11]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.0.10...v2.0.11
+[2.0.10]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.0.0...v2.0.10
 [2.0.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/releases/tag/v2.0.0

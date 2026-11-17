@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import MobileCoreServices
+import UniformTypeIdentifiers
 
 internal class ZBMultiPartRequest {
     
@@ -21,6 +21,8 @@ internal class ZBMultiPartRequest {
     
     static internal func createFileRequest(url:String, parameters: [String: Any]?, filePathKey: String, paths: [String]) throws -> URLRequest {
         let boundary = generateBoundaryString()
+        try validate(parameters: parameters, filePathKey: filePathKey,
+                     fileNames: paths.map { URL(fileURLWithPath: $0).lastPathComponent })
         
         guard let requestURL = URL(string: url) else { throw ZBError.invalidEndpoint }
         var request = URLRequest(url: requestURL)
@@ -35,6 +37,7 @@ internal class ZBMultiPartRequest {
     /// Create request with file data (e.g. in-memory CSV) instead of file path.
     static internal func createFileRequestWithData(url: String, parameters: [String: Any]?, filePathKey: String, fileData: Data, fileName: String) throws -> URLRequest {
         let boundary = generateBoundaryString()
+        try validate(parameters: parameters, filePathKey: filePathKey, fileNames: [fileName])
         
         guard let requestURL = URL(string: url) else { throw ZBError.invalidEndpoint }
         var request = URLRequest(url: requestURL)
@@ -68,11 +71,33 @@ internal class ZBMultiPartRequest {
         return body
     }
     
+    /// The text of the refusal: fixed, so it never quotes a value (an api_key
+    /// is one of them).
+    internal static let refusedFieldText =
+        "A form field name, a form value or a file name must not contain CR, LF or NUL, and a file name must not contain a double quote"
+
+    /// Throws when a form field name, a form value or a file name could break
+    /// out of its multipart part: CR, LF or NUL in any of them, or `"` in a
+    /// file name (a field name is quoted too, so `"` is refused there as well).
+    internal static func validate(parameters: [String: Any]?, filePathKey: String, fileNames: [String]) throws {
+        func bad(_ text: String, quote: Bool) -> Bool {
+            text.unicodeScalars.contains { $0 == "\r" || $0 == "\n" || $0 == "\0" || (quote && $0 == "\"") }
+        }
+        for (key, value) in parameters ?? [:] {
+            if bad(key, quote: true) || bad("\(value)", quote: false) {
+                throw ZBError.decodeError(messages: [refusedFieldText])
+            }
+        }
+        if bad(filePathKey, quote: true) { throw ZBError.decodeError(messages: [refusedFieldText]) }
+        for name in fileNames where bad(name, quote: true) {
+            throw ZBError.decodeError(messages: [refusedFieldText])
+        }
+    }
+
     private static func mimeTypeForFile(name: String) -> String {
         let pathExtension = (name as NSString).pathExtension
-        if let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, pathExtension as NSString, nil)?.takeRetainedValue(),
-           let mimetype = UTTypeCopyPreferredTagWithClass(uti, kUTTagClassMIMEType)?.takeRetainedValue() {
-            return mimetype as String
+        if let mimetype = UTType(filenameExtension: pathExtension)?.preferredMIMEType {
+            return mimetype
         }
         return "text/csv"
     }
@@ -124,7 +149,7 @@ internal class ZBMultiPartRequest {
     
     /// Determine mime type on the basis of extension of a file.
     ///
-    /// This requires `import MobileCoreServices`.
+    /// This requires `import UniformTypeIdentifiers`.
     ///
     /// - parameter path:         The path of the file for which we are going to determine the mime type.
     ///
@@ -134,10 +159,8 @@ internal class ZBMultiPartRequest {
         let url = URL(fileURLWithPath: path)
         let pathExtension = url.pathExtension
         
-        if let uti = UTTypeCreatePreferredIdentifierForTag(kUTTagClassFilenameExtension, pathExtension as NSString, nil)?.takeRetainedValue() {
-            if let mimetype = UTTypeCopyPreferredTagWithClass(uti, kUTTagClassMIMEType)?.takeRetainedValue() {
-                return mimetype as String
-            }
+        if let mimetype = UTType(filenameExtension: pathExtension)?.preferredMIMEType {
+            return mimetype
         }
         return "application/octet-stream"
     }

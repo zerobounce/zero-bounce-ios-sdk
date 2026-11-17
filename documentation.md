@@ -619,10 +619,9 @@ of an `api_key` parameter. Use `ZeroBounceWarmup` with a Warmup API key;
 `ZeroBounceSDK` stays for the validation key.
 
 `ZeroBounceWarmup.baseUrl` is `https://warmup-api.zerobounce.net`; trailing slashes are
-dropped when it is set. A `baseUrl` with a `?` or a `#` is refused: every call
-fails before anything is sent with `baseUrl must be an https:// URL`, and the
-error does not quote the URL. The same refusal on `ZeroBounceSDK`'s base URLs
-reads `url must be an https:// URL`.
+dropped when it is set. It follows the same rules as `ZeroBounceSDK`'s base
+URLs: a refused `baseUrl` makes every call fail before anything is sent, with
+the same text, and the error does not quote the URL.
 
 The body comes back parsed — a dictionary, an array or a number depending on
 the endpoint, and `nil` for the documented empty successes (HTTP 204 and an
@@ -687,9 +686,11 @@ paths built from the bulk one (both default to `bulkapi.zerobounce.net`), so
 `initialize` alone leaves them pointing at the live API.
 
 Every base URL must be `https://`, and trailing slashes are dropped when it is
-set. A base URL with a `?` or a `#` is refused: every call built on it fails
-before anything is sent with `url must be an https:// URL`, and the error does
-not quote the URL.
+set. A base URL with user information (`@`), a query or fragment (`?`, `#`), a
+backslash, whitespace, a control or invisible character, invalid UTF-8, a
+non-ASCII character or `%` in the host, or an encoded slash or dot segment in
+the path is refused: every call built on it fails before anything is sent, and
+the error does not quote the URL.
 
 ```swift
 ZeroBounceSDK.shared.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/listevaluator")

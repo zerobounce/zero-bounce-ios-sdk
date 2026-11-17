@@ -35,7 +35,7 @@ Open an [issue](https://github.com/zerobounce/zero-bounce-ios-sdk/issues) and in
 
 2. **Make your changes** and add or update tests where relevant.
 
-3. **Run the test suite** (see README) before submitting.
+3. **Run the test suite** (see README) before submitting. CI builds with the iOS 15 deployment target but runs the tests on Mac Catalyst, not on an iOS 15 simulator; keep new code free of APIs newer than iOS 15 (guard them with `#available`).
 
 4. **Commit** with a clear message (e.g. `Add X`, `Fix Y`).
 
