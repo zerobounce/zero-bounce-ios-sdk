@@ -842,18 +842,32 @@ public class ZeroBounceSDK {
             changed = true
             return omittedValue
         }
-        func scrub(_ value: Any, _ depth: Int = 0) -> Any {
+        // CF and Security objects cannot carry text and are typed under their
+        // keys (a SecTrust under NSURLErrorFailingURLPeerTrustErrorKey), so
+        // they stay as they are.
+        func isOpaqueCFObject(_ object: AnyObject) -> Bool {
+            guard object is NSObject else { return false }
+            let type = CFGetTypeID(object)
+            return type == SecTrustGetTypeID() || type == SecCertificateGetTypeID()
+                || type == SecIdentityGetTypeID() || type == SecKeyGetTypeID()
+        }
+        // A scrubbed value, or nil when the value is of a type that cannot be
+        // read for a secret: its key is dropped, never given a string.
+        func scrub(_ value: Any, _ depth: Int = 0) -> Any? {
             if depth > maxDepth { return omit() }
+            // Identity is tracked before any bridging or casting.
             var identity: ObjectIdentifier?
-            if Swift.type(of: value) is AnyClass {
-                let id = ObjectIdentifier(value as AnyObject)
+            let object: AnyObject? = Swift.type(of: value) is AnyClass ? (value as AnyObject) : nil
+            if let object {
+                let id = ObjectIdentifier(object)
                 if visiting.contains(id) { return omit() }
                 visiting.insert(id)
                 identity = id
+                if isOpaqueCFObject(object) { visiting.remove(id); return value }
             }
             defer { if let identity { visiting.remove(identity) } }
-            func hashable(_ element: Any) -> AnyHashable {
-                (scrub(element, depth + 1) as? AnyHashable) ?? (omit() as! AnyHashable)
+            func hashable(_ element: Any) -> AnyHashable? {
+                scrub(element, depth + 1) as? AnyHashable
             }
             switch value {
             case let text as String:
@@ -884,9 +898,10 @@ public class ZeroBounceSDK {
                     if cleaned != text { copy.url = URL(string: cleaned) }
                 }
                 if let headers = request.allHTTPHeaderFields {
-                    var cleanedHeaders: [String: String] = [:]
-                    for (name, content) in headers { cleanedHeaders[clean(name)] = clean(content) }
-                    copy.allHTTPHeaderFields = cleanedHeaders
+                    // Assigning allHTTPHeaderFields merges, so a header whose
+                    // name holds a secret would stay: clear every one first.
+                    for name in headers.keys { copy.setValue(nil, forHTTPHeaderField: name) }
+                    for (name, content) in headers { copy.setValue(clean(content), forHTTPHeaderField: clean(name)) }
                 }
                 if let body = request.httpBody {
                     let text = String(decoding: body, as: UTF8.self)
@@ -898,23 +913,54 @@ public class ZeroBounceSDK {
                 return copy
             case let nested as NSError:
                 return redact(nested, depth + 1)
+            case let array as NSArray where object != nil:
+                // Enumerated as Foundation objects, never bridged: a bridged
+                // copy would hash or walk a cycle without end.
+                var out: [Any] = []
+                for element in array { if let kept = scrub(element, depth + 1) { out.append(kept) } else { changed = true } }
+                return out
+            case let set as NSSet where object != nil:
+                let out = NSMutableSet()
+                for element in set {
+                    if let kept = scrub(element, depth + 1) as AnyObject? { out.add(kept) } else { changed = true }
+                }
+                return out
+            case let map as NSDictionary where object != nil:
+                let out = NSMutableDictionary()
+                for key in map.allKeys {
+                    guard let content = map[key] else { continue }
+                    guard let cleanKey = scrub(key, depth + 1) as AnyObject? as? NSCopying else { changed = true; continue }
+                    if let kept = scrub(content, depth + 1) as AnyObject? { out[cleanKey] = kept } else { changed = true }
+                }
+                if out.allKeys.allSatisfy({ $0 is String }) { return out as? [String: Any] ?? out }
+                return out
             case let list as [Any]:
-                return list.map { scrub($0, depth + 1) }
+                var out: [Any] = []
+                for element in list { if let kept = scrub(element, depth + 1) { out.append(kept) } else { changed = true } }
+                return out
             case let set as Set<AnyHashable>:
-                return Set(set.map { hashable($0) })
+                var out = Set<AnyHashable>()
+                for element in set { if let kept = hashable(element) { out.insert(kept) } else { changed = true } }
+                return out
             case let map as [String: Any]:
                 var out: [String: Any] = [:]
-                for (key, content) in map { out[clean(key)] = scrub(content, depth + 1) }
+                for (key, content) in map {
+                    if let kept = scrub(content, depth + 1) { out[clean(key)] = kept } else { changed = true }
+                }
                 return out
             case let map as [AnyHashable: Any]:
                 var out: [AnyHashable: Any] = [:]
-                for (key, content) in map { out[hashable(key)] = scrub(content, depth + 1) }
+                for (key, content) in map {
+                    if let cleanKey = hashable(key), let kept = scrub(content, depth + 1) { out[cleanKey] = kept } else { changed = true }
+                }
                 return out
             case is NSNumber, is Bool, is Int, is Int8, is Int16, is Int32, is Int64, is UInt, is UInt8,
                  is UInt16, is UInt32, is UInt64, is Float, is Double, is Date, is NSNull, is UUID, is Decimal:
                 return value
             default:
-                return omit()
+                // An unknown type cannot be read: the caller drops its key.
+                changed = true
+                return nil
             }
         }
         func redact(_ error: NSError, _ depth: Int = 0) -> NSError {
@@ -923,10 +969,14 @@ public class ZeroBounceSDK {
                 return NSError(domain: omittedValue, code: error.code)
             }
             var info: [String: Any] = [:]
-            for (key, content) in error.userInfo { info[clean(key)] = scrub(content, depth + 1) }
+            for (key, content) in error.userInfo {
+                if let kept = scrub(content, depth + 1) { info[clean(key)] = kept } else { changed = true }
+            }
             return NSError(domain: clean(error.domain), code: error.code, userInfo: info)
         }
-        let redacted = redact(error as NSError)
+        let root = error as NSError
+        visiting.insert(ObjectIdentifier(root))
+        let redacted = redact(root)
         guard changed else { return error }
         if redacted.domain == NSURLErrorDomain {
             return URLError(URLError.Code(rawValue: redacted.code), userInfo: redacted.userInfo)

@@ -602,7 +602,7 @@ class SecretRedactionTests: XCTestCase {
         let text = String(describing: cleaned.userInfo)
         XCTAssertFalse(text.contains(key), text)
         XCTAssertEqual(cleaned.userInfo["number"] as? Int, 7)
-        XCTAssertEqual(cleaned.userInfo["opaque"] as? String, ZeroBounceSDK.omittedValue)
+        XCTAssertNil(cleaned.userInfo["opaque"], "a value of an unknown type loses its key, it is never replaced by a string")
         let scrubbed = cleaned.userInfo["request"] as? URLRequest
         XCTAssertEqual(scrubbed?.value(forHTTPHeaderField: "Authorization"), "Bearer ***")
     }
@@ -620,5 +620,125 @@ class SecretRedactionTests: XCTestCase {
         for _ in 0..<500 { nested = ["next": nested] }
         let deep = ZeroBounceSDK.redacting([key], in: NSError(domain: "d", code: 2, userInfo: ["n": nested])) as NSError
         XCTAssertFalse(String(describing: deep.userInfo).contains(key))
+    }
+
+    // MARK: Pre-release re-check
+
+    private static let testCertificateBase64 = "MIIC5DCCAcygAwIBAgIUHZqRI7cWEN/uCbH7ncqqv9HRsQwwDQYJKoZIhvcNAQELBQAwEjEQMA4GA1UEAwwHemItdGVzdDAeFw0yNjExMTcxNDU0NTBaFw0zNjExMTQxNDU0NTBaMBIxEDAOBgNVBAMMB3piLXRlc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDA2A0M+mkqC03WZOWh9iNW5FSQlgjuWD7+eGDk7xUStzc3FUSehLQFGfvaQDoopqBDcg7mb6TmIsimUl3gKfRxJ6t708kXRNlR4FhbreZO4VBqD5lrcUVi688mGHgItshPtGQRqtyC+zM1fn5AxVSy5bTZOsq4L4LJndiPyMwpVZaZbXG1T7/+0JqRuqY/n9QU7++H2Zojpl98jgeh5/FSm8KIG1l1ZB/5QP7TBci7H1fboIL07aShOURMeGTzAD9PIbS7X/SOwTQc1X0HUtvD2AZtsFdkQqOB96RWA/YWMruNYl62yzxI/o8CKfMiMjE5JPpTp9evBAlzY6VqJ1K3AgMBAAGjMjAwMB0GA1UdDgQWBBRLmQfxXxXSvcbFsI0O4w6GAUACdzAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQBA23ZD1kbGccZQC+dtq/QwCYF5LaDHuZphrTlyejkfo31DlFAlfo1I2KNtMGuXCGdD8QHT4i1V1Ml05/4A2S9DGplrdx6SQ2nafDUHUElgjI+6tV++7kJLqPyJVD17qSEN78PVKKDP/i820FyAuGUshmf9dTI7JEVatBFwWa1GNAJrMobiV6btd0WvpgT3ZaN2ew+V4nDSSYZ4Py3mtAjOckPFIVHO3f1IpBa2f7oIoVC4KtD8Rm0edcl/NiEpkjuGtkeDEfsnNwr4i/39qXxi9L/Zz/46M0HQDVeNgXQJnb5ku+0elU/Yv8d/I/i7edjazA5RcF9FVfRCa3QwuV67"
+
+    func testATlsErrorKeepsARealSecTrustAndMasksTheUrl() throws {
+        let key = "zb-dummy-key-tls-1"
+        let der = try XCTUnwrap(Data(base64Encoded: Self.testCertificateBase64))
+        let certificate = try XCTUnwrap(SecCertificateCreateWithData(nil, der as CFData))
+        var created: SecTrust?
+        XCTAssertEqual(SecTrustCreateWithCertificates(certificate, SecPolicyCreateBasicX509(), &created), errSecSuccess)
+        let trust = try XCTUnwrap(created)
+        let url = URL(string: "https://api.example/v2/x?api_key=\(key)")!
+        let error = URLError(.serverCertificateUntrusted, userInfo: [
+            NSURLErrorFailingURLErrorKey: url,
+            NSURLErrorFailingURLStringErrorKey: url.absoluteString,
+            NSURLErrorFailingURLPeerTrustErrorKey: trust,
+            NSRecoveryAttempterErrorKey: NSObject(),
+        ])
+        let cleaned = try XCTUnwrap(ZeroBounceSDK.redacting([key], in: error) as? URLError)
+        let kept: AnyObject = try XCTUnwrap(cleaned.userInfo[NSURLErrorFailingURLPeerTrustErrorKey] as AnyObject?)
+        XCTAssertEqual(CFGetTypeID(kept), SecTrustGetTypeID())
+        let peer: SecTrust = try XCTUnwrap(cleaned.failureURLPeerTrust)
+        XCTAssertEqual(CFGetTypeID(peer), SecTrustGetTypeID())
+        XCTAssertEqual(SecTrustGetCertificateCount(peer), 1)
+        XCTAssertFalse(String(describing: cleaned.userInfo).contains(key))
+        XCTAssertFalse((cleaned.failingURL?.absoluteString ?? "").contains(key))
+        XCTAssertNil(cleaned.userInfo[NSRecoveryAttempterErrorKey])
+    }
+
+    func testValuesThatCarryNoTextStayAndOtherUnknownValuesLoseTheirKey() {
+        let key = "zb-dummy-key-kinds-2"
+        let id = UUID()
+        let date = Date(timeIntervalSince1970: 5)
+        let info: [String: Any] = [
+            "text": "a \(key)", "number": NSNumber(value: 3), "date": date, "null": NSNull(),
+            "uuid": id, "decimal": Decimal(string: "1.5")!, "object": NSObject(),
+            "list": ["x \(key)", NSObject()],
+        ]
+        let cleaned = ZeroBounceSDK.redacting([key], in: NSError(domain: "d", code: 1, userInfo: info)) as NSError
+        XCTAssertEqual(cleaned.userInfo["number"] as? Int, 3)
+        XCTAssertEqual(cleaned.userInfo["date"] as? Date, date)
+        XCTAssertTrue(cleaned.userInfo["null"] is NSNull)
+        XCTAssertEqual(cleaned.userInfo["uuid"] as? UUID, id)
+        XCTAssertEqual(cleaned.userInfo["decimal"] as? Decimal, Decimal(string: "1.5"))
+        XCTAssertNil(cleaned.userInfo["object"])
+        XCTAssertEqual((cleaned.userInfo["list"] as? [Any])?.count, 1)
+        XCTAssertFalse(String(describing: cleaned.userInfo).contains(key))
+    }
+
+    func testCyclesThroughSetsArraysDictionariesAndErrorsDoNotCrash() {
+        let key = "zb-dummy-key-cycle-3"
+        // NSSet <-> NSArray
+        let array = NSMutableArray()
+        let set = NSMutableSet()
+        array.add(set)
+        array.add("a \(key)")
+        set.add(array)
+        // NSDictionary <-> NSSet
+        let dictionary = NSMutableDictionary()
+        let set2 = NSMutableSet()
+        dictionary["set"] = set2
+        dictionary["text"] = "b \(key)"
+        set2.add(dictionary)
+        // NSError underlying chain pointing back
+        let inner = NSMutableDictionary()
+        let outer = NSError(domain: "o", code: 1, userInfo: [NSUnderlyingErrorKey: NSError(domain: "i", code: 2, userInfo: ["back": inner, "t": key])])
+        inner["error"] = outer
+        let info: [String: Any] = ["array": array, "dict": dictionary, "chain": outer]
+        let cleaned = ZeroBounceSDK.redacting([key], in: NSError(domain: "d", code: 1, userInfo: info)) as NSError
+        XCTAssertFalse(String(describing: cleaned.userInfo).contains(key))
+        // The error holding itself.
+        let selfInfo = NSMutableDictionary()
+        let selfError = NSError(domain: "s", code: 3, userInfo: ["m": selfInfo, "t": key])
+        selfInfo["me"] = selfError
+        XCTAssertFalse(String(describing: ZeroBounceSDK.redacting([key], in: selfError)).contains(key))
+    }
+
+    func testDepthBeyondTheLimitOnArraysAndErrorChainsIsHandled() {
+        let key = "zb-dummy-key-depth-4"
+        var nested: Any = NSArray(object: "deep \(key)")
+        for _ in 0..<100 { nested = NSArray(object: nested) }
+        let a = ZeroBounceSDK.redacting([key], in: NSError(domain: "d", code: 1, userInfo: ["n": nested])) as NSError
+        XCTAssertFalse(String(describing: a.userInfo).contains(key))
+        var chain = NSError(domain: "leaf", code: 0, userInfo: ["t": key])
+        for i in 1...100 { chain = NSError(domain: "e\(i)", code: i, userInfo: [NSUnderlyingErrorKey: chain]) }
+        let b = ZeroBounceSDK.redacting([key], in: chain)
+        XCTAssertFalse(String(describing: b).contains(key))
+    }
+
+    func testSharedNonCyclicObjectsAreScrubbedNotOmitted() {
+        let key = "zb-dummy-key-shared-5"
+        let shared = NSMutableString(string: "s \(key)")
+        let sharedArray = NSArray(object: shared)
+        let info: [String: Any] = ["a": sharedArray, "b": sharedArray, "c": [sharedArray, sharedArray], "d": NSSet(object: shared)]
+        let cleaned = ZeroBounceSDK.redacting([key], in: NSError(domain: "d", code: 1, userInfo: info)) as NSError
+        XCTAssertFalse(String(describing: cleaned.userInfo).contains(key))
+        XCTAssertEqual((cleaned.userInfo["a"] as? [Any])?.first as? String, "s ***")
+        XCTAssertEqual((cleaned.userInfo["b"] as? [Any])?.first as? String, "s ***")
+        XCTAssertEqual(((cleaned.userInfo["c"] as? [Any])?.last as? [Any])?.first as? String, "s ***")
+        XCTAssertEqual((cleaned.userInfo["d"] as? NSSet)?.anyObject() as? String, "s ***")
+    }
+
+    func testAHeaderNameHoldingTheKeyIsRemoved() {
+        let key = "zb-dummy-key-header-6"
+        var request = URLRequest(url: URL(string: "https://api.example/x")!)
+        request.setValue("v", forHTTPHeaderField: "X-\(key)")
+        let cleaned = ZeroBounceSDK.redacting([key], in: NSError(domain: "d", code: 1, userInfo: ["r": request])) as NSError
+        let headers = (cleaned.userInfo["r"] as? URLRequest)?.allHTTPHeaderFields ?? [:]
+        XCTAssertFalse(String(describing: headers).contains(key), "\(headers)")
+    }
+
+    func testATagCutAtTheEndOfThePrefixIsWholeOnlyWhenTheNextCharacterClosesIt() {
+        func html(_ text: String) -> Bool { ZBError.looksLikeHtml(Data(text.utf8)) }
+        let pad = String(repeating: " x", count: 998) // 1996 characters
+        XCTAssertFalse(html(pad + "<head" + "er>y"))
+        XCTAssertFalse(html(pad + "<htmlx"))
+        XCTAssertTrue(html(pad + "<head>"))
+        XCTAssertTrue(html(pad + "<head"))
     }
 }

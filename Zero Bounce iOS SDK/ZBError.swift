@@ -205,14 +205,18 @@ public enum ZBError: LocalizedError {
     static func looksLikeHtml(_ data: Data) -> Bool {
         let content = unpadded(data)
         if let first = content.first, first == 0x7B || first == 0x5B { return false }
-        let prefix = String(decodedBody(content.prefix(65536)).prefix(2000)).lowercased()
-        return ["<!doctype html", "<html", "<head", "<body"].contains { hasWholeTag(prefix, $0) }
+        let full = decodedBody(content.prefix(65536))
+        let prefix = String(full.prefix(2000)).lowercased()
+        // A tag that ends exactly at the end of the prefix is whole only when
+        // the next character of the content closes it (or the content ends).
+        let following = full.dropFirst(2000).unicodeScalars.first
+        return ["<!doctype html", "<html", "<head", "<body"].contains { hasWholeTag(prefix, $0, following: following) }
     }
 
-    private static func hasWholeTag(_ text: String, _ tag: String) -> Bool {
+    private static func hasWholeTag(_ text: String, _ tag: String, following: Unicode.Scalar? = nil) -> Bool {
         var from = text.startIndex
         while let found = text.range(of: tag, range: from..<text.endIndex) {
-            guard let next = text[found.upperBound...].unicodeScalars.first else { return true }
+            guard let next = text[found.upperBound...].unicodeScalars.first ?? following else { return true }
             if [">", "/", " ", "\t", "\n", "\u{0B}", "\u{0C}", "\r"].contains(next) { return true }
             from = text.index(after: found.lowerBound)
         }

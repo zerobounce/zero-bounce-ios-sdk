@@ -71,7 +71,7 @@ jobs:
           # (MARKETING_VERSION[sdk=iphoneos*]) included. There are at least two (the SDK target's
           # Debug and Release configurations); a missing entry would leave fewer.
           PBX="Zero Bounce iOS SDK.xcodeproj/project.pbxproj"
-          MARKETING_VERSIONS=$(grep -hE '^[[:space:]]*"?MARKETING_VERSION("?\[[^]]*\]"?)?"?[[:space:]]*=' "$PBX" | sed -E 's/^.*(MARKETING_VERSION|\])"?[[:space:]]*=[[:space:]]*"?([^";]*)"?[[:space:]]*;.*/\2/' || true)
+          MARKETING_VERSIONS=$(grep -hE '^[[:space:]]*"?MARKETING_VERSION("?(\[[^]]*\])*"?)?"?[[:space:]]*=' "$PBX" | sed -E 's/^.*(MARKETING_VERSION|\])"?[[:space:]]*=[[:space:]]*"?([^";]*)"?[[:space:]]*;.*/\2/' || true)
           if [ -z "$MARKETING_VERSIONS" ]; then
             echo "Error: Could not read MARKETING_VERSION from project.pbxproj"
             exit 1
