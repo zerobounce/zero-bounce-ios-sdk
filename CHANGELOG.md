@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-11-17
+
 ### Breaking
 
 - A refused base URL (on `ZeroBounceSDK` and `ZeroBounceWarmup`) fails with one text, `A base URL must be an https:// URL (plain http:// only to 127.0.0.1, localhost or [::1]) with a host, and must not contain ...`, in `ZBError.decodeError`. 3.0.1 used `url must be an https:// URL` (`baseUrl must be an https:// URL` on Warmup); code that matched those strings must match the new one or the error case.
@@ -89,7 +91,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Behaviour change:** a multipart upload (`sendFile`, `scoringSendFile`, the Email Finder, Domain Search and list-evaluator uploads, both file-path and in-memory variants) refuses a CR, LF or NUL in any form field name or value, and in the file name, and a `"` in the file name or a field name, with `decodeError` and a fixed text, before sending. 3.0.1 wrote them into the part headers unchanged (header injection). The boundary stays a fresh UUID.
 - The temporary file a download is written to (see the atomic-write entry under **Fixed**) is created with its final permission bits before any data goes in: those of the file already at the target, else the default creation mode (`getFile`, `scoringGetFile`, `getFileStreaming`, `scoringGetFileStreaming`, `emailFinderGetFile`, `domainSearchGetFile`). In 3.0.1 the streaming downloads deleted the target and moved the URLSession temporary file in (its own mode, not the target's), and `getFile` wrote with `Data.write(to:)`, which keeps an existing file's mode. A download moved from the URLSession location is copied in 1 MB chunks into that file, then the source is removed.
 - Error user info is scrubbed more completely: dictionary keys, `Set`/`NSSet` members, `NSAttributedString`, `URLComponents`, `URLRequest`/`NSURLRequest` (URL, header names and values, body; a body stream is dropped) and the error domain. Values that cannot carry text stay as they are (CF and Security objects such as the `SecTrust` under `NSURLErrorFailingURLPeerTrustErrorKey`, which `URLError.failureURLPeerTrust` needs; `NSNumber`, `Date`, `NSNull`, `UUID`, `Decimal`); a value of any other unknown type (for example `NSRecoveryAttempterErrorKey`) is dropped with its key, never replaced by a string. Containers nested more than 32 levels deep, or holding themselves (also through `NSSet`/`NSArray`/`NSDictionary` and `NSError` underlying errors, tracked by identity before any bridging), are replaced (no stack overflow). A secret in a request header name is removed with the header.
-- A body is an HTML page when a tag cut by the end of the 2000-character probe (`<head` of `<header>`, `<htmlx`) is closed by the next character; it was counted as whole at the probe's end.
 - A lone `\xHH` or `\NNN` byte escape that is not valid UTF-8 is also read as the Latin-1 character (`ab\xe9cd` is `abécd`), so a non-ASCII key written that way by Python or C is masked.
 
 ## [3.0.1] - 2026-11-11
@@ -241,7 +242,8 @@ Covers the tags 2.0.1 to 2.0.10, all made on the same day. They changed only the
 
 - Release 2.0.0 of the SDK.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v3.0.1...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v3.0.1...v4.0.0
 [3.0.1]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.2.0...v3.0.0
 [2.2.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.1.4...v2.2.0
