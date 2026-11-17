@@ -67,17 +67,25 @@ jobs:
             echo "Error: podspec version ($PODSPEC_VERSION) does not match tag ($TAG)."
             exit 1
           fi
-          # Every MARKETING_VERSION in the Xcode project (the SDK target, both configurations) must match too.
-          MARKETING_VERSIONS=$(grep -hE '^[[:space:]]*MARKETING_VERSION[[:space:]]*=' "Zero Bounce iOS SDK.xcodeproj/project.pbxproj" | sed -E 's/.*=[[:space:]]*"?([^";]*)"?;.*/\1/' | sort -u)
+          # Every MARKETING_VERSION in the Xcode project must match too, conditional keys
+          # (MARKETING_VERSION[sdk=iphoneos*]) included. There are at least two (the SDK target's
+          # Debug and Release configurations); a missing entry would leave fewer.
+          PBX="Zero Bounce iOS SDK.xcodeproj/project.pbxproj"
+          MARKETING_VERSIONS=$(grep -hE '^[[:space:]]*"?MARKETING_VERSION("?\[[^]]*\]"?)?"?[[:space:]]*=' "$PBX" | sed -E 's/^.*(MARKETING_VERSION|\])"?[[:space:]]*=[[:space:]]*"?([^";]*)"?[[:space:]]*;.*/\2/' || true)
           if [ -z "$MARKETING_VERSIONS" ]; then
             echo "Error: Could not read MARKETING_VERSION from project.pbxproj"
             exit 1
           fi
-          if [ "$MARKETING_VERSIONS" != "$TAG_VERSION" ]; then
-            echo "Error: MARKETING_VERSION in project.pbxproj ($MARKETING_VERSIONS) does not match tag ($TAG)."
+          MV_COUNT=$(printf '%s\n' "$MARKETING_VERSIONS" | wc -l | tr -d ' ')
+          if [ "$MV_COUNT" -lt 2 ]; then
+            echo "Error: found $MV_COUNT MARKETING_VERSION entries in project.pbxproj, expected at least 2."
             exit 1
           fi
-          echo "Publishing tag: $TAG (podspec $PODSPEC_VERSION, project $MARKETING_VERSIONS)"
+          if [ "$(printf '%s\n' "$MARKETING_VERSIONS" | sort -u)" != "$TAG_VERSION" ]; then
+            echo "Error: MARKETING_VERSION in project.pbxproj ($(printf '%s\n' "$MARKETING_VERSIONS" | sort -u | paste -sd, -)) does not match tag ($TAG)."
+            exit 1
+          fi
+          echo "Publishing tag: $TAG (podspec $PODSPEC_VERSION, project $TAG_VERSION in $MV_COUNT entries)"
 
       - name: Record tag commit SHA
         id: tag_sha

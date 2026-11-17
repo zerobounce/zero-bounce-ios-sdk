@@ -45,6 +45,10 @@ Open an [issue](https://github.com/zerobounce/zero-bounce-ios-sdk/issues) and in
 
 Maintainers will review and may request changes. Once approved, your PR can be merged.
 
+## Releases
+
+Releases are made by maintainers through the **Publish** workflow (Actions → Publish → Run workflow, with the tag). Do not push a tag or bump versions in a PR unless a maintainer asked; see `AGENTS.md` for the version files and steps.
+
 ## Questions
 
 * [Zero Bounce API docs](https://www.zerobounce.net/docs/)

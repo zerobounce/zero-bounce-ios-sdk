@@ -541,7 +541,7 @@ public class ZeroBounceSDK {
             if needles.contains(where: { !occurrences(of: $0, in: view).isEmpty }) { return true }
             guard layers > 0, bytes.contains(where: { $0 == 0x25 || $0 == 0x2B || $0 == 0x5C || $0 == 0x26 }) else { return false }
             for view in [percentDecoded(bytes, plusAsSpace: false), percentDecoded(bytes, plusAsSpace: true),
-                         jsonUnescaped(bytes), htmlUnescaped(bytes)] where view != bytes {
+                         jsonUnescaped(bytes), jsonUnescaped(bytes, latin1: true), htmlUnescaped(bytes)] where view != bytes {
                 if search(view, layers - 1) { return true }
             }
             return false
@@ -640,7 +640,11 @@ public class ZeroBounceSDK {
     /// a valid code point, otherwise the first four) and `\NNN` with exactly
     /// three octal digits, `\x` or `\X` plus exactly two hex digits, and `\'`.
     /// `%u0027` is not an escape of any of these.
-    private static func jsonUnescaped(_ bytes: [UInt8]) -> [UInt8] {
+    ///
+    /// With `latin1` set, a byte escape that starts no valid UTF-8 sequence is
+    /// read as the Latin-1 character of that value (`\xe9` as U+00E9) instead
+    /// of being kept as written: Python and C write non-ASCII text that way.
+    private static func jsonUnescaped(_ bytes: [UInt8], latin1: Bool = false) -> [UInt8] {
         let simple: [UInt8: UInt8] = [0x22: 0x22, 0x5C: 0x5C, 0x2F: 0x2F, 0x62: 0x08, 0x66: 0x0C,
                                       0x6E: 0x0A, 0x72: 0x0D, 0x74: 0x09]
         var out: [UInt8] = []
@@ -685,7 +689,11 @@ public class ZeroBounceSDK {
                         index = end
                     } else {
                         let entry = run[index]
-                        out.append(contentsOf: bytes[entry.start..<entry.start + entry.length])
+                        if latin1 {
+                            appendScalar(UInt32(entry.byte), to: &out)
+                        } else {
+                            out.append(contentsOf: bytes[entry.start..<entry.start + entry.length])
+                        }
                         index += 1
                     }
                 }
@@ -789,9 +797,14 @@ public class ZeroBounceSDK {
         return out
     }
 
+    /// What replaces a value in an error's user info that cannot be read for a
+    /// secret (an unknown type, a container nested too deep or holding itself).
+    internal static let omittedValue = "[value omitted]"
+
     /// `error` with every form of every secret replaced by "***", wherever
     /// its text or user info carries it. An error that carries none comes
     /// back as it was.
+
     internal static func redacting(_ secrets: [String], in error: Error) -> Error {
         let forms = secretForms(secrets)
         guard !forms.isEmpty else { return error }
@@ -820,7 +833,28 @@ public class ZeroBounceSDK {
                 return zbError
             }
         }
-        func scrub(_ value: Any) -> Any {
+        // Containers nested deeper than this, and a container that holds
+        // itself, are replaced; so is any value of a type that cannot be read
+        // for a secret (`omittedValue`).
+        let maxDepth = 32
+        var visiting = Set<ObjectIdentifier>()
+        func omit() -> Any {
+            changed = true
+            return omittedValue
+        }
+        func scrub(_ value: Any, _ depth: Int = 0) -> Any {
+            if depth > maxDepth { return omit() }
+            var identity: ObjectIdentifier?
+            if Swift.type(of: value) is AnyClass {
+                let id = ObjectIdentifier(value as AnyObject)
+                if visiting.contains(id) { return omit() }
+                visiting.insert(id)
+                identity = id
+            }
+            defer { if let identity { visiting.remove(identity) } }
+            func hashable(_ element: Any) -> AnyHashable {
+                (scrub(element, depth + 1) as? AnyHashable) ?? (omit() as! AnyHashable)
+            }
             switch value {
             case let text as String:
                 return clean(text)
@@ -833,20 +867,64 @@ public class ZeroBounceSDK {
                 let text = String(decoding: data, as: UTF8.self)
                 let cleaned = clean(text)
                 return cleaned == text ? data : Data(cleaned.utf8)
+            case let attributed as NSAttributedString:
+                let text = attributed.string
+                let cleaned = clean(text)
+                return cleaned == text ? attributed : NSAttributedString(string: cleaned)
+            case let components as URLComponents:
+                guard let text = components.string else { return components }
+                let cleaned = clean(text)
+                if cleaned == text { return components }
+                return URLComponents(string: cleaned) ?? omit()
+            case let request as URLRequest:
+                var copy = request
+                if let url = request.url {
+                    let text = url.absoluteString
+                    let cleaned = clean(text)
+                    if cleaned != text { copy.url = URL(string: cleaned) }
+                }
+                if let headers = request.allHTTPHeaderFields {
+                    var cleanedHeaders: [String: String] = [:]
+                    for (name, content) in headers { cleanedHeaders[clean(name)] = clean(content) }
+                    copy.allHTTPHeaderFields = cleanedHeaders
+                }
+                if let body = request.httpBody {
+                    let text = String(decoding: body, as: UTF8.self)
+                    let cleaned = clean(text)
+                    if cleaned != text { copy.httpBody = Data(cleaned.utf8) }
+                }
+                // A body stream cannot be read for a secret.
+                if request.httpBodyStream != nil { copy.httpBodyStream = nil; changed = true }
+                return copy
             case let nested as NSError:
-                return redact(nested)
+                return redact(nested, depth + 1)
             case let list as [Any]:
-                return list.map(scrub)
+                return list.map { scrub($0, depth + 1) }
+            case let set as Set<AnyHashable>:
+                return Set(set.map { hashable($0) })
             case let map as [String: Any]:
-                return map.mapValues(scrub)
+                var out: [String: Any] = [:]
+                for (key, content) in map { out[clean(key)] = scrub(content, depth + 1) }
+                return out
             case let map as [AnyHashable: Any]:
-                return map.mapValues(scrub)
-            default:
+                var out: [AnyHashable: Any] = [:]
+                for (key, content) in map { out[hashable(key)] = scrub(content, depth + 1) }
+                return out
+            case is NSNumber, is Bool, is Int, is Int8, is Int16, is Int32, is Int64, is UInt, is UInt8,
+                 is UInt16, is UInt32, is UInt64, is Float, is Double, is Date, is NSNull, is UUID, is Decimal:
                 return value
+            default:
+                return omit()
             }
         }
-        func redact(_ error: NSError) -> NSError {
-            NSError(domain: error.domain, code: error.code, userInfo: error.userInfo.mapValues(scrub))
+        func redact(_ error: NSError, _ depth: Int = 0) -> NSError {
+            if depth > maxDepth {
+                changed = true
+                return NSError(domain: omittedValue, code: error.code)
+            }
+            var info: [String: Any] = [:]
+            for (key, content) in error.userInfo { info[clean(key)] = scrub(content, depth + 1) }
+            return NSError(domain: clean(error.domain), code: error.code, userInfo: info)
         }
         let redacted = redact(error as NSError)
         guard changed else { return error }

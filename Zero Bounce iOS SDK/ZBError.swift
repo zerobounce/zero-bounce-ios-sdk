@@ -196,13 +196,27 @@ public enum ZBError: LocalizedError {
         return body.first == 0x5B && (try? JSONSerialization.jsonObject(with: body)) != nil
     }
 
-    /// Whether the start of a body is an HTML page: a `<!doctype html`,
-    /// `<html`, `<head` or `<body` tag in its first 2000 characters.
+    /// Whether the start of a body is an HTML page. A body whose content
+    /// (after its padding) starts with `{` or `[` is JSON, never HTML, so a
+    /// result that holds the text "<html>" in a field stays a result. Any
+    /// other body is HTML when a whole `<!doctype html`, `<html`, `<head` or
+    /// `<body` tag (the next character is whitespace, `>` or `/`, so `<header>`
+    /// does not match) is in its first 2000 characters, in any case.
     static func looksLikeHtml(_ data: Data) -> Bool {
-        let head = decodedBody(data.prefix(65536)).trimmingCharacters(in: .whitespacesAndNewlines)
-        let prefix = String(head.prefix(2000)).lowercased()
-        return prefix.contains("<!doctype html") || prefix.contains("<html")
-            || prefix.contains("<head") || prefix.contains("<body")
+        let content = unpadded(data)
+        if let first = content.first, first == 0x7B || first == 0x5B { return false }
+        let prefix = String(decodedBody(content.prefix(65536)).prefix(2000)).lowercased()
+        return ["<!doctype html", "<html", "<head", "<body"].contains { hasWholeTag(prefix, $0) }
+    }
+
+    private static func hasWholeTag(_ text: String, _ tag: String) -> Bool {
+        var from = text.startIndex
+        while let found = text.range(of: tag, range: from..<text.endIndex) {
+            guard let next = text[found.upperBound...].unicodeScalars.first else { return true }
+            if [">", "/", " ", "\t", "\n", "\u{0B}", "\u{0C}", "\r"].contains(next) { return true }
+            from = text.index(after: found.lowerBound)
+        }
+        return false
     }
 
     /// A body as text: bytes that are not UTF-8 (or a character cut by the end
@@ -314,8 +328,7 @@ public enum ZBError: LocalizedError {
         if trimmed.isEmpty {
             return "Empty response from ZeroBounce (HTTP \(statusCode))"
         }
-        let prefix = String(trimmed.prefix(2000)).lowercased()
-        if prefix.contains("<!doctype html") || prefix.contains("<html") || prefix.contains("<head") || prefix.contains("<body") {
+        if looksLikeHtml(data) {
             if let title = htmlTitle(in: body), !title.isEmpty {
                 return "ZeroBounce returned an HTML error page (\"\(title)\") instead of an API response."
             }

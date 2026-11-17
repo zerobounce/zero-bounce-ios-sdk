@@ -47,7 +47,7 @@ Initialize the SDK with your api key and preferred api:
 ZeroBounceSDK.shared.initialize(apiKey: "<YOUR_API_KEY>", apiBaseUrl: .API_DEFAULT_URL)
 ```
 
-`initialize` returns `false` (the result is discardable) when it refuses a key. It refuses a key with surrounding whitespace or control characters; one with U+00A0, U+2028 or U+3000 anywhere; one with any of U+180B through U+180F anywhere; one with U+2000 through U+200A, U+2029, U+202F, U+205F or U+1680 in the middle; and one made only of combining marks. An ordinary space (U+0020) in the middle of a key is allowed. The SDK is then uninitialized, and every call fails with `ZBError.notInitialized`, even if an earlier `initialize` had set a key. `ZeroBounceWarmup.initialize(apiKey:)` also returns `false` and clears the key, but Warmup calls then fail with `ZBError.decodeError`, whose message is `The Warmup API is not initialized. Please call ZeroBounceWarmup.shared.initialize(apiKey:) first`. They do not use `ZBError.notInitialized`.
+`initialize` returns `false` (the result is discardable) when it refuses a key. It refuses a key with surrounding whitespace or control characters; one with U+00A0, U+2028 or U+3000 anywhere; one with any of U+180B through U+180F anywhere; one with U+2000 through U+200A, U+2029, U+202F, U+205F or U+1680 in the middle; one with an invisible character anywhere (any Unicode Default_Ignorable_Code_Point, such as U+200B or a variation selector; a Hangul filler U+115F, U+1160, U+3164 or U+FFA0; U+2800; U+FFFD); and one made only of combining marks. An ordinary space (U+0020) in the middle of a key is allowed. The SDK is then uninitialized, and every call fails with `ZBError.notInitialized`, even if an earlier `initialize` had set a key. `ZeroBounceWarmup.initialize(apiKey:)` also returns `false` and clears the key, but Warmup calls then fail with `ZBError.decodeError`, whose message is `The Warmup API is not initialized. Please call ZeroBounceWarmup.shared.initialize(apiKey:) first`. They do not use `ZBError.notInitialized`.
 
 ## Examples
 Then you can use any of the SDK methods, for example:
@@ -806,8 +806,8 @@ All the offline unit tests should pass (the Mac Catalyst command above skips the
 
 ## Publish
 
-1. Bump `s.version` in `ZeroBounceSDK.podspec`, commit, tag (`vX.Y.Z`), push tag.
-2. **Actions → Publish → Run workflow** with that tag.
+1. Set the same version in `s.version` in `ZeroBounceSDK.podspec` and in every `MARKETING_VERSION` in `Zero Bounce iOS SDK.xcodeproj/project.pbxproj` (both build configurations), commit, tag (`vX.Y.Z`), push the tag. The workflow refuses a tag that differs from either.
+2. **Actions → Publish → Run workflow** with that tag. It validates the tag, runs the tests and the Swift package build, pushes the pod to CocoaPods trunk and creates the GitHub release. Tick `skip_trunk` to create the release without the trunk push; if the trunk push fails, the release is still created.
 
 Registry: [ZeroBounceSDK on CocoaPods](https://cocoapods.org/pods/ZeroBounceSDK)
 

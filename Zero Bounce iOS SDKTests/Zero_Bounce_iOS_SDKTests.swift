@@ -6641,3 +6641,46 @@ extension TransportSafetyTests {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dir).filter { $0.hasSuffix(".zbtmp") }, [])
     }
 }
+
+extension TransportSafetyTests {
+    /// Audit 2: a form field name with a double quote is refused (the name is
+    /// quoted in the part header); a form value may hold one.
+    func testAFormFieldNameWithADoubleQuoteIsRefused() throws {
+        XCTAssertThrowsError(try ZBMultiPartRequest.validate(parameters: ["a\"b": "x"], filePathKey: "file", fileNames: ["a.csv"]))
+        XCTAssertNoThrow(try ZBMultiPartRequest.validate(parameters: ["ab": "x\"y"], filePathKey: "file", fileNames: ["a.csv"]))
+    }
+
+    /// Audit 2: HTML is a whole tag in a body that does not start with { or [.
+    func testTheHtmlRuleNeedsAWholeTagAndNeverAppliesToJson() {
+        func html(_ text: String) -> Bool { ZBError.looksLikeHtml(Data(text.utf8)) }
+        XCTAssertTrue(html("<!DOCTYPE html><p>"))
+        XCTAssertTrue(html("\u{FEFF}  <HTML lang=en>"))
+        XCTAssertTrue(html("<html"))
+        XCTAssertTrue(html("<head/>"))
+        XCTAssertTrue(html("text then <body>"))
+        XCTAssertFalse(html("<header>x</header>"))
+        XCTAssertFalse(html("<htmlx>"))
+        XCTAssertFalse(html("{\"Credits\":\"7\",\"note\":\"<html>\"}"))
+        XCTAssertFalse(html("  [\"<body>\"]"))
+        XCTAssertFalse(html("a,b\n<html> newsletter,x\n".replacingOccurrences(of: "<html>", with: "<hml>")))
+        XCTAssertTrue(html("a,b\n<html> newsletter,x\n"))
+        let text = ZBError.message(from: Data("{\"note\":\"<html>\"}".utf8), statusCode: 200)
+        XCTAssertFalse(text.contains("HTML error page"), text)
+        let page = ZBError.message(from: Data("<html><title>Blocked</title></html>".utf8), statusCode: 403)
+        XCTAssertTrue(page.contains("HTML error page"), page)
+        let failure = ZBError.downloadFailure(Data("<html>".utf8), response: nil, statusCode: 200)
+        XCTAssertNotNil(failure)
+    }
+
+    /// Audit 2: an unknown or differently cased validate status decodes.
+    func testAnUnknownOrUpperCaseValidateStatusDecodes() throws {
+        struct Box: Decodable { let status: ZBValidateStatus }
+        func decode(_ raw: String) throws -> ZBValidateStatus {
+            try JSONDecoder().decode(Box.self, from: Data("{\"status\":\"\(raw)\"}".utf8)).status
+        }
+        XCTAssertEqual(try decode("Valid"), .valid)
+        XCTAssertEqual(try decode("CATCH-ALL"), .catchAll)
+        XCTAssertEqual(try decode("brand-new"), .unknown)
+        XCTAssertEqual(try decode(""), .none)
+    }
+}

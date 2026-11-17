@@ -17,4 +17,13 @@ public enum ZBValidateStatus: String, Codable {
     case spamTrap = "spamtrap"
     case abuse
     case doNotMail = "do_not_mail"
+
+    /// Decodes leniently, in any case: a status this SDK does not recognise
+    /// is `.unknown` instead of failing the whole response.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ZBValidateStatus(rawValue: raw)
+            ?? ZBValidateStatus(rawValue: raw.lowercased())
+            ?? .unknown
+    }
 }

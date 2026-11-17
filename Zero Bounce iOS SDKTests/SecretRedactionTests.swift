@@ -440,8 +440,8 @@ class SecretRedactionTests: XCTestCase {
             XCTAssertTrue(ZeroBounceSDK.revealsSecret(spelling.replacingOccurrences(of: "\\", with: "\\\\"), [key]))
             XCTAssertTrue(ZeroBounceSDK.revealsSecret(spelling.replacingOccurrences(of: "\\", with: "&#92;"), [key]))
         }
-        // A byte that starts no valid sequence is not an invented character.
-        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xe9cd\\xff", ["ab\u{E9}cd"]))
+        // A lone byte that starts no valid sequence is read as Latin-1 too.
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("ab\\xe9cd\\xff", ["ab\u{E9}cd"]))
         XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xc3cd", ["ab\u{E9}cd"]))
         XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xc3\\x28cd", ["ab\u{E9}cd"]))
         // Plain ASCII escapes are as before.
@@ -571,5 +571,54 @@ class SecretRedactionTests: XCTestCase {
             fileData: Data("a,b\n".utf8), fileName: "a.csv"
         )
         XCTAssertEqual(ok.httpMethod, "POST")
+    }
+
+    // MARK: Audit 2
+
+    func testALatin1ByteEscapeOfANonAsciiSecretIsRevealed() {
+        let key = "ab\u{E9}cd12"
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("ab\\xe9cd12", [key]))
+        XCTAssertTrue(ZeroBounceSDK.revealsSecret("ab\\351cd12", [key]))
+        XCTAssertFalse(ZeroBounceSDK.revealsSecret("ab\\xe8cd12", [key]))
+    }
+
+    func testUserInfoKeysSetsAttributedStringsComponentsAndRequestsAreScrubbed() throws {
+        let key = "SECRET-KEY-77"
+        var request = URLRequest(url: URL(string: "https://api.example/v2/x?api_key=\(key)")!)
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        let components = URLComponents(string: "https://api.example/v2/x?api_key=\(key)")!
+        let info: [String: Any] = [
+            "key-\(key)": "x",
+            "set": Set(["a", "b-\(key)"]),
+            "attributed": NSAttributedString(string: "oops \(key)"),
+            "components": components,
+            "request": request,
+            "nsrequest": NSURLRequest(url: URL(string: "https://api.example/?k=\(key)")!),
+            "opaque": NSObject(),
+            "number": 7,
+        ]
+        let error = NSError(domain: "d", code: 1, userInfo: info)
+        let cleaned = ZeroBounceSDK.redacting([key], in: error) as NSError
+        let text = String(describing: cleaned.userInfo)
+        XCTAssertFalse(text.contains(key), text)
+        XCTAssertEqual(cleaned.userInfo["number"] as? Int, 7)
+        XCTAssertEqual(cleaned.userInfo["opaque"] as? String, ZeroBounceSDK.omittedValue)
+        let scrubbed = cleaned.userInfo["request"] as? URLRequest
+        XCTAssertEqual(scrubbed?.value(forHTTPHeaderField: "Authorization"), "Bearer ***")
+    }
+
+    func testASelfContainingUserInfoDoesNotCrash() {
+        let key = "SECRET-KEY-78"
+        let loop = NSMutableDictionary()
+        loop["self"] = loop
+        loop["text"] = "has \(key)"
+        let error = NSError(domain: "d", code: 1, userInfo: ["loop": loop])
+        let cleaned = ZeroBounceSDK.redacting([key], in: error) as NSError
+        XCTAssertFalse(String(describing: cleaned.userInfo).contains(key))
+        // And a chain nested far deeper than the limit.
+        var nested: Any = "deep \(key)"
+        for _ in 0..<500 { nested = ["next": nested] }
+        let deep = ZeroBounceSDK.redacting([key], in: NSError(domain: "d", code: 2, userInfo: ["n": nested])) as NSError
+        XCTAssertFalse(String(describing: deep.userInfo).contains(key))
     }
 }
