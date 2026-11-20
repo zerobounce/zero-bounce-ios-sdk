@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-11-20
+
 ### Added
 
 - `ZeroBounceSDKProtocol` and `ZeroBounceWarmupProtocol`, public protocols with every public API method of `ZeroBounceSDK` (64) and `ZeroBounceWarmup` (26) and the same signatures, which the two classes now conform to. App code can hold `any ZeroBounceSDKProtocol` and receive a fake in its tests; the classes stay `public`, not `open`. Setup is left out (`initialize`, `setListEvaluatorBaseUrl`, `setInboxPlacementBaseUrl`, `baseUrl`, `shared`, `setSessionConfiguration`). Protocols cannot declare default arguments, so a protocol extension adds, for each method with defaults, the overload that leaves them all out. The protocols gain methods in minor releases along with the classes: use them for fakes and type annotations, not as a stable contract for your own conforming types. See "Testing code that uses the SDK" in the README.
@@ -246,7 +248,8 @@ Covers the tags 2.0.1 to 2.0.10, all made on the same day. They changed only the
 
 - Release 2.0.0 of the SDK.
 
-[Unreleased]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v3.0.1...v4.0.0
 [3.0.1]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/zerobounce/zero-bounce-ios-sdk/compare/v2.2.0...v3.0.0
