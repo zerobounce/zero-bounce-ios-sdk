@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ZeroBounceSDKProtocol` and `ZeroBounceWarmupProtocol`, public protocols with every public API method of `ZeroBounceSDK` (64) and `ZeroBounceWarmup` (26) and the same signatures, which the two classes now conform to. App code can hold `any ZeroBounceSDKProtocol` and receive a fake in its tests; the classes stay `public`, not `open`. Setup is left out (`initialize`, `setListEvaluatorBaseUrl`, `setInboxPlacementBaseUrl`, `baseUrl`, `shared`, `setSessionConfiguration`). Protocols cannot declare default arguments, so a protocol extension adds, for each method with defaults, the overload that leaves them all out. The protocols gain methods in minor releases along with the classes: use them for fakes and type annotations, not as a stable contract for your own conforming types. See "Testing code that uses the SDK" in the README.
+
 ## [4.0.0] - 2026-11-17
 
 ### Breaking

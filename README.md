@@ -645,6 +645,51 @@ ZeroBounceSDK.shared.setListEvaluatorBaseUrl("https://bulkapi.zerobounce.net/v2/
 ZeroBounceSDK.shared.setInboxPlacementBaseUrl("https://bulkapi.zerobounce.net/api/ipt")
 ```
 
+## Testing code that uses the SDK
+
+`ZeroBounceSDK` conforms to `ZeroBounceSDKProtocol` and `ZeroBounceWarmup` to
+`ZeroBounceWarmupProtocol`. Each protocol has every public API method of its
+class with the same signature; setup (`initialize`, the base URL setters,
+`shared`, `setSessionConfiguration`) is left out. Have your code hold the
+protocol and pass a fake in tests:
+
+```swift
+final class SignupGate {
+    let client: any ZeroBounceSDKProtocol
+    init(client: any ZeroBounceSDKProtocol = ZeroBounceSDK.shared) { self.client = client }
+
+    func check(_ email: String, done: @escaping (Bool) -> Void) {
+        client.validate(email: email) { result in
+            if case .Success(let response) = result { done(response.status == .valid) } else { done(false) }
+        }
+    }
+}
+
+// In the test target: implement every requirement; the ones your code
+// never calls can fail or call fatalError().
+final class FakeZeroBounce: ZeroBounceSDKProtocol {
+    var validateResult: ZeroBounceSDK.ZBResult<ZBValidateResponse> = .Failure(URLError(.notConnectedToInternet))
+    func validate(email: String, ipAddress: String?,
+                  completion: @escaping (ZeroBounceSDK.ZBResult<ZBValidateResponse>) -> ()) {
+        completion(validateResult)
+    }
+    // ... the other requirements
+}
+```
+
+A protocol cannot declare default arguments, so a requirement takes every
+argument. A protocol extension adds, for each method with defaults, the
+overload that leaves them all out (`validate(email:completion:)` above); to
+pass only some of them, pass the rest explicitly (`nil` for an optional). Build
+response values for a fake by decoding JSON, for example
+`JSONDecoder().decode(ZBValidateResponse.self, from: data)`.
+
+The protocols gain a requirement whenever the class gains a method, which
+happens in minor releases, so a fake may need new methods after an upgrade.
+Use them for fakes and type annotations; they are not a stable contract for
+your own conforming types. To exercise the real client against canned HTTP
+answers instead, see the next section.
+
 ## Stubbing HTTP in your tests
 
 Requests go through the SDK's own `URLSession`, not `URLSession.shared`, so a

@@ -11,6 +11,8 @@ Guidance for AI coding agents working in this repository.
 - `Zero Bounce iOS SDK/`: Swift sources. `ZeroBounceSDK.swift` is the client. `Priority3Api.swift` is bulk finder, domain search, list evaluator, filters, S3/SFTP and the Inbox Placement Tester. `ZeroBounceWarmup.swift` is the Warmup API: a separate product on its own host with its own team-scoped key and an `API-Key` header, so it never touches the validation key.
 - `Zero Bounce iOS SDKTests/Zero_Bounce_iOS_SDKTests.swift`: XCTest, including the offline `URLProtocol` suites for the client and for Warmup.
 - `Zero Bounce iOS SDKTests/SecretRedactionTests.swift`: the offline tests for secret redaction (the case fold, the decode layers).
+- `ZeroBounceSDKProtocol.swift` and `ZeroBounceWarmupProtocol.swift`: every public API method of each client, for app test fakes. A new public method goes into its protocol too, with its doc comment; a method with default arguments also gets the overload in the protocol extension that leaves them out. Setup (`initialize`, base URL setters, statics) stays out.
+- `Zero Bounce iOS SDKTests/ClientProtocolTests.swift`: reads the sources and fails when a class and its protocol drift apart (a missing method, a different signature, a default the extension does not pass), and drives fakes of both protocols.
 - `Zero Bounce iOS SDKTests/LiveApiTests.swift`: the opt-in live suite. The Mac Catalyst test command and CI exclude it by name (the simulator command does not skip it), and it does nothing without keys.
 - `ZeroBounceSDK.podspec`: `s.version`.
 - `Zero Bounce iOS SDK.xcodeproj/project.pbxproj`: `MARKETING_VERSION`.
